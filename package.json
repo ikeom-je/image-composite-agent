@@ -1,0 +1,45 @@
+{
+  "name": "image-processor-api",
+  "version": "2.0.0",
+  "description": "Advanced Image Composition REST API with Alpha Channel Support",
+  "author": "AWS CDK Team",
+  "license": "MIT",
+  "keywords": [
+    "aws",
+    "cdk",
+    "lambda",
+    "api-gateway",
+    "image-processing",
+    "pillow",
+    "python",
+    "uv",
+    "alpha-channel"
+  ],
+  "bin": {
+    "image-processor-api": "bin/image-processor-api.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy",
+    "synth": "cdk synth",
+    "diff": "cdk diff"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "22.7.9",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "aws-cdk": "2.1019.1",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.201.0",
+    "constructs": "^10.0.0",
+    "source-map-support": "^0.5.21"
+  }
+}
