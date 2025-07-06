@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Image Processor API for local testing
+
+Resources:
+  ImageProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda/python/
+      Handler: image_processor.handler
+      Runtime: python3.13
+      Architectures:
+        - arm64
+      MemorySize: 1024
+      Timeout: 30
+      Environment:
+        Variables:
+          S3_RESOURCES_BUCKET: test-resources-bucket
+          TEST_BUCKET: test-images-bucket
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /images/composite
+            Method: get
+
+Outputs:
+  ImageProcessorApi:
+    Description: API Gateway endpoint URL for Prod stage for Image Processor function
+    Value: !Sub "http://127.0.0.1:3000/images/composite"
+  ImageProcessorFunction:
+    Description: Image Processor Lambda Function ARN
+    Value: !GetAtt ImageProcessorFunction.Arn
