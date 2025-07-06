@@ -8,7 +8,7 @@
 
 - **AWS Lambda**: Python 3.12ランタイムを使用し、画像処理ロジックを実装
 - **Amazon API Gateway**: RESTful APIエンドポイントを提供
-- **Amazon S3**: 画像リソースとテスト画像を保存
+- **Amazon S3**: 画像リソースとテスト画像を保存、
 - **AWS CDK**: インフラストラクチャをコードとして定義・管理
 
 ## 前提条件
@@ -30,7 +30,7 @@ aws configure set region ap-northeast-1
 
 ### 必要なツール
 
-- Node.js 18以上
+- Node.js 20以上
 - AWS CLI（設定済み）
 - Docker（CDKバンドリング用）
 
