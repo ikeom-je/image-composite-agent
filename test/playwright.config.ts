@@ -1,0 +1,45 @@
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * 画像合成REST API用のPlaywright設定
+ * @see https://playwright.dev/docs/test-configuration
+ */
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI ? 'html' : 'list',
+  reportSlowTests: null,
+  quiet: !process.env.DEBUG,
+  use: {
+    baseURL: process.env.API_URL || 'https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'api-tests',
+      testMatch: /.*\.api\.spec\.ts/,
+    },
+  ],
+  outputDir: 'test-results',
+  webServer: process.env.LOCAL_TEST ? {
+    command: 'cd ../lambda/python && python -m http.server 8000',
+    url: 'http://localhost:8000',
+    reuseExistingServer: !process.env.CI,
+  } : undefined,
+});

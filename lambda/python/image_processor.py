@@ -509,15 +509,26 @@ def handler(event, context):
             return format_response(400, {'error': 'image1 and image2 parameters are required'})
         
         # サイズと位置のパラメータの取得 (デフォルト値あり)
-        img1_width = int(query_params.get('image1Width', 300))
-        img1_height = int(query_params.get('image1Height', 200))
-        img1_x = query_params.get('image1X')  # Noneの場合は自動計算
-        img1_y = int(query_params.get('image1Y', 20))
-        
-        img2_width = int(query_params.get('image2Width', 300))
-        img2_height = int(query_params.get('image2Height', 200))
-        img2_x = query_params.get('image2X')  # Noneの場合は自動計算
-        img2_y = query_params.get('image2Y')  # Noneの場合は自動計算
+        try:
+            img1_width = int(query_params.get('image1Width', 300))
+            img1_height = int(query_params.get('image1Height', 200))
+            img1_x = int(query_params.get('image1X', -1))  # -1の場合は自動計算
+            img1_y = int(query_params.get('image1Y', 20))
+            
+            img2_width = int(query_params.get('image2Width', 300))
+            img2_height = int(query_params.get('image2Height', 200))
+            img2_x = int(query_params.get('image2X', -1))  # -1の場合は自動計算
+            img2_y = int(query_params.get('image2Y', -1))  # -1の場合は自動計算
+        except ValueError:
+            logger.warning("Invalid numeric parameters, using defaults")
+            img1_width = 300
+            img1_height = 200
+            img1_x = -1
+            img1_y = 20
+            img2_width = 300
+            img2_height = 200
+            img2_x = -1
+            img2_y = -1
         
         # 環境変数からバケット名を取得
         s3_resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', 'image-resources')
@@ -571,20 +582,14 @@ def handler(event, context):
                     return format_response(500, {'error': f"Failed to load {name}: {str(e)}"})
         
         # 画像位置の計算
-        if img1_x is None:
+        if img1_x < 0:
             img1_x = base_img.width - img1_width - 20  # 右端から20pxマージン
-        else:
-            img1_x = int(img1_x)
         
-        if img2_x is None:
+        if img2_x < 0:
             img2_x = base_img.width - img2_width - 20  # 右端から20pxマージン
-        else:
-            img2_x = int(img2_x)
             
-        if img2_y is None:
+        if img2_y < 0:
             img2_y = img1_y + img1_height + 20  # 20pxマージン
-        else:
-            img2_y = int(img2_y)
         
         # 画像合成パラメータ
         img1_params = {
