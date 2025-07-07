@@ -1,6 +1,6 @@
 {
   "name": "image-processor-api",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Advanced Image Composition REST API with Alpha Channel Support",
   "author": "AWS CDK Team",
   "license": "MIT",
@@ -21,24 +21,33 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test": "jest",
+    "test": "test/run-tests.sh",
+    "test:lambda": "source .venv/bin/activate && cd test/lambda && python -m unittest test_image_processor.py && deactivate",
+    "test:api": "test/run-api-tests.sh",
+    "test:api:report": "npx playwright test --config=test/playwright.config.ts --project=api-tests",
+    "test:frontend": "FRONTEND_URL=http://localhost:8080 npx playwright test --config=test/playwright.config.ts test/e2e/frontend.spec.ts --reporter=list",
     "cdk": "cdk",
-    "deploy": "cdk deploy",
+    "deploy": "cdk deploy --require-approval never",
+    "post-deploy": "node scripts/update-frontend-env.js",
+    "deploy-frontend": "node scripts/deploy-frontend.js",
     "destroy": "cdk destroy",
     "synth": "cdk synth",
-    "diff": "cdk diff"
+    "diff": "cdk diff",
+    "build-frontend": "cd frontend && npm install && npm run build",
+    "deploy-all": "npm run build && npm run deploy && npm run deploy-frontend"
   },
   "devDependencies": {
+    "@playwright/test": "^1.53.2",
     "@types/jest": "^29.5.14",
-    "@types/node": "22.7.9",
+    "@types/node": "^22.7.9",
+    "aws-cdk": "2.1019.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
-    "aws-cdk": "2.1019.1",
     "ts-node": "^10.9.2",
     "typescript": "~5.6.3"
   },
   "dependencies": {
-    "aws-cdk-lib": "2.201.0",
+    "aws-cdk-lib": "2.110.0",
     "constructs": "^10.0.0",
     "source-map-support": "^0.5.21"
   }

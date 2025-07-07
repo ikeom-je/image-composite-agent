@@ -1,6 +1,6 @@
 # 🎨 画像合成REST API
 
-高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。
+高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3で構築されたフロントエンドアプリケーションも含まれており、S3にホスティングできます。
 
 ## ✨ 主な特徴
 
@@ -10,17 +10,33 @@
 - **🌐 ブラウザフレンドリー**: 美しいHTML表示 + JavaScriptダウンロード
 - **🔧 柔軟な画像指定**: HTTP URL、S3パス、テスト画像に対応
 - **📱 レスポンシブ対応**: モバイルデバイスでも快適に利用可能
+- **🖥️ Vue.js フロントエンド**: 直感的なユーザーインターフェースでAPI機能を体験
 
 ## 🏗️ アーキテクチャ
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   API Gateway   │───▶│   AWS Lambda     │───▶│   Amazon S3     │
-│                 │    │  (Python 3.12)  │    │  (画像ストレージ) │
+│                 │    │  (Python 3.11)  │    │  (画像ストレージ) │
 │ REST API        │    │  + uv + venv     │    │                 │
 │ /images/        │    │  + Pillow        │    │ - テスト画像     │
 │ composite       │    │  + boto3         │    │ - リソース画像   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+                                                       ▲
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐
+                                              │  CloudFront    │
+                                              │  Distribution   │
+                                              └───────┬─────────┘
+                                                      │
+                                                      ▼
+                                              ┌─────────────────┐
+                                              │   S3 Bucket     │
+                                              │  (Private)      │
+                                              │  Vue.js 3      │
+                                              │  フロントエンド  │
+                                              └─────────────────┘
 ```
 
 ## 🚀 クイックスタート
@@ -55,6 +71,7 @@ aws configure set region ap-northeast-1
 - API URL: `https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
 - テストバケット: `imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u`
 - リソースバケット: `imageprocessorapistack-imageresourcesbucket76f0cd7-buex7dxhtrpd`
+- フロントエンドURL: `https://d7kz1a65nk29c.cloudfront.net`
 
 ### 1. デプロイ
 
@@ -77,13 +94,65 @@ chmod +x upload-test-images.sh
 ./upload-test-images.sh auto
 ```
 
-### 3. 動作確認
+### 3. フロントエンドのデプロイ
 
-既存のAPIエンドポイントで動作確認：
+フロントエンドは自動的にCDKスタックの一部としてデプロイされます。S3バケットはプライベートに保たれ、CloudFrontを通じてのみアクセス可能です。
 
+```bash
+# フロントエンドのビルドとCDKスタックのデプロイを一度に行う
+npm run deploy-all
+
+# または個別に実行
+npm run build-frontend  # フロントエンドのビルド
+npm run deploy          # CDKスタックのデプロイ
+```
+
+デプロイ後、CloudFormationの出力に表示される `FrontendUrl` にアクセスしてフロントエンドを確認できます。
+このURLはCloudFrontのドメイン名を指し、HTTPS経由でセキュアにアクセスできます。
+
+### 4. 動作確認
+
+フロントエンドインターフェースで画像合成機能を試す：
+```
+https://d7kz1a65nk29c.cloudfront.net/
+```
+
+または、APIエンドポイントで直接テスト：
 ```
 https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test
 ```
+
+## 🧪 テスト
+
+### テスト環境
+
+- **ユニットテスト**: Python unittest
+- **E2Eテスト**: Playwright
+- **テスト対象**: Lambda関数、API、フロントエンド
+
+### テストの実行
+
+```bash
+# すべてのテストを実行
+npm test
+
+# Lambda関数のテストのみ実行
+npm run test:lambda
+
+# APIテストのみ実行
+npm run test:api
+
+# フロントエンドテストのみ実行
+npm run test:frontend
+```
+
+### テスト構成
+
+- `test/lambda/`: Lambda関数のユニットテスト
+- `test/e2e/`: PlaywrightによるE2Eテスト
+  - `image-processor.api.spec.ts`: API機能のテスト
+  - `frontend.spec.ts`: フロントエンドUIのテスト
+- `test/run-tests.sh`: テスト実行スクリプト
 
 ## 📖 API仕様
 
@@ -180,8 +249,17 @@ image-processor-api/
 │           ├── aws-logo.png              # ベース画像用
 │           ├── circle_red.png            # 合成画像1用
 │           └── rectangle_blue.png        # 合成画像2用
+├── frontend/                             # Vue.js フロントエンド
+│   ├── src/                              # ソースコード
+│   │   ├── App.vue                       # メインコンポーネント
+│   │   └── main.js                       # エントリーポイント
+│   ├── public/                           # 静的ファイル
+│   │   └── index.html                    # HTMLテンプレート
+│   ├── deploy-to-s3.sh                   # S3デプロイスクリプト
+│   └── package.json                      # 依存関係
 ├── scripts/
-│   └── upload-test-images.sh             # テスト画像アップロード
+│   ├── upload-test-images.sh             # テスト画像アップロード
+│   └── update-cdk-stack.js               # CDKスタック更新スクリプト
 ├── cdk.json                              # CDK設定
 ├── package.json                          # Node.js依存関係
 └── README.md                             # このファイル
