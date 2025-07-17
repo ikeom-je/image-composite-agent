@@ -694,3 +694,178 @@ exit $?
 ```
 
 これらの改善により、テスト実行が自動化され、CI/CD環境での実行がスムーズになります。`--no-open-report`フラグを使用することで、HTML報告書サーバーが起動せずにテストが完了します。
+## フロントエンドのViteとTailwind CSS実装
+
+### Viteの設定
+
+Viteを使用してフロントエンドの開発環境とビルドプロセスを高速化します：
+
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
+
+export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))
+    }
+  },
+  base: './',
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['vue', 'axios']
+        }
+      }
+    }
+  }
+})
+```
+
+### Tailwind CSSの設定
+
+Tailwind CSSを使用してユーティリティファーストのスタイリングを実装します：
+
+```javascript
+// tailwind.config.js
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{vue,js,ts,jsx,tsx}"
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#0078d7',
+          light: '#00a2ed',
+          dark: '#005a9e'
+        },
+        accent: '#ff9900',
+        background: '#f5f7fa',
+        card: '#ffffff',
+        text: '#333333',
+        border: '#e0e0e0',
+        success: '#28a745',
+        error: '#dc3545'
+      }
+    }
+  },
+  plugins: []
+}
+```
+
+### 環境変数の設定
+
+Viteでの環境変数は `VITE_` プレフィックスを使用します：
+
+```
+# .env
+VITE_API_URL=https://your-api-url.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite
+```
+
+アプリケーション内での使用方法：
+
+```javascript
+// 環境変数へのアクセス
+const apiUrl = import.meta.env.VITE_API_URL || 'デフォルトURL';
+```
+
+### コンポーネントスタイリング
+
+Tailwind CSSを使用したコンポーネントスタイリングの例：
+
+```html
+<template>
+  <div class="max-w-7xl mx-auto p-4">
+    <header class="text-center mb-8 p-6 bg-gradient-to-r from-primary to-primary-light text-white rounded-lg shadow-md">
+      <h1 class="text-4xl mb-2">🎨 画像合成REST API デモ</h1>
+      <p class="text-xl opacity-90">高性能・アルファチャンネル対応の画像合成REST API</p>
+    </header>
+    
+    <!-- コンテンツ -->
+    <div class="flex flex-wrap gap-6 mb-8">
+      <!-- フォーム部分 -->
+      <div class="flex-1 min-w-[300px] bg-white p-6 rounded-lg shadow-sm">
+        <!-- フォームコンテンツ -->
+      </div>
+      
+      <!-- 結果表示部分 -->
+      <div class="flex-1 min-w-[300px] bg-white p-6 rounded-lg shadow-sm">
+        <!-- 結果コンテンツ -->
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### カスタムコンポーネントクラス
+
+Tailwind CSSの `@layer components` を使用して再利用可能なコンポーネントクラスを定義：
+
+```css
+/* src/assets/main.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn {
+    @apply bg-primary text-white py-2 px-4 rounded font-medium transition-colors hover:bg-primary-light disabled:bg-gray-400 disabled:cursor-not-allowed;
+  }
+  
+  .form-label {
+    @apply block mb-1 font-medium;
+  }
+  
+  .form-input {
+    @apply w-full p-2 border border-border rounded text-base;
+  }
+  
+  .form-select {
+    @apply w-full p-2 border border-border rounded text-base;
+  }
+  
+  .form-group {
+    @apply mb-4;
+  }
+}
+```
+
+### レスポンシブデザイン
+
+Tailwind CSSのブレークポイントを使用したレスポンシブデザインの実装：
+
+```html
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  <!-- レスポンシブグリッドアイテム -->
+  <div class="bg-white p-4 rounded-lg shadow-sm">
+    <!-- コンテンツ -->
+  </div>
+</div>
+```
+
+### ビルドとデプロイ
+
+Viteプロジェクトのビルドとデプロイ：
+
+```bash
+# 開発サーバー起動
+npm run dev
+
+# 本番用ビルド
+npm run build
+
+# ビルド結果のプレビュー
+npm run preview
+
+# S3へのデプロイ
+./deploy-to-s3.sh
+```
+
+これらの設定と実装により、高速な開発環境と最適化されたプロダクションビルドを実現し、モダンでレスポンシブなユーザーインターフェースを提供します。
