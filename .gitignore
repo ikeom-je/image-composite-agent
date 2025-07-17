@@ -1,8 +1,13 @@
 *.js
 !jest.config.js
+!tailwind.config.js
+!postcss.config.js
+!vite.config.js
 *.d.ts
 node_modules
 
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+*__pychache__*

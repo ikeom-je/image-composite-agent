@@ -2,22 +2,37 @@
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ImageProcessorApiStack } from '../lib/image-processor-api-stack';
+import { ImageCompositeViewerStack } from '../lib/image-composite-viewer-stack';
 
 const app = new cdk.App();
 
-new ImageProcessorApiStack(app, 'ImageProcessorApiStack', {
-  description: 'Advanced Image Composition REST API with Alpha Channel Support',
-  
-  // 環境設定（defaultプロファイルを使用）
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
-  },
+// 環境設定（defaultプロファイルを使用）
+const env = {
+  account: process.env.CDK_DEFAULT_ACCOUNT,
+  region: process.env.CDK_DEFAULT_REGION,
+};
 
-  // タグの設定
-  tags: {
-    Project: 'ImageProcessorAPI',
-    Version: 'v2',
-    Environment: 'Production'
-  }
+// タグの設定
+const tags = {
+  Project: 'ImageProcessorAPI',
+  Version: 'v2',
+  Environment: 'Production'
+};
+
+// バックエンドスタックをデプロイ
+const apiStack = new ImageProcessorApiStack(app, 'ImageProcessorApiStack', {
+  description: 'Advanced Image Composition REST API with Alpha Channel Support',
+  env,
+  tags
 });
+
+// フロントエンドスタックをデプロイ
+const viewerStack = new ImageCompositeViewerStack(app, 'ImageCompositeViewerStack', {
+  description: 'Frontend Viewer for Image Composition REST API',
+  env,
+  tags,
+  apiEndpoint: apiStack.apiEndpoint
+});
+
+// スタック間の依存関係を設定（フロントエンドはバックエンドに依存）
+viewerStack.addDependency(apiStack);
