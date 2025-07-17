@@ -1,6 +1,6 @@
 # 🎨 画像合成REST API
 
-高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3で構築されたフロントエンドアプリケーションも含まれており、S3にホスティングできます。
+高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3、Vite、Tailwind CSSで構築されたフロントエンドアプリケーションも含まれており、S3にホスティングしてCloudFrontで配信します。
 
 ## ✨ 主な特徴
 

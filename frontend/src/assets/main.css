@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-text;
+  }
+  
+  h1 {
+    @apply text-4xl font-bold mb-4;
+  }
+  
+  h2 {
+    @apply text-2xl font-semibold mb-4 text-primary border-b border-border pb-2;
+  }
+  
+  h3 {
+    @apply text-xl font-medium mb-2 text-primary;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply bg-primary text-white py-2 px-4 rounded font-medium transition-colors hover:bg-primary-light disabled:bg-gray-400 disabled:cursor-not-allowed;
+  }
+  
+  .form-label {
+    @apply block mb-1 font-medium;
+  }
+  
+  .form-input {
+    @apply w-full p-2 border border-border rounded text-base;
+  }
+  
+  .form-select {
+    @apply w-full p-2 border border-border rounded text-base;
+  }
+  
+  .form-group {
+    @apply mb-4;
+  }
+  
+  .spinner {
+    @apply w-10 h-10 border-4 border-primary-light border-t-primary rounded-full animate-spin;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+}

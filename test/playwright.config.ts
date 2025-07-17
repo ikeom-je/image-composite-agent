@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
  * 画像合成REST API用のPlaywright設定
@@ -35,11 +36,23 @@ export default defineConfig({
       name: 'api-tests',
       testMatch: /.*\.api\.spec\.ts/,
     },
+    {
+      name: 'frontend-tests',
+      testMatch: /.*frontend\.spec\.ts/,
+      use: {
+        baseURL: 'http://localhost:5173',
+      },
+    },
   ],
   outputDir: 'test-results',
   webServer: process.env.LOCAL_TEST ? {
     command: 'cd ../lambda/python && python -m http.server 8000',
     url: 'http://localhost:8000',
     reuseExistingServer: !process.env.CI,
-  } : undefined,
+  } : {
+    command: 'cd ../frontend && npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
+  },
 });
