@@ -32,7 +32,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // Python Lambda関数の作成（シンプルなバンドリング）
     const imageProcessorFunction = new lambda.Function(this, 'ImageProcessorFunction', {
       runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: lambda.Architecture.ARM_64,
+      architecture: lambda.Architecture.X86_64,
       handler: 'image_processor.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/python'), {
         bundling: {

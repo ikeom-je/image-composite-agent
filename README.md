@@ -1,4 +1,4 @@
-# 🎨 画像合成REST API
+# 🎨 画像合成REST API v2.0.3
 
 高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3、Vite、Tailwind CSSで構築されたフロントエンドアプリケーションも含まれており、S3にホスティングしてCloudFrontで配信します。
 
@@ -68,10 +68,10 @@ aws configure set region ap-northeast-1
 
 **既存スタック情報:**
 - スタック名: `ImageProcessorApiStack`
-- API URL: `https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-- テストバケット: `imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u`
-- リソースバケット: `imageprocessorapistack-imageresourcesbucket76f0cd7-buex7dxhtrpd`
-- フロントエンドURL: `https://d7kz1a65nk29c.cloudfront.net`
+- API URL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+- テストバケット: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+- リソースバケット: `imageprocessorapistack-imageresourcesbucket76f0cd7-lyeuy5nd8rzd`
+- フロントエンドURL: `https://d2jokx0x4ou6mb.cloudfront.net`
 
 ### 1. デプロイ
 
@@ -114,12 +114,12 @@ npm run deploy          # CDKスタックのデプロイ
 
 フロントエンドインターフェースで画像合成機能を試す：
 ```
-https://d7kz1a65nk29c.cloudfront.net/
+https://d2jokx0x4ou6mb.cloudfront.net/
 ```
 
 または、APIエンドポイントで直接テスト：
 ```
-https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test
+https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test
 ```
 
 ## 🧪 テスト
@@ -190,17 +190,17 @@ GET /images/composite
 
 ```bash
 # HTML表示でテスト画像を合成
-curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
 
 # PNG形式で直接ダウンロード
-curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&format=png" -o composite.png
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&format=png" -o composite.png
 ```
 
 ### カスタム配置
 
 ```bash
 # 画像の位置とサイズを指定
-curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image1X=100&image1Y=100&image1Width=400&image1Height=300"
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image1X=100&image1Y=100&image1Width=400&image1Height=300"
 ```
 
 ### S3画像の使用
