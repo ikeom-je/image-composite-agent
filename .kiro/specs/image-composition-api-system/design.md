@@ -169,9 +169,164 @@ async generateImage() {
 }
 ```
 
-### 4. S3ストレージコンポーネント
+#### 3.4 動的URL設定コンポーネント
+```javascript
+// 設定ファイルから動的にAPI URLを取得
+export default {
+  data() {
+    return {
+      // 環境変数またはconfig.jsonから動的取得
+      apiBaseUrl: import.meta.env.VITE_API_URL || this.loadApiUrlFromConfig(),
+    };
+  },
+  methods: {
+    async loadApiUrlFromConfig() {
+      try {
+        const response = await fetch('/config.json');
+        const config = await response.json();
+        return config.apiUrl;
+      } catch (error) {
+        console.warn('Failed to load config, using fallback URL');
+        return 'https://api.example.com/prod/images/composite';
+      }
+    }
+  }
+}
+```
 
-#### 4.1 画像リソースバケット
+**機能:**
+- デプロイ時に生成されるconfig.jsonからのURL取得
+- 環境変数による設定のオーバーライド
+- フォールバック機能による堅牢性確保
+
+### 4. 動的設定管理コンポーネント
+
+#### 4.1 CDKデプロイ時設定生成
+```typescript
+// CDKスタックでの設定ファイル生成
+export class ImageProcessorApiStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // インフラリソース作成後に設定ファイルを生成
+    const configContent = {
+      apiUrl: this.apiEndpoint,
+      cloudfrontUrl: this.distribution.distributionDomainName,
+      version: process.env.npm_package_version || '1.0.0',
+      environment: this.node.tryGetContext('environment') || 'production'
+    };
+    
+    // S3にconfig.jsonをデプロイ
+    new s3deploy.BucketDeployment(this, 'DeployConfig', {
+      sources: [
+        s3deploy.Source.jsonData('config.json', configContent),
+        s3deploy.Source.asset(path.join(__dirname, '../frontend/dist'))
+      ],
+      destinationBucket: this.frontendBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*'],
+    });
+  }
+}
+```
+
+#### 4.2 環境別設定管理
+```typescript
+// 環境別の設定管理
+interface EnvironmentConfig {
+  apiUrl: string;
+  cloudfrontUrl: string;
+  s3BucketNames: {
+    resources: string;
+    testImages: string;
+    frontend: string;
+  };
+  features: {
+    enableS3Upload: boolean;
+    enableAdvancedFilters: boolean;
+  };
+}
+
+const generateEnvironmentConfig = (stack: ImageProcessorApiStack): EnvironmentConfig => {
+  return {
+    apiUrl: stack.apiEndpoint,
+    cloudfrontUrl: `https://${stack.distribution.distributionDomainName}`,
+    s3BucketNames: {
+      resources: stack.resourcesBucket.bucketName,
+      testImages: stack.testImagesBucket.bucketName,
+      frontend: stack.frontendBucket.bucketName,
+    },
+    features: {
+      enableS3Upload: stack.node.tryGetContext('enableS3Upload') === 'true',
+      enableAdvancedFilters: stack.node.tryGetContext('enableAdvancedFilters') === 'true',
+    }
+  };
+};
+```
+
+#### 4.3 フロントエンド設定読み込み
+```javascript
+// フロントエンドでの動的設定読み込み
+class ConfigManager {
+  private static instance: ConfigManager;
+  private config: EnvironmentConfig | null = null;
+  
+  static getInstance(): ConfigManager {
+    if (!ConfigManager.instance) {
+      ConfigManager.instance = new ConfigManager();
+    }
+    return ConfigManager.instance;
+  }
+  
+  async loadConfig(): Promise<EnvironmentConfig> {
+    if (this.config) {
+      return this.config;
+    }
+    
+    try {
+      // 1. config.jsonから設定を読み込み
+      const response = await fetch('/config.json');
+      this.config = await response.json();
+      
+      // 2. 環境変数による上書き
+      if (import.meta.env.VITE_API_URL) {
+        this.config.apiUrl = import.meta.env.VITE_API_URL;
+      }
+      
+      return this.config;
+    } catch (error) {
+      console.error('Failed to load configuration:', error);
+      // フォールバック設定
+      this.config = {
+        apiUrl: import.meta.env.VITE_API_URL || 'https://api.example.com/prod/images/composite',
+        cloudfrontUrl: 'https://example.cloudfront.net',
+        s3BucketNames: {
+          resources: 'default-resources-bucket',
+          testImages: 'default-test-bucket',
+          frontend: 'default-frontend-bucket'
+        },
+        features: {
+          enableS3Upload: false,
+          enableAdvancedFilters: false
+        }
+      };
+      return this.config;
+    }
+  }
+  
+  getApiUrl(): string {
+    return this.config?.apiUrl || import.meta.env.VITE_API_URL || '';
+  }
+  
+  getCloudFrontUrl(): string {
+    return this.config?.cloudfrontUrl || '';
+  }
+}
+```
+
+### 5. S3ストレージコンポーネント
+
+#### 5.1 画像リソースバケット
 ```typescript
 this.resourcesBucket = new s3.Bucket(this, 'ImageResourcesBucket', {
   accessControl: s3.BucketAccessControl.PRIVATE,
@@ -181,7 +336,7 @@ this.resourcesBucket = new s3.Bucket(this, 'ImageResourcesBucket', {
 });
 ```
 
-#### 4.2 テスト画像バケット
+#### 5.2 テスト画像バケット
 ```typescript
 this.testImagesBucket = new s3.Bucket(this, 'TestImagesBucket', {
   accessControl: s3.BucketAccessControl.PRIVATE,
@@ -191,14 +346,14 @@ this.testImagesBucket = new s3.Bucket(this, 'TestImagesBucket', {
 });
 ```
 
-#### 4.3 フロントエンドホスティング
+#### 5.3 フロントエンドホスティング
 - CloudFront経由でのセキュアな配信
 - Origin Access Identity (OAI)による制限
 - SPA対応のエラーレスポンス設定
 
-### 5. テストコンポーネント
+### 6. テストコンポーネント
 
-#### 5.1 Lambda関数ユニットテスト
+#### 6.1 Lambda関数ユニットテスト
 ```python
 class TestImageProcessor(unittest.TestCase):
     def test_fetch_image_from_s3(self):
@@ -211,7 +366,7 @@ class TestImageProcessor(unittest.TestCase):
         # ハンドラー関数の正常系テスト
 ```
 
-#### 5.2 API E2Eテスト（Playwright）
+#### 6.2 API E2Eテスト（Playwright）
 ```typescript
 test('基本的な画像合成API', async ({ request }) => {
   const response = await request.get('/images/composite?baseImage=test&image1=test&image2=test');
@@ -224,7 +379,7 @@ test('S3パス指定での画像合成', async ({ request }) => {
 });
 ```
 
-#### 5.3 フロントエンドE2Eテスト
+#### 6.3 フロントエンドE2Eテスト
 ```typescript
 test('フロントエンド画像生成機能', async ({ page }) => {
   await page.goto(FRONTEND_URL);
@@ -327,7 +482,11 @@ interface ErrorResponse {
 ### フロントエンド状態モデル
 ```typescript
 interface AppState {
-  // API設定
+  // 動的設定
+  config: EnvironmentConfig | null;
+  configLoaded: boolean;
+  
+  // API設定（動的に設定される）
   apiBaseUrl: string;
   apiUrl: string;
   
@@ -347,6 +506,23 @@ interface Example {
   title: string;
   description: string;
   params: ImageCompositeRequest;
+}
+
+// 動的設定モデル
+interface EnvironmentConfig {
+  apiUrl: string;
+  cloudfrontUrl: string;
+  s3BucketNames: {
+    resources: string;
+    testImages: string;
+    frontend: string;
+  };
+  features: {
+    enableS3Upload: boolean;
+    enableAdvancedFilters: boolean;
+  };
+  version: string;
+  environment: string;
 }
 ```
 
@@ -620,15 +796,23 @@ test.describe('フロントエンドUI', () => {
    - 統合シナリオテスト
 
 ### Phase 5: デプロイと運用
-1. **自動デプロイ**
+1. **動的設定システム**
+   - CDKデプロイ時のURL自動取得
+   - config.json動的生成とS3デプロイ
+   - フロントエンドでの設定読み込み機能
+   - 環境変数による設定オーバーライド
+
+2. **自動デプロイ**
    - CDKによるインフラ管理
    - フロントエンドビルドとデプロイ
    - CloudFrontキャッシュ無効化
+   - 設定ファイルの同期デプロイ
 
-2. **監視と運用**
+3. **監視と運用**
    - CloudWatch Logsによるログ監視
    - パフォーマンスメトリクス
    - エラー率の監視
+   - 設定ファイル読み込みエラーの監視
 
 ## パフォーマンス考慮事項
 

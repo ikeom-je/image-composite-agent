@@ -55,6 +55,7 @@
   - Content-Type判定による適切なレスポンス処理を実装する
   - エラーハンドリングと自動再試行メカニズムを実装する
   - ローディング状態とプログレス表示を実装する
+  - 動的設定管理システム（ConfigManager）を実装する
   - _Requirements: 5.2, 5.3_
 
 - [ ] 9. 画像表示とダウンロード機能を実装する
@@ -70,6 +71,14 @@
   - HTTPS強制とキャッシュ設定を実装する
   - SPA対応のエラーレスポンス設定を実装する
   - _Requirements: 6.5_
+
+- [ ] 10.1. 動的URL設定システムを実装する
+  - CDKデプロイ時にAPI GatewayとCloudFrontのURLを自動取得する仕組みを実装する
+  - config.jsonファイルを動的生成してS3にデプロイする機能を実装する
+  - フロントエンドでconfig.jsonから設定を読み込む機能を実装する
+  - 環境変数による設定オーバーライド機能を実装する
+  - フォールバック機能による堅牢性を確保する
+  - _Requirements: 5.2, 6.4_
 
 - [ ] 11. Lambda関数のユニットテストを実装する
   - 画像取得機能のテストケースを作成する
@@ -108,7 +117,158 @@
 
 - [ ] 16. デプロイメントとドキュメント整備を完了する
   - 本番環境へのデプロイを実行する
+  - 動的URL設定が正しく動作することを確認する
   - README.mdとAmazonQ.mdを更新する
   - API仕様書とユーザーガイドを作成する
   - 運用・保守手順をドキュメント化する
   - _Requirements: 全般_
+
+## 動的URL設定の実装詳細
+
+### CDK側の実装
+```typescript
+// lib/image-processor-api-stack.ts
+export class ImageProcessorApiStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // ... 他のリソース作成 ...
+    
+    // 設定ファイルの内容を動的生成
+    const configContent = {
+      apiUrl: this.apiEndpoint,
+      cloudfrontUrl: `https://${this.distribution.distributionDomainName}`,
+      s3BucketNames: {
+        resources: this.resourcesBucket.bucketName,
+        testImages: this.testImagesBucket.bucketName,
+        frontend: this.frontendBucket.bucketName,
+      },
+      version: process.env.npm_package_version || '1.0.0',
+      environment: this.node.tryGetContext('environment') || 'production'
+    };
+    
+    // フロントエンドと設定ファイルを同時にデプロイ
+    new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
+      sources: [
+        s3deploy.Source.asset(path.join(__dirname, '../frontend/dist')),
+        s3deploy.Source.jsonData('config.json', configContent)
+      ],
+      destinationBucket: this.frontendBucket,
+      distribution: this.distribution,
+      distributionPaths: ['/*'],
+    });
+  }
+}
+```
+
+### フロントエンド側の実装
+```javascript
+// frontend/src/utils/config.js
+class ConfigManager {
+  constructor() {
+    this.config = null;
+    this.loading = false;
+  }
+  
+  async loadConfig() {
+    if (this.config) return this.config;
+    if (this.loading) return this.waitForConfig();
+    
+    this.loading = true;
+    
+    try {
+      const response = await fetch('/config.json');
+      this.config = await response.json();
+      
+      // 環境変数による上書き
+      if (import.meta.env.VITE_API_URL) {
+        this.config.apiUrl = import.meta.env.VITE_API_URL;
+      }
+      
+      return this.config;
+    } catch (error) {
+      console.error('Failed to load config:', error);
+      this.config = this.getDefaultConfig();
+      return this.config;
+    } finally {
+      this.loading = false;
+    }
+  }
+  
+  getDefaultConfig() {
+    return {
+      apiUrl: import.meta.env.VITE_API_URL || 'https://api.example.com/prod/images/composite',
+      cloudfrontUrl: 'https://example.cloudfront.net',
+      s3BucketNames: {
+        resources: 'default-resources-bucket',
+        testImages: 'default-test-bucket',
+        frontend: 'default-frontend-bucket'
+      }
+    };
+  }
+  
+  async waitForConfig() {
+    while (this.loading) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return this.config;
+  }
+}
+
+export const configManager = new ConfigManager();
+```
+
+```javascript
+// frontend/src/App.vue
+<script>
+import { configManager } from './utils/config.js';
+
+export default {
+  name: 'App',
+  data() {
+    return {
+      config: null,
+      configLoaded: false,
+      apiBaseUrl: '',
+      // ... 他のデータ
+    };
+  },
+  
+  async created() {
+    await this.loadConfiguration();
+  },
+  
+  methods: {
+    async loadConfiguration() {
+      try {
+        this.config = await configManager.loadConfig();
+        this.apiBaseUrl = this.config.apiUrl;
+        this.configLoaded = true;
+        
+        // S3バケット名を使用例に反映
+        this.updateExamplesWithS3Paths();
+      } catch (error) {
+        console.error('Configuration loading failed:', error);
+        this.apiBaseUrl = import.meta.env.VITE_API_URL || '';
+        this.configLoaded = true;
+      }
+    },
+    
+    updateExamplesWithS3Paths() {
+      if (this.config?.s3BucketNames?.testImages) {
+        const bucketName = this.config.s3BucketNames.testImages;
+        // 使用例のS3パスを動的に更新
+        this.examples.forEach(example => {
+          if (example.params.image1?.startsWith('s3://')) {
+            example.params.image1 = `s3://${bucketName}/images/circle_red.png`;
+          }
+          if (example.params.image2?.startsWith('s3://')) {
+            example.params.image2 = `s3://${bucketName}/images/rectangle_blue.png`;
+          }
+        });
+      }
+    }
+  }
+};
+</script>
+```
