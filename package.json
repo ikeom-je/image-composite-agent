@@ -27,7 +27,7 @@
     "test:api:report": "npx playwright test --config=test/playwright.config.ts --project=api-tests",
     "test:frontend": "FRONTEND_URL=http://localhost:8080 npx playwright test --config=test/playwright.config.ts test/e2e/frontend.spec.ts --reporter=list",
     "cdk": "cdk",
-    "deploy": "cdk deploy --all --require-approval never",
+    "deploy": "node scripts/ensure-frontend-build.js && cdk deploy --all --require-approval never",
     "deploy:api": "cdk deploy ImageProcessorApiStack --require-approval never",
     "deploy:frontend": "cdk deploy ImageCompositeViewerStack --require-approval never",
     "post-deploy": "node scripts/update-frontend-env.js",
@@ -41,7 +41,7 @@
     "diff:api": "cdk diff ImageProcessorApiStack",
     "diff:frontend": "cdk diff ImageCompositeViewerStack",
     "build-frontend": "cd frontend && npm install && npm run build",
-    "deploy-all": "npm run build && npm run deploy"
+    "deploy-all": "npm run build && npm run build-frontend && npm run deploy"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.2",
