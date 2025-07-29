@@ -163,9 +163,17 @@ def create_composite_image(base_img: Image.Image, image1: Image.Image, image2: I
         PIL.Image.Image: 合成された画像
     """
     logger.info("Creating composite image")
+    logger.info(f"Base image mode: {base_img.mode}, size: {base_img.size}")
     
     # ベース画像のコピーを作成
     composite = base_img.copy()
+    
+    # 透明背景の場合、アルファチャンネルが正しく設定されているか確認
+    if base_img.mode == 'RGBA':
+        # 透明ピクセルの数を確認（デバッグ用）
+        transparent_pixels = sum(1 for p in base_img.getdata() if p[3] == 0)
+        total_pixels = base_img.width * base_img.height
+        logger.info(f"Base image transparency: {transparent_pixels}/{total_pixels} pixels are fully transparent")
     
     # 1つ目の画像のリサイズと配置
     img1_resized = image1.resize((img1_params['width'], img1_params['height']), Image.LANCZOS)
@@ -177,8 +185,16 @@ def create_composite_image(base_img: Image.Image, image1: Image.Image, image2: I
     logger.info(f"Image2 position: ({img2_params['x']}, {img2_params['y']}), size: ({img2_params['width']}, {img2_params['height']})")
     
     # 画像を合成（アルファチャネルを考慮）
-    composite.paste(img1_resized, (img1_params['x'], img1_params['y']), img1_resized)
-    composite.paste(img2_resized, (img2_params['x'], img2_params['y']), img2_resized)
+    # 透明度を保持するため、画像自体をマスクとして使用
+    if img1_resized.mode == 'RGBA':
+        composite.paste(img1_resized, (img1_params['x'], img1_params['y']), img1_resized)
+    else:
+        composite.paste(img1_resized, (img1_params['x'], img1_params['y']))
+    
+    if img2_resized.mode == 'RGBA':
+        composite.paste(img2_resized, (img2_params['x'], img2_params['y']), img2_resized)
+    else:
+        composite.paste(img2_resized, (img2_params['x'], img2_params['y']))
     
     logger.info("Composite image created successfully")
     return composite
@@ -211,7 +227,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎨 画像合成API v2.0.2</title>
+    <title>🎨 画像合成API v2.2.0</title>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -356,8 +372,8 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎨 画像合成API v2.0.2 テスト成功！</h1>
-            <p>高性能・アルファチャンネル対応の画像合成システム（S3パス修正版）</p>
+            <h1>🎨 画像合成API v2.2.0 テスト成功！</h1>
+            <p>高性能・アルファチャンネル対応の画像合成システム（透明背景対応版）</p>
         </div>
         
         <div class="status-grid">
@@ -449,7 +465,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = 'composite-image-v2.0.2.png';
+                a.download = 'composite-image-v2.2.0.png';
                 
                 // ダウンロードを実行
                 document.body.appendChild(a);
@@ -483,7 +499,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 
 def handler(event, context):
     """
-    Lambda ハンドラー関数 - 画像合成API v2.0.2
+    Lambda ハンドラー関数 - 画像合成API v2.2.0
     
     Args:
         event: Lambda イベントオブジェクト
@@ -492,7 +508,7 @@ def handler(event, context):
     Returns:
         HTTP レスポンス
     """
-    logger.info("🚀 Processing image composition request - API v2.0.2")
+    logger.info("🚀 Processing image composition request - API v2.2.0")
     logger.info(f"Event: {json.dumps(event)}")
     
     try:
@@ -542,6 +558,8 @@ def handler(event, context):
         def normalize_path(path_param):
             if path_param == "test":
                 return "test"  # テスト画像はそのまま
+            elif path_param == "transparent":
+                return "transparent"  # 透明背景はそのまま
             elif path_param and not (path_param.startswith('http://') or 
                                     path_param.startswith('https://') or 
                                     path_param.startswith('file://') or 
@@ -557,15 +575,19 @@ def handler(event, context):
         logger.info(f"📁 Normalized paths - base: {base_image_path}, image1: {image1_path}, image2: {image2_path}")
         
         # ベース画像の読み込み
-        if base_image_path:
+        if base_image_path and base_image_path != "transparent":
             base_img = fetch_image(base_image_path, "baseImage")
             if base_img.size != (1920, 1080):
                 logger.info(f"🔄 Resizing base image from {base_img.size} to (1920, 1080)")
                 base_img = base_img.resize((1920, 1080), Image.LANCZOS)
         else:
-            # ベース画像が指定されていない場合は透明の画像を作成
+            # ベース画像が指定されていない場合、または"transparent"が指定された場合は透明の画像を作成
+            # アルファチャンネルを0に設定して完全透明にする
             base_img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
-            logger.info("🆕 Created transparent base image (1920x1080)")
+            if base_image_path == "transparent":
+                logger.info("🆕 Created transparent base image (1920x1080) with alpha=0 - transparent option selected")
+            else:
+                logger.info("🆕 Created transparent base image (1920x1080) with alpha=0 - no base image specified")
             
         # 合成する画像を並列で取得
         logger.info("⚡ Starting parallel image fetching...")
@@ -622,8 +644,15 @@ def handler(event, context):
         
         # 合成画像をバイトに変換
         img_byte_arr = io.BytesIO()
-        composite_img.save(img_byte_arr, format='PNG', optimize=False)
+        # 透明度を保持するためのPNG保存オプション
+        composite_img.save(img_byte_arr, format='PNG', optimize=False, compress_level=6)
         img_byte_arr = img_byte_arr.getvalue()
+        
+        # 透明背景の場合、透明ピクセルの確認
+        if composite_img.mode == 'RGBA':
+            transparent_pixels = sum(1 for p in composite_img.getdata() if p[3] == 0)
+            total_pixels = composite_img.width * composite_img.height
+            logger.info(f"Final composite transparency: {transparent_pixels}/{total_pixels} pixels are fully transparent")
         
         logger.info(f"📊 Output composite image: {composite_img.mode}, {len(img_byte_arr):,} bytes")
         
@@ -634,7 +663,7 @@ def handler(event, context):
                 'statusCode': 200,
                 'headers': {
                     'Content-Type': 'image/png',
-                    'Content-Disposition': 'inline; filename="composite-image-v2.0.2.png"',
+                    'Content-Disposition': 'inline; filename="composite-image-v2.2.0.png"',
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': base64.b64encode(img_byte_arr).decode('utf-8'),
@@ -669,7 +698,7 @@ def handler(event, context):
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>❌ エラー - 画像合成API v2.0.2</title>
+    <title>❌ エラー - 画像合成API v2.2.0</title>
     <style>
         body {{ 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
@@ -703,7 +732,7 @@ def handler(event, context):
         <p><strong>必須パラメータ:</strong> <code>image1</code>, <code>image2</code></p>
         <p><strong>使用例:</strong> <code>?baseImage=test&image1=test&image2=test</code></p>
         <hr>
-        <p><small>画像合成API v2.0.2 - S3パス修正版</small></p>
+        <p><small>画像合成API v2.2.0 - 透明背景対応版</small></p>
     </div>
 </body>
 </html>

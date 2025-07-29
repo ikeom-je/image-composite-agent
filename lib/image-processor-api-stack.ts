@@ -152,7 +152,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
         testImages: this.testImagesBucket.bucketName,
         frontend: this.frontendBucket.bucketName,
       },
-      version: process.env.npm_package_version || '2.1.0',
+      version: process.env.npm_package_version || '2.2.0',
       environment: this.node.tryGetContext('environment') || 'production',
       features: {
         enableS3Upload: this.node.tryGetContext('enableS3Upload') === 'true',

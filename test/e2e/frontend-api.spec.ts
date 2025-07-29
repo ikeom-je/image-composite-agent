@@ -74,7 +74,7 @@ test.describe('フロントエンドAPI接続テスト', () => {
     
     // オプションのvalue属性も確認
     const optionValues = await image1Select.locator('option').evaluateAll(options => 
-      options.map(option => ({ text: option.textContent, value: option.value }))
+      options.map(option => ({ text: option.textContent, value: (option as HTMLOptionElement).value }))
     );
     console.log('Option values:', optionValues);
     
