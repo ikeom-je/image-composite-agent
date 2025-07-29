@@ -145,6 +145,8 @@ def fetch_image(url_or_s3_path: str, image_type: str = "unknown") -> Image.Image
     logger.info(f"{image_type} image has transparent pixels: {has_transparency}")
     
     return img
+
+
 def create_composite_image(base_img: Image.Image, image1: Image.Image, image2: Image.Image,
                           img1_params: Dict[str, Any], img2_params: Dict[str, Any]) -> Image.Image:
     """
@@ -209,7 +211,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎨 画像合成API v2</title>
+    <title>🎨 画像合成API v2.0.2</title>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -354,8 +356,8 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎨 画像合成API v2 テスト成功！</h1>
-            <p>高性能・アルファチャンネル対応の画像合成システム</p>
+            <h1>🎨 画像合成API v2.0.2 テスト成功！</h1>
+            <p>高性能・アルファチャンネル対応の画像合成システム（S3パス修正版）</p>
         </div>
         
         <div class="status-grid">
@@ -369,7 +371,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
                 <span class="icon">✅</span> 並列処理: 成功
             </div>
             <div class="status-item">
-                <span class="icon">✅</span> uv高速化: 成功
+                <span class="icon">✅</span> S3パス解析: 修正済み
             </div>
         </div>
         
@@ -425,7 +427,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
             <h3>🔗 API使用例</h3>
             <p><strong>HTML表示:</strong> <code>?baseImage=test&image1=test&image2=test</code></p>
             <p><strong>PNG直接:</strong> <code>?baseImage=test&image1=test&image2=test&format=png</code></p>
-            <p><strong>カスタム配置:</strong> <code>?baseImage=test&image1=test&image2=test&image1X=100&image1Y=100&image2X=500&image2Y=300</code></p>
+            <p><strong>S3パス使用:</strong> <code>?baseImage=test&image1=s3://bucket/key&image2=test</code></p>
         </div>
     </div>
 
@@ -447,7 +449,7 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = 'composite-image-v2.png';
+                a.download = 'composite-image-v2.0.2.png';
                 
                 // ダウンロードを実行
                 document.body.appendChild(a);
@@ -477,9 +479,11 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 </body>
 </html>
     """
+
+
 def handler(event, context):
     """
-    Lambda ハンドラー関数 - 画像合成API v2
+    Lambda ハンドラー関数 - 画像合成API v2.0.2
     
     Args:
         event: Lambda イベントオブジェクト
@@ -488,7 +492,7 @@ def handler(event, context):
     Returns:
         HTTP レスポンス
     """
-    logger.info("🚀 Processing image composition request - API v2")
+    logger.info("🚀 Processing image composition request - API v2.0.2")
     logger.info(f"Event: {json.dumps(event)}")
     
     try:
@@ -630,7 +634,7 @@ def handler(event, context):
                 'statusCode': 200,
                 'headers': {
                     'Content-Type': 'image/png',
-                    'Content-Disposition': 'inline; filename="composite-image-v2.png"',
+                    'Content-Disposition': 'inline; filename="composite-image-v2.0.2.png"',
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': base64.b64encode(img_byte_arr).decode('utf-8'),
@@ -665,7 +669,7 @@ def handler(event, context):
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>❌ エラー - 画像合成API v2</title>
+    <title>❌ エラー - 画像合成API v2.0.2</title>
     <style>
         body {{ 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
@@ -699,7 +703,7 @@ def handler(event, context):
         <p><strong>必須パラメータ:</strong> <code>image1</code>, <code>image2</code></p>
         <p><strong>使用例:</strong> <code>?baseImage=test&image1=test&image2=test</code></p>
         <hr>
-        <p><small>画像合成API v2 - 高性能アルファチャンネル対応</small></p>
+        <p><small>画像合成API v2.0.2 - S3パス修正版</small></p>
     </div>
 </body>
 </html>

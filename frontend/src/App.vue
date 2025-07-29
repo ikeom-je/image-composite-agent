@@ -21,7 +21,7 @@
           <label>画像1:</label>
           <select v-model="params.image1">
             <option value="test">テスト画像 (circle_red.png)</option>
-            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png">S3パス (circle_red.png)</option>
+            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z/images/circle_red.png">S3パス (circle_red.png)</option>
           </select>
         </div>
 
@@ -49,7 +49,7 @@
           <label>画像2:</label>
           <select v-model="params.image2">
             <option value="test">テスト画像 (rectangle_blue.png)</option>
-            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/rectangle_blue.png">S3パス (rectangle_blue.png)</option>
+            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z/images/rectangle_blue.png">S3パス (rectangle_blue.png)</option>
           </select>
         </div>
 
@@ -139,7 +139,7 @@ export default {
   name: 'App',
   data() {
     return {
-      apiBaseUrl: process.env.VUE_APP_API_URL || 'https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite',
+      apiBaseUrl: import.meta.env.VITE_API_URL || 'https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite',
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -200,12 +200,12 @@ export default {
           description: 'S3に保存された画像を使用した例',
           params: {
             baseImage: 'test',
-            image1: 's3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png',
+            image1: 's3://imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z/images/circle_red.png',
             image1X: 20,
             image1Y: 20,
             image1Width: 300,
             image1Height: 200,
-            image2: 's3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/rectangle_blue.png',
+            image2: 's3://imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z/images/rectangle_blue.png',
             image2X: 20,
             image2Y: 240,
             image2Width: 300,
@@ -277,8 +277,25 @@ export default {
           this.resultUrl = URL.createObjectURL(pngResponse.data);
         }
       } catch (error) {
-        console.error('Error generating image:', error);
-        this.error = error.message || 'Unknown error';
+        console.error('Error generating image:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url,
+          method: error.config?.method,
+          code: error.code
+        });
+        
+        // より詳細なエラーメッセージを設定
+        if (error.code === 'ERR_NAME_NOT_RESOLVED') {
+          this.error = 'API サーバーに接続できません。ネットワーク接続を確認してください。';
+        } else if (error.response?.status === 500) {
+          this.error = 'サーバーエラーが発生しました。しばらく待ってから再試行してください。';
+        } else if (error.response?.status === 400) {
+          this.error = 'リクエストパラメータに問題があります。設定を確認してください。';
+        } else {
+          this.error = error.message || 'Unknown error';
+        }
         
         // エラーが発生した場合、PNG形式で再試行
         try {
@@ -288,7 +305,11 @@ export default {
           this.resultUrl = URL.createObjectURL(retryResponse.data);
           this.error = null; // エラーをクリア
         } catch (retryError) {
-          console.error('Retry failed:', retryError);
+          console.error('Retry failed:', {
+            message: retryError.message,
+            status: retryError.response?.status,
+            code: retryError.code
+          });
           // 再試行も失敗した場合は元のエラーを表示
         }
       } finally {

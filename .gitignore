@@ -10,4 +10,5 @@ node_modules
 .cdk.staging
 cdk.out
 
-*__pychache__*
+*__pycache__*
+*.pyc
