@@ -4,6 +4,14 @@
 
 高性能・アルファチャンネル対応の画像合成REST APIシステムの包括的な設計。AWS CDK + Lambda + API Gateway + S3 + CloudFront構成で、2つまたは3つの画像を合成してPNG形式で出力する。Vue.js 3フロントエンドによる直感的なWebインターフェースを提供し、動的設定管理による環境非依存性を実現する。
 
+**設計原則:**
+- **後方互換性の完全保持**: 既存の2画像合成機能を維持しつつ3画像合成を追加
+- **アルファチャンネル完全対応**: 透過情報を保持した高品質な画像合成
+- **環境非依存性**: 動的設定管理によるデプロイ時URL自動設定
+- **高性能処理**: 並列画像取得とLANCOS補間による最適化
+- **セキュリティファースト**: IAM最小権限とCORS適切設定
+- **テスト駆動開発**: 包括的なテストカバレッジによる品質保証
+
 ## アーキテクチャ
 
 ### システム全体構成
@@ -31,8 +39,8 @@
 
 ### 1. AWS CDKインフラストラクチャ
 
-#### 1.1 メインスタック構成```typescr
-ipt
+#### 1.1 メインスタック構成
+```typescript
 export class ImageProcessorApiStack extends cdk.Stack {
   // S3バケット群
   private resourcesBucket: s3.Bucket;
@@ -79,8 +87,57 @@ new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
 
 ### 2. Lambda関数の画像処理エンジン
 
-#### 2.1 三角形画像生成機能
+#### 2.1 テスト画像生成機能
+
+**設計判断**: テスト画像の自動生成により、外部依存なしでの機能検証を実現。各画像タイプに応じた適切な図形を生成し、アルファチャンネル対応により透過背景での合成を可能にする。
+
 ```python
+def generate_circle_image(size: Tuple[int, int] = (400, 400), 
+                         color: Tuple[int, int, int] = (239, 68, 68)) -> Image.Image:
+    """
+    赤色の円形画像を生成する
+    
+    Args:
+        size: 画像サイズ (width, height)
+        color: RGB色値 (デフォルト: 赤色)
+        
+    Returns:
+        PIL.Image.Image: 透過背景の円形画像
+    """
+    img = Image.new('RGBA', size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # 円の描画
+    width, height = size
+    margin = min(width, height) // 8
+    draw.ellipse([margin, margin, width - margin, height - margin], 
+                 fill=(*color, 255))
+    
+    return img
+
+def generate_rectangle_image(size: Tuple[int, int] = (400, 400), 
+                           color: Tuple[int, int, int] = (59, 130, 246)) -> Image.Image:
+    """
+    青色の四角形画像を生成する
+    
+    Args:
+        size: 画像サイズ (width, height)
+        color: RGB色値 (デフォルト: 青色)
+        
+    Returns:
+        PIL.Image.Image: 透過背景の四角形画像
+    """
+    img = Image.new('RGBA', size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    
+    # 四角形の描画
+    width, height = size
+    margin = min(width, height) // 8
+    draw.rectangle([margin, margin, width - margin, height - margin], 
+                   fill=(*color, 255))
+    
+    return img
+
 def generate_triangle_image(size: Tuple[int, int] = (400, 400), 
                           color: Tuple[int, int, int] = (34, 197, 94)) -> Image.Image:
     """
@@ -112,6 +169,8 @@ def generate_triangle_image(size: Tuple[int, int] = (400, 400),
 ```
 
 #### 2.2 メインハンドラー関数
+
+**設計判断**: 統一されたエラーハンドリングと包括的なログ出力により、運用時のトラブルシューティングを容易にする。パラメータ検証を厳密に行い、セキュリティと安定性を確保する。
 ```python
 def handler(event, context):
     """
@@ -162,7 +221,9 @@ def handler(event, context):
         return format_response(500, {'error': str(e)})
 ```
 
-#### 2.2 画像取得エンジン
+#### 2.3 画像取得エンジン
+
+**設計判断**: 複数の画像ソース（S3、HTTP/HTTPS、テスト画像）に対応し、並列処理により高速化を実現。テスト画像の自動選択により、開発・テスト環境での利便性を向上させる。
 ```python
 def fetch_images_parallel(image_paths: Dict[str, str]) -> Dict[str, Image.Image]:
     """
@@ -223,7 +284,7 @@ def get_test_image(image_type: str) -> Image.Image:
     return fetch_image_from_s3(test_bucket, image_path)
 ```
 
-#### 2.3 画像合成エンジン
+#### 2.4 画像合成エンジン
 ```python
 def create_composite_image(base_img: Image.Image, 
                           image1: Image.Image, 
@@ -682,7 +743,9 @@ class CompositeRequest:
 
 ## エラーハンドリング
 
-### Lambda関数エラー処理
+**設計判断**: 包括的なエラーハンドリング戦略により、システムの堅牢性と運用性を確保する。各レイヤーでの適切なエラー処理と詳細なログ出力により、トラブルシューティングを容易にする。
+
+### 1. Lambda関数エラー処理
 ```python
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
     """統一されたレスポンス形式"""
@@ -708,7 +771,9 @@ def handle_image_error(error: Exception, image_name: str) -> Dict:
         'FileNotFoundError': f'{image_name}が見つかりません',
         'PermissionError': f'{image_name}へのアクセス権限がありません',
         'ValueError': f'{image_name}の形式が無効です',
-        'ConnectionError': f'{image_name}の取得中にネットワークエラーが発生しました'
+        'ConnectionError': f'{image_name}の取得中にネットワークエラーが発生しました',
+        'TimeoutError': f'{image_name}の取得がタイムアウトしました',
+        'MemoryError': f'{image_name}の処理中にメモリ不足が発生しました'
     }
     
     error_type = type(error).__name__
@@ -716,49 +781,913 @@ def handle_image_error(error: Exception, image_name: str) -> Dict:
     
     logger.error(f"Image error [{error_type}]: {message}")
     return format_response(400, {'error': message})
+
+def validate_parameters(params: Dict[str, Any]) -> List[str]:
+    """パラメータ検証とエラーメッセージ生成"""
+    errors = []
+    
+    # 必須パラメータの検証
+    if not params.get('image1'):
+        errors.append('image1パラメータは必須です')
+    if not params.get('image2'):
+        errors.append('image2パラメータは必須です')
+    
+    # 位置・サイズパラメータの検証
+    for image_num in ['1', '2', '3']:
+        if params.get(f'image{image_num}'):
+            x = params.get(f'image{image_num}X', 0)
+            y = params.get(f'image{image_num}Y', 0)
+            width = params.get(f'image{image_num}Width', 100)
+            height = params.get(f'image{image_num}Height', 100)
+            
+            if x < 0 or y < 0:
+                errors.append(f'image{image_num}の位置座標は0以上である必要があります')
+            if width <= 0 or height <= 0:
+                errors.append(f'image{image_num}のサイズは1以上である必要があります')
+            if width > 5000 or height > 5000:
+                errors.append(f'image{image_num}のサイズは5000ピクセル以下である必要があります')
+    
+    # フォーマットパラメータの検証
+    format_param = params.get('format', 'html')
+    if format_param not in ['html', 'png']:
+        errors.append('formatパラメータはhtmlまたはpngである必要があります')
+    
+    return errors
+
+def handle_validation_errors(errors: List[str]) -> Dict:
+    """バリデーションエラーの処理"""
+    logger.warning(f"Parameter validation failed: {errors}")
+    return format_response(400, {
+        'error': 'パラメータが無効です',
+        'details': errors
+    })
+```
+
+### 2. フロントエンドエラー処理
+```javascript
+class ErrorHandler {
+  static handleApiError(error) {
+    console.error('API Error:', error);
+    
+    if (error.code === 'ERR_NAME_NOT_RESOLVED') {
+      return 'API サーバーに接続できません。ネットワーク接続を確認してください。';
+    } else if (error.response?.status === 500) {
+      return 'サーバーエラーが発生しました。しばらく待ってから再試行してください。';
+    } else if (error.response?.status === 400) {
+      const errorData = error.response.data;
+      if (errorData.details && Array.isArray(errorData.details)) {
+        return `リクエストパラメータに問題があります:\n${errorData.details.join('\n')}`;
+      }
+      return 'リクエストパラメータに問題があります。設定を確認してください。';
+    } else if (error.response?.status === 403) {
+      return 'アクセス権限がありません。管理者に連絡してください。';
+    } else if (error.response?.status === 429) {
+      return 'リクエストが多すぎます。しばらく待ってから再試行してください。';
+    } else {
+      return error.message || 'Unknown error';
+    }
+  }
+  
+  static handleConfigError(error) {
+    console.error('Configuration Error:', error);
+    return '設定の読み込みに失敗しました。デフォルト設定で続行します。';
+  }
+  
+  static handleImageError(error) {
+    console.error('Image Error:', error);
+    return '画像の処理中にエラーが発生しました。画像ファイルを確認してください。';
+  }
+}
+
+// Vue.jsコンポーネントでの使用例
+export default {
+  methods: {
+    async generateImage() {
+      this.isLoading = true;
+      this.error = null;
+      
+      try {
+        const apiUrl = this.buildApiUrl();
+        const response = await axios.get(apiUrl, {
+          responseType: 'blob',
+          timeout: 30000, // 30秒タイムアウト
+          headers: { 'Accept': 'image/png, image/jpeg, image/*' }
+        });
+        
+        // 成功時の処理
+        this.handleSuccessResponse(response);
+        
+      } catch (error) {
+        this.error = ErrorHandler.handleApiError(error);
+        
+        // エラー分析とリトライ判定
+        if (this.shouldRetry(error)) {
+          this.scheduleRetry();
+        }
+      } finally {
+        this.isLoading = false;
+      }
+    },
+    
+    shouldRetry(error) {
+      // 一時的なエラーの場合はリトライを許可
+      const retryableErrors = [500, 502, 503, 504];
+      return retryableErrors.includes(error.response?.status);
+    },
+    
+    scheduleRetry() {
+      if (this.retryCount < 3) {
+        this.retryCount++;
+        setTimeout(() => {
+          this.generateImage();
+        }, 2000 * this.retryCount); // 指数バックオフ
+      }
+    }
+  }
+};
+```
+
+### 3. インフラストラクチャエラー処理
+```typescript
+// CDKでのエラーハンドリング設定
+export class ImageProcessorApiStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // Lambda関数のエラー設定
+    const imageProcessorFunction = new lambda.Function(this, 'ImageProcessor', {
+      // ... 他の設定 ...
+      
+      // デッドレターキューの設定
+      deadLetterQueue: new sqs.Queue(this, 'ImageProcessorDLQ', {
+        retentionPeriod: cdk.Duration.days(14)
+      }),
+      
+      // リトライ設定
+      retryAttempts: 2,
+      
+      // タイムアウト設定
+      timeout: cdk.Duration.seconds(30),
+      
+      // メモリ設定（画像処理のため多めに確保）
+      memorySize: 1024,
+      
+      // 環境変数でログレベル設定
+      environment: {
+        LOG_LEVEL: 'INFO',
+        PYTHONPATH: '/var/runtime'
+      }
+    });
+    
+    // CloudWatch Alarmの設定
+    const errorAlarm = new cloudwatch.Alarm(this, 'LambdaErrorAlarm', {
+      metric: imageProcessorFunction.metricErrors(),
+      threshold: 5,
+      evaluationPeriods: 2,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING
+    });
+    
+    // API Gatewayのエラーレスポンス設定
+    const api = new apigateway.RestApi(this, 'ImageCompositeApi', {
+      // ... 他の設定 ...
+      
+      // デフォルトエラーレスポンス
+      defaultMethodOptions: {
+        methodResponses: [
+          {
+            statusCode: '200',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true
+            }
+          },
+          {
+            statusCode: '400',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true
+            }
+          },
+          {
+            statusCode: '500',
+            responseParameters: {
+              'method.response.header.Access-Control-Allow-Origin': true
+            }
+          }
+        ]
+      }
+    });
+  }
+}
+```
+
+### 4. ログ戦略
+```python
+import logging
+import json
+from datetime import datetime
+
+# ログ設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def log_request_start(event):
+    """リクエスト開始ログ"""
+    logger.info(f"Request started: {json.dumps({
+        'requestId': event.get('requestContext', {}).get('requestId'),
+        'httpMethod': event.get('httpMethod'),
+        'path': event.get('path'),
+        'queryStringParameters': event.get('queryStringParameters'),
+        'timestamp': datetime.utcnow().isoformat()
+    })}")
+
+def log_request_end(request_id, status_code, duration):
+    """リクエスト終了ログ"""
+    logger.info(f"Request completed: {json.dumps({
+        'requestId': request_id,
+        'statusCode': status_code,
+        'duration': duration,
+        'timestamp': datetime.utcnow().isoformat()
+    })}")
+
+def log_image_processing(operation, details):
+    """画像処理ログ"""
+    logger.info(f"Image processing: {json.dumps({
+        'operation': operation,
+        'details': details,
+        'timestamp': datetime.utcnow().isoformat()
+    })}")
+
+def log_error(error, context):
+    """エラーログ"""
+    logger.error(f"Error occurred: {json.dumps({
+        'error': str(error),
+        'errorType': type(error).__name__,
+        'context': context,
+        'timestamp': datetime.utcnow().isoformat()
+    })}")
+```
+
+### 5. 監視とアラート
+```typescript
+// CloudWatch メトリクスとアラームの設定
+const lambdaErrorRate = new cloudwatch.Alarm(this, 'LambdaErrorRate', {
+  metric: imageProcessorFunction.metricErrors({
+    period: cdk.Duration.minutes(5)
+  }).with({
+    statistic: 'Sum'
+  }),
+  threshold: 10,
+  evaluationPeriods: 2,
+  alarmDescription: 'Lambda function error rate is too high'
+});
+
+const lambdaDuration = new cloudwatch.Alarm(this, 'LambdaDuration', {
+  metric: imageProcessorFunction.metricDuration({
+    period: cdk.Duration.minutes(5)
+  }).with({
+    statistic: 'Average'
+  }),
+  threshold: 25000, // 25秒
+  evaluationPeriods: 2,
+  alarmDescription: 'Lambda function duration is too long'
+});
+
+const apiGateway4xxErrors = new cloudwatch.Alarm(this, 'ApiGateway4xxErrors', {
+  metric: api.metricClientError({
+    period: cdk.Duration.minutes(5)
+  }),
+  threshold: 20,
+  evaluationPeriods: 2,
+  alarmDescription: 'API Gateway 4xx error rate is too high'
+});
+```
+
+## パフォーマンスと拡張性
+
+**設計判断**: 高性能で拡張可能なシステム設計により、大量のリクエストと複雑な画像処理に対応する。並列処理、キャッシュ戦略、自動スケーリングを組み合わせて最適なパフォーマンスを実現する。
+
+### 1. 並列処理による高速化
+```python
+def fetch_images_parallel(image_paths: Dict[str, str]) -> Dict[str, Image.Image]:
+    """
+    複数画像の並列取得による高速化
+    
+    設計判断: ThreadPoolExecutorを使用して最大4つの画像を並列取得し、
+    処理時間を大幅に短縮する。特に3画像合成時の効果が顕著。
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_path = {}
+        
+        for name, path in image_paths.items():
+            if path:  # パスが指定されている場合のみ
+                future_to_path[executor.submit(fetch_image, path, name)] = name
+        
+        images = {}
+        for future in concurrent.futures.as_completed(future_to_path):
+            name = future_to_path[future]
+            try:
+                images[name] = future.result()
+                logger.info(f"✅ Successfully loaded {name}")
+            except Exception as e:
+                logger.error(f"❌ Error loading image {name}: {e}")
+                raise ValueError(f"Failed to load {name}: {str(e)}")
+        
+        return images
+
+def optimize_image_processing():
+    """
+    画像処理の最適化設定
+    
+    - LANCZOS補間による高品質リサイズ
+    - RGBA変換による透過情報保持
+    - メモリ効率的な画像操作
+    """
+    # 高品質リサイズ設定
+    RESIZE_FILTER = Image.LANCZOS
+    
+    # メモリ使用量の最適化
+    Image.MAX_IMAGE_PIXELS = 50000000  # 50MP制限
+    
+    # 並列処理設定
+    MAX_WORKERS = 4
+    TIMEOUT_SECONDS = 30
+```
+
+### 2. キャッシュ戦略
+```typescript
+// CloudFrontキャッシュ設定
+const distribution = new cloudfront.Distribution(this, 'Distribution', {
+  defaultBehavior: {
+    origin: new origins.S3Origin(frontendBucket, {
+      originAccessIdentity: oai
+    }),
+    viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+    cachePolicy: new cloudfront.CachePolicy(this, 'CachePolicy', {
+      cachePolicyName: 'ImageCompositeCache',
+      defaultTtl: cdk.Duration.hours(24),
+      maxTtl: cdk.Duration.days(365),
+      minTtl: cdk.Duration.seconds(0),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Accept'),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none()
+    })
+  },
+  additionalBehaviors: {
+    '/config.json': {
+      origin: new origins.S3Origin(frontendBucket, {
+        originAccessIdentity: oai
+      }),
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED, // 設定ファイルはキャッシュしない
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS
+    }
+  }
+});
+```
+
+### 3. Lambda関数の最適化
+```typescript
+const imageProcessorFunction = new lambda.Function(this, 'ImageProcessor', {
+  runtime: lambda.Runtime.PYTHON_3_12,
+  handler: 'image_processor.handler',
+  code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/python')),
+  
+  // パフォーマンス最適化設定
+  memorySize: 1024,        // 画像処理に十分なメモリ
+  timeout: cdk.Duration.seconds(30),  // 適切なタイムアウト
+  
+  // 同時実行数の制御
+  reservedConcurrentExecutions: 100,
+  
+  // 環境変数による最適化
+  environment: {
+    PYTHONPATH: '/var/runtime',
+    PIL_DISABLE_PLATFORM_GUESSING: '1',  // Pillowの最適化
+    PARALLEL_WORKERS: '4',
+    MAX_IMAGE_SIZE: '5000'
+  },
+  
+  // レイヤーによる依存関係の最適化
+  layers: [
+    lambda.LayerVersion.fromLayerVersionArn(
+      this,
+      'PillowLayer',
+      'arn:aws:lambda:region:account:layer:pillow:1'
+    )
+  ]
+});
+```
+
+### 4. API Gatewayの最適化
+```typescript
+const api = new apigateway.RestApi(this, 'ImageCompositeApi', {
+  restApiName: 'Image Composite API',
+  description: 'High-performance image composition API',
+  
+  // スロットリング設定
+  deployOptions: {
+    throttleSettings: {
+      rateLimit: 1000,      // 1秒あたり1000リクエスト
+      burstLimit: 2000      // バースト時2000リクエスト
+    },
+    
+    // ログ設定
+    loggingLevel: apigateway.MethodLoggingLevel.INFO,
+    dataTraceEnabled: true,
+    metricsEnabled: true
+  },
+  
+  // バイナリメディアタイプの設定
+  binaryMediaTypes: ['image/png', 'image/jpeg', 'image/*'],
+  
+  // CORS設定
+  defaultCorsPreflightOptions: {
+    allowOrigins: apigateway.Cors.ALL_ORIGINS,
+    allowMethods: apigateway.Cors.ALL_METHODS,
+    allowHeaders: ['Content-Type', 'Accept'],
+    maxAge: cdk.Duration.hours(1)
+  }
+});
+```
+
+### 5. 自動スケーリングとモニタリング
+```typescript
+// Lambda関数のメトリクス監視
+const concurrentExecutionsAlarm = new cloudwatch.Alarm(this, 'ConcurrentExecutions', {
+  metric: imageProcessorFunction.metricConcurrentExecutions(),
+  threshold: 80,  // 80%の同時実行数でアラート
+  evaluationPeriods: 2,
+  alarmDescription: 'Lambda concurrent executions approaching limit'
+});
+
+const invocationRateAlarm = new cloudwatch.Alarm(this, 'InvocationRate', {
+  metric: imageProcessorFunction.metricInvocations({
+    period: cdk.Duration.minutes(1)
+  }),
+  threshold: 500,  // 1分間に500回以上の呼び出しでアラート
+  evaluationPeriods: 3,
+  alarmDescription: 'High Lambda invocation rate detected'
+});
+
+// API Gatewayのメトリクス監視
+const apiLatencyAlarm = new cloudwatch.Alarm(this, 'ApiLatency', {
+  metric: api.metricLatency({
+    period: cdk.Duration.minutes(5)
+  }),
+  threshold: 10000,  // 10秒以上のレイテンシでアラート
+  evaluationPeriods: 2,
+  alarmDescription: 'API Gateway latency is too high'
+});
+```
+
+### 6. フロントエンドの最適化
+```javascript
+// Vue.jsアプリケーションの最適化
+export default {
+  data() {
+    return {
+      // リクエストキューによる同時実行制御
+      requestQueue: [],
+      maxConcurrentRequests: 3,
+      activeRequests: 0
+    };
+  },
+  
+  methods: {
+    async generateImage() {
+      // リクエストキューに追加
+      return new Promise((resolve, reject) => {
+        this.requestQueue.push({ resolve, reject, params: { ...this.params } });
+        this.processQueue();
+      });
+    },
+    
+    async processQueue() {
+      if (this.activeRequests >= this.maxConcurrentRequests || this.requestQueue.length === 0) {
+        return;
+      }
+      
+      this.activeRequests++;
+      const { resolve, reject, params } = this.requestQueue.shift();
+      
+      try {
+        const result = await this.executeImageGeneration(params);
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      } finally {
+        this.activeRequests--;
+        this.processQueue(); // 次のリクエストを処理
+      }
+    },
+    
+    async executeImageGeneration(params) {
+      const apiUrl = this.buildApiUrl(params);
+      
+      // プリフライトリクエストの最適化
+      const response = await axios.get(apiUrl, {
+        responseType: 'blob',
+        timeout: 30000,
+        headers: { 
+          'Accept': 'image/png, image/jpeg, image/*',
+          'Cache-Control': 'no-cache'
+        },
+        // リトライ設定
+        retry: 3,
+        retryDelay: (retryCount) => retryCount * 1000
+      });
+      
+      return response;
+    }
+  }
+};
+```
+
+### 7. パフォーマンス指標とSLA
+```typescript
+// パフォーマンス目標の定義
+const performanceTargets = {
+  // レスポンス時間
+  apiResponseTime: {
+    target: '< 5秒',
+    measurement: 'P95レスポンス時間',
+    alarm: '10秒以上'
+  },
+  
+  // スループット
+  throughput: {
+    target: '1000 req/min',
+    measurement: '1分間あたりのリクエスト数',
+    alarm: '処理能力の80%超過'
+  },
+  
+  // 可用性
+  availability: {
+    target: '99.9%',
+    measurement: '月間稼働率',
+    alarm: 'エラー率5%以上'
+  },
+  
+  // 画像処理時間
+  imageProcessing: {
+    target: '< 3秒',
+    measurement: 'Lambda実行時間',
+    alarm: '25秒以上（タイムアウト近く）'
+  }
+};
+
+// ダッシュボードの作成
+const dashboard = new cloudwatch.Dashboard(this, 'PerformanceDashboard', {
+  dashboardName: 'ImageCompositePerformance',
+  widgets: [
+    [
+      new cloudwatch.GraphWidget({
+        title: 'Lambda Duration',
+        left: [imageProcessorFunction.metricDuration()],
+        width: 12
+      })
+    ],
+    [
+      new cloudwatch.GraphWidget({
+        title: 'API Gateway Latency',
+        left: [api.metricLatency()],
+        width: 12
+      })
+    ],
+    [
+      new cloudwatch.GraphWidget({
+        title: 'Error Rates',
+        left: [
+          imageProcessorFunction.metricErrors(),
+          api.metricClientError(),
+          api.metricServerError()
+        ],
+        width: 12
+      })
+    ]
+  ]
+});
 ```
 
 ## テスト戦略
 
-### ユニットテスト
+**設計判断**: 包括的なテスト戦略により、システムの品質と信頼性を確保する。ユニットテスト、統合テスト、E2Eテストの3層構造で、各レイヤーの機能を検証し、後方互換性とアルファチャンネル対応を保証する。
+
+### 1. ユニットテスト（Lambda関数）
 ```python
 class TestImageComposition(unittest.TestCase):
     def test_two_image_composition(self):
-        """2画像合成の基本テスト"""
+        """2画像合成の基本テスト - 後方互換性検証"""
         # テスト画像の準備
-        # 合成処理の実行
+        base_img = generate_test_base_image()
+        image1 = generate_circle_image()
+        image2 = generate_rectangle_image()
+        
+        # 合成処理の実行（image3=None）
+        result = create_composite_image(base_img, image1, image2, None, default_params)
+        
         # 結果の検証
+        self.assertEqual(result.mode, 'RGBA')
+        self.assertIsNotNone(result)
+        self.assertTrue(has_alpha_channel(result))
         
     def test_three_image_composition(self):
-        """3画像合成の基本テスト"""
-        # テスト画像の準備
+        """3画像合成の基本テスト - 新機能検証"""
+        # 3つのテスト画像の準備
+        base_img = generate_test_base_image()
+        image1 = generate_circle_image()
+        image2 = generate_rectangle_image()
+        image3 = generate_triangle_image()
+        
         # 合成処理の実行
+        result = create_composite_image(base_img, image1, image2, image3, default_params)
+        
         # 結果の検証
+        self.assertEqual(result.mode, 'RGBA')
+        self.assertIsNotNone(result)
+        self.assertTrue(has_alpha_channel(result))
         
     def test_parameter_validation(self):
         """パラメータ検証テスト"""
-        # 無効なパラメータでのテスト
-        # エラーレスポンスの検証
+        # 必須パラメータ不足のテスト
+        with self.assertRaises(ValueError):
+            parse_image_parameters({'image1': None, 'image2': 'test'})
+            
+        # 無効な位置パラメータのテスト
+        with self.assertRaises(ValueError):
+            parse_image_parameters({'image1': 'test', 'image2': 'test', 'image1X': -1})
+            
+    def test_test_image_selection(self):
+        """テスト画像自動選択テスト"""
+        # 各画像タイプの自動選択を検証
+        circle_img = get_test_image('image1')
+        rectangle_img = get_test_image('image2')
+        triangle_img = get_test_image('image3')
+        
+        self.assertIsNotNone(circle_img)
+        self.assertIsNotNone(rectangle_img)
+        self.assertIsNotNone(triangle_img)
+        self.assertEqual(triangle_img.mode, 'RGBA')
+        
+    def test_alpha_channel_preservation(self):
+        """アルファチャンネル保持テスト"""
+        # 透過画像の合成でアルファチャンネルが保持されることを確認
+        transparent_img = create_transparent_test_image()
+        result = create_composite_image(None, transparent_img, transparent_img, None, default_params)
+        
+        self.assertTrue(has_transparency(result))
+        self.assertEqual(result.mode, 'RGBA')
+        
+    def test_parallel_image_fetching(self):
+        """並列画像取得テスト"""
+        # 複数画像の並列取得が正常に動作することを確認
+        image_paths = {
+            'image1': 'test',
+            'image2': 'test',
+            'image3': 'test'
+        }
+        
+        start_time = time.time()
+        images = fetch_images_parallel(image_paths)
+        end_time = time.time()
+        
+        self.assertEqual(len(images), 3)
+        self.assertLess(end_time - start_time, 5.0)  # 5秒以内で完了
 ```
 
-### E2Eテスト
+### 2. 統合テスト（API Gateway + Lambda）
 ```typescript
-test.describe('画像合成API', () => {
-  test('基本的な2画像合成', async ({ request }) => {
-    const response = await request.get('/images/composite?image1=test&image2=test');
+test.describe('画像合成API統合テスト', () => {
+  test('基本的な2画像合成API', async ({ request }) => {
+    const response = await request.get(
+      '/images/composite?image1=test&image2=test&format=png'
+    );
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/png');
+  });
+  
+  test('3画像合成API', async ({ request }) => {
+    const response = await request.get(
+      '/images/composite?image1=test&image2=test&image3=test&format=png'
+    );
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/png');
+  });
+  
+  test('S3画像パス指定テスト', async ({ request }) => {
+    const bucketName = process.env.TEST_BUCKET_NAME;
+    const response = await request.get(
+      `/images/composite?image1=s3://${bucketName}/images/circle_red.png&image2=s3://${bucketName}/images/rectangle_blue.png`
+    );
     expect(response.status()).toBe(200);
   });
   
-  test('3画像合成', async ({ request }) => {
-    const response = await request.get('/images/composite?image1=test&image2=test&image3=test');
-    expect(response.status()).toBe(200);
+  test('パラメータバリデーションテスト', async ({ request }) => {
+    // 必須パラメータ不足
+    const response = await request.get('/images/composite?image1=test');
+    expect(response.status()).toBe(400);
+    
+    // 無効なフォーマット
+    const response2 = await request.get('/images/composite?image1=test&image2=test&format=invalid');
+    expect(response2.status()).toBe(400);
   });
   
-  test('フロントエンド操作', async ({ page }) => {
+  test('HTML形式レスポンステスト', async ({ request }) => {
+    const response = await request.get(
+      '/images/composite?image1=test&image2=test&format=html'
+    );
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('text/html');
+    
+    const html = await response.text();
+    expect(html).toContain('<img');
+    expect(html).toContain('JavaScript');
+  });
+  
+  test('後方互換性テスト', async ({ request }) => {
+    // image3を指定しない場合の動作確認
+    const response = await request.get(
+      '/images/composite?image1=test&image2=test'
+    );
+    expect(response.status()).toBe(200);
+  });
+});
+```
+
+### 3. E2Eテスト（フロントエンド）
+```typescript
+test.describe('フロントエンドE2Eテスト', () => {
+  test('動的設定読み込みテスト', async ({ page }) => {
     await page.goto('/');
-    await page.selectOption('[data-testid="image3-select"]', 'test');
+    
+    // 設定読み込み完了まで待機
+    await expect(page.locator('[data-testid="config-loading"]')).toBeHidden();
+    
+    // バージョン情報が表示されることを確認
+    await expect(page.locator('[data-testid="version-info"]')).toContainText('2.3.0');
+    
+    // API URLが動的に設定されていることを確認
+    const apiUrl = await page.evaluate(() => window.appConfig?.apiUrl);
+    expect(apiUrl).toBeTruthy();
+  });
+  
+  test('2画像合成フロントエンド操作', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // 2画像のみ選択
+    await page.selectOption('[data-testid="image1-select"]', 'test');
+    await page.selectOption('[data-testid="image2-select"]', 'test');
+    
+    // image3は選択しない（空文字のまま）
+    await expect(page.locator('[data-testid="image3-select"]')).toHaveValue('');
+    
+    // 画像生成ボタンをクリック
     await page.click('[data-testid="generate-button"]');
+    
+    // ボタンテキストが「2画像を合成」であることを確認
+    await expect(page.locator('[data-testid="generate-button"]')).toContainText('2画像を合成');
+    
+    // 結果画像が表示されることを確認
     await expect(page.locator('[data-testid="result-image"]')).toBeVisible();
+  });
+  
+  test('3画像合成フロントエンド操作', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // 3画像を選択
+    await page.selectOption('[data-testid="image1-select"]', 'test');
+    await page.selectOption('[data-testid="image2-select"]', 'test');
+    await page.selectOption('[data-testid="image3-select"]', 'test');
+    
+    // 画像生成ボタンをクリック
+    await page.click('[data-testid="generate-button"]');
+    
+    // ボタンテキストが「3画像を合成」であることを確認
+    await expect(page.locator('[data-testid="generate-button"]')).toContainText('3画像を合成');
+    
+    // 結果画像が表示されることを確認
+    await expect(page.locator('[data-testid="result-image"]')).toBeVisible();
+  });
+  
+  test('使用例機能テスト', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // 3画像合成の使用例を選択
+    await page.click('[data-testid="example-3-images"]');
+    
+    // パラメータが自動設定されることを確認
+    await expect(page.locator('[data-testid="image3-select"]')).toHaveValue('test');
+    
+    // 自動実行されて結果が表示されることを確認
+    await expect(page.locator('[data-testid="result-image"]')).toBeVisible();
+  });
+  
+  test('画像ダウンロード機能テスト', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    
+    // 画像生成
+    await page.selectOption('[data-testid="image1-select"]', 'test');
+    await page.selectOption('[data-testid="image2-select"]', 'test');
+    await page.click('[data-testid="generate-button"]');
+    
+    // 結果表示を待機
+    await expect(page.locator('[data-testid="result-image"]')).toBeVisible();
+    
+    // ダウンロードボタンのテスト
+    const downloadPromise = page.waitForEvent('download');
+    await page.click('[data-testid="download-button"]');
+    const download = await downloadPromise;
+    
+    expect(download.suggestedFilename()).toBe('composite-image.png');
+  });
+  
+  test('レスポンシブデザインテスト', async ({ page }) => {
+    // モバイルビューポートでのテスト
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/');
+    
+    // UI要素が適切に表示されることを確認
+    await expect(page.locator('[data-testid="form-container"]')).toBeVisible();
+    await expect(page.locator('[data-testid="generate-button"]')).toBeVisible();
+    
+    // タブレットビューポートでのテスト
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expect(page.locator('[data-testid="config-table"]')).toBeVisible();
+  });
+});
+```
+
+### 4. パフォーマンステスト
+```typescript
+test.describe('パフォーマンステスト', () => {
+  test('並列画像取得の性能テスト', async ({ request }) => {
+    const startTime = Date.now();
+    
+    const response = await request.get(
+      '/images/composite?image1=test&image2=test&image3=test&format=png'
+    );
+    
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    expect(response.status()).toBe(200);
+    expect(duration).toBeLessThan(10000); // 10秒以内で完了
+  });
+  
+  test('大量リクエストの負荷テスト', async ({ request }) => {
+    const promises = [];
+    
+    // 10個の並列リクエストを送信
+    for (let i = 0; i < 10; i++) {
+      promises.push(
+        request.get('/images/composite?image1=test&image2=test&format=png')
+      );
+    }
+    
+    const responses = await Promise.all(promises);
+    
+    // 全てのリクエストが成功することを確認
+    responses.forEach(response => {
+      expect(response.status()).toBe(200);
+    });
+  });
+});
+```
+
+### 5. セキュリティテスト
+```typescript
+test.describe('セキュリティテスト', () => {
+  test('CORS設定テスト', async ({ request }) => {
+    const response = await request.options('/images/composite');
+    
+    expect(response.headers()['access-control-allow-origin']).toBe('*');
+    expect(response.headers()['access-control-allow-methods']).toContain('GET');
+  });
+  
+  test('無効なS3パスの処理テスト', async ({ request }) => {
+    const response = await request.get(
+      '/images/composite?image1=s3://invalid-bucket/invalid-path&image2=test'
+    );
+    
+    expect(response.status()).toBe(400);
+    
+    const error = await response.json();
+    expect(error.error).toContain('Failed to load');
+  });
+  
+  test('SQLインジェクション対策テスト', async ({ request }) => {
+    const maliciousInput = "test'; DROP TABLE users; --";
+    const response = await request.get(
+      `/images/composite?image1=${encodeURIComponent(maliciousInput)}&image2=test`
+    );
+    
+    // エラーレスポンスが返されることを確認（SQLが実行されないこと）
+    expect(response.status()).toBe(400);
   });
 });
 ```
