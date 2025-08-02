@@ -3,12 +3,21 @@
     <header>
       <h1>🎨 画像合成REST API デモ</h1>
       <p class="subtitle">高性能・アルファチャンネル対応の画像合成REST API</p>
+      <div v-if="config" class="config-info">
+        <small>Version: {{ config.version }} | Environment: {{ config.environment }}</small>
+      </div>
     </header>
 
-    <div class="main-content">
+    <!-- 設定読み込み中の表示 -->
+    <div v-if="!configLoaded" class="config-loading">
+      <div class="spinner"></div>
+      <p>設定を読み込み中...</p>
+    </div>
+
+    <div v-else class="main-content">
       <div class="form-container">
         <h2>画像合成パラメータ</h2>
-        
+
         <div class="form-group">
           <label>ベース画像:</label>
           <select v-model="params.baseImage">
@@ -21,7 +30,8 @@
           <label>画像1:</label>
           <select v-model="params.image1">
             <option value="test">テスト画像 (circle_red.png)</option>
-            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png">S3パス (circle_red.png)</option>
+            <option v-if="config?.s3BucketNames?.testImages"
+              :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">S3パス (circle_red.png)</option>
           </select>
         </div>
 
@@ -49,7 +59,9 @@
           <label>画像2:</label>
           <select v-model="params.image2">
             <option value="test">テスト画像 (rectangle_blue.png)</option>
-            <option value="s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/rectangle_blue.png">S3パス (rectangle_blue.png)</option>
+            <option v-if="config?.s3BucketNames?.testImages"
+              :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">S3パス (rectangle_blue.png)
+            </option>
           </select>
         </div>
 
@@ -88,16 +100,16 @@
 
       <div class="result-container">
         <h2>生成結果</h2>
-        
+
         <div v-if="isLoading" class="loading">
           <div class="spinner"></div>
           <p>画像を生成中...</p>
         </div>
-        
+
         <div v-else-if="error" class="error">
           <p>エラーが発生しました: {{ error }}</p>
         </div>
-        
+
         <div v-else-if="resultUrl" class="result">
           <img :src="resultUrl" alt="合成画像" class="result-image" @error="handleImageError" />
           <div class="actions">
@@ -109,7 +121,7 @@
             <code>{{ apiUrl }}</code>
           </div>
         </div>
-        
+
         <div v-else class="empty-result">
           <p>「画像を生成」ボタンをクリックして画像を合成してください</p>
         </div>
@@ -134,12 +146,18 @@
 
 <script>
 import axios from 'axios';
+import { configManager } from './utils/config.js';
 
 export default {
   name: 'App',
   data() {
     return {
-      apiBaseUrl: process.env.VUE_APP_API_URL || 'https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite',
+      // 動的設定
+      config: null,
+      configLoaded: false,
+
+      // API設定（動的に設定される）
+      apiBaseUrl: '',
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -200,12 +218,12 @@ export default {
           description: 'S3に保存された画像を使用した例',
           params: {
             baseImage: 'test',
-            image1: 's3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png',
+            image1: 's3://placeholder/images/circle_red.png',
             image1X: 20,
             image1Y: 20,
             image1Width: 300,
             image1Height: 200,
-            image2: 's3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/rectangle_blue.png',
+            image2: 's3://placeholder/images/rectangle_blue.png',
             image2X: 20,
             image2Y: 240,
             image2Width: 300,
@@ -216,39 +234,98 @@ export default {
       ]
     };
   },
+
+  async created() {
+    await this.loadConfiguration();
+  },
+
   methods: {
+    /**
+     * 設定を読み込む
+     */
+    async loadConfiguration() {
+      try {
+        console.log('Loading application configuration...');
+        this.config = await configManager.loadConfig();
+        this.apiBaseUrl = this.config.apiUrl;
+        this.configLoaded = true;
+
+        console.log('Configuration loaded:', {
+          apiUrl: this.config.apiUrl,
+          version: this.config.version,
+          environment: this.config.environment
+        });
+
+        // S3バケット名を使用例に反映
+        this.updateExamplesWithS3Paths();
+
+        // フォームのS3パス選択肢も更新
+        this.updateFormS3Options();
+      } catch (error) {
+        console.error('Configuration loading failed:', error);
+        this.apiBaseUrl = import.meta.env.VITE_API_URL || '';
+        this.configLoaded = true;
+      }
+    },
+
+    /**
+     * 使用例のS3パスを動的に更新
+     */
+    updateExamplesWithS3Paths() {
+      if (this.config?.s3BucketNames?.testImages) {
+        const bucketName = this.config.s3BucketNames.testImages;
+        console.log('Updating examples with S3 bucket:', bucketName);
+
+        this.examples.forEach(example => {
+          if (example.params.image1?.startsWith('s3://placeholder')) {
+            example.params.image1 = `s3://${bucketName}/images/circle_red.png`;
+          }
+          if (example.params.image2?.startsWith('s3://placeholder')) {
+            example.params.image2 = `s3://${bucketName}/images/rectangle_blue.png`;
+          }
+        });
+      }
+    },
+
+    /**
+     * フォームのS3パス選択肢を更新
+     */
+    updateFormS3Options() {
+      // この関数は将来的にフォームの選択肢を動的に更新するために使用
+      // 現在はテンプレート内で直接参照しているため、後で実装
+    },
     buildApiUrl() {
       const url = new URL(this.apiBaseUrl);
-      
+
       // パラメータを追加
       Object.keys(this.params).forEach(key => {
         if (this.params[key] !== null && this.params[key] !== undefined) {
           url.searchParams.append(key, this.params[key]);
         }
       });
-      
+
       return url.toString();
     },
     async generateImage() {
       this.isLoading = true;
       this.error = null;
       this.resultUrl = '';
-      
+
       try {
         const apiUrl = this.buildApiUrl();
         this.apiUrl = apiUrl;
-        
+
         // 常にBlobとして取得し、画像として表示する
-        const response = await axios.get(apiUrl, { 
+        const response = await axios.get(apiUrl, {
           responseType: 'blob',
           headers: {
             'Accept': 'image/png, image/jpeg, image/*'
           }
         });
-        
+
         // レスポンスのContent-Typeを確認
         const contentType = response.headers['content-type'];
-        
+
         if (contentType && contentType.includes('image')) {
           // 画像の場合は直接表示
           this.resultUrl = URL.createObjectURL(response.data);
@@ -277,9 +354,26 @@ export default {
           this.resultUrl = URL.createObjectURL(pngResponse.data);
         }
       } catch (error) {
-        console.error('Error generating image:', error);
-        this.error = error.message || 'Unknown error';
-        
+        console.error('Error generating image:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url,
+          method: error.config?.method,
+          code: error.code
+        });
+
+        // より詳細なエラーメッセージを設定
+        if (error.code === 'ERR_NAME_NOT_RESOLVED') {
+          this.error = 'API サーバーに接続できません。ネットワーク接続を確認してください。';
+        } else if (error.response?.status === 500) {
+          this.error = 'サーバーエラーが発生しました。しばらく待ってから再試行してください。';
+        } else if (error.response?.status === 400) {
+          this.error = 'リクエストパラメータに問題があります。設定を確認してください。';
+        } else {
+          this.error = error.message || 'Unknown error';
+        }
+
         // エラーが発生した場合、PNG形式で再試行
         try {
           const retryUrl = new URL(this.apiUrl);
@@ -288,7 +382,11 @@ export default {
           this.resultUrl = URL.createObjectURL(retryResponse.data);
           this.error = null; // エラーをクリア
         } catch (retryError) {
-          console.error('Retry failed:', retryError);
+          console.error('Retry failed:', {
+            message: retryError.message,
+            status: retryError.response?.status,
+            code: retryError.code
+          });
           // 再試行も失敗した場合は元のエラーを表示
         }
       } finally {
@@ -306,7 +404,7 @@ export default {
     },
     downloadImage() {
       if (!this.resultUrl) return;
-      
+
       const link = document.createElement('a');
       link.href = this.resultUrl;
       link.download = 'composite-image.png';
@@ -316,7 +414,7 @@ export default {
     },
     copyApiUrl() {
       if (!this.apiUrl) return;
-      
+
       navigator.clipboard.writeText(this.apiUrl)
         .then(() => {
           alert('API URLをクリップボードにコピーしました');
@@ -375,6 +473,20 @@ header {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+.config-info {
+  margin-top: 10px;
+  opacity: 0.8;
+}
+
+.config-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
 h1 {
   font-size: 2.5rem;
   margin-bottom: 10px;
@@ -392,7 +504,8 @@ h1 {
   margin-bottom: 30px;
 }
 
-.form-container, .result-container {
+.form-container,
+.result-container {
   flex: 1;
   min-width: 300px;
   background-color: var(--card-background);
@@ -418,7 +531,8 @@ label {
   font-weight: 500;
 }
 
-input, select {
+input,
+select {
   width: 100%;
   padding: 10px;
   border: 1px solid var(--border-color);
@@ -467,8 +581,13 @@ button:disabled {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .error {
@@ -560,11 +679,12 @@ footer {
   .main-content {
     flex-direction: column;
   }
-  
-  .form-container, .result-container {
+
+  .form-container,
+  .result-container {
     width: 100%;
   }
-  
+
   .example-card {
     min-width: 100%;
   }
