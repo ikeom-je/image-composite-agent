@@ -28,7 +28,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod',
+        target: process.env.API_URL || 'https://api.example.com/prod',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       }

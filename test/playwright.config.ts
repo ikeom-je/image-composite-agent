@@ -15,7 +15,7 @@ export default defineConfig({
   reportSlowTests: null,
   quiet: !process.env.DEBUG,
   use: {
-    baseURL: process.env.API_URL || 'https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod',
+    baseURL: process.env.API_URL || 'https://api.example.com/prod',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -47,21 +47,21 @@ export default defineConfig({
       name: 'upload-tests',
       testMatch: /upload-functionality\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
       },
     },
     {
       name: 'selection-tests',
       testMatch: /image-selection\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
       },
     },
     {
       name: 'integration-tests',
       testMatch: /integration-workflow\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
       },
     },
   ],

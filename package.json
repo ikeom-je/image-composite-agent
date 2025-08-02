@@ -1,6 +1,6 @@
 {
   "name": "image-processor-api",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Advanced Image Composition REST API with Alpha Channel Support",
   "author": "AWS CDK Team",
   "license": "MIT",
@@ -46,7 +46,9 @@
     "diff:api": "cdk diff ImageProcessorApiStack",
     "diff:frontend": "cdk diff ImageCompositeViewerStack",
     "build-frontend": "cd frontend && npm install && npm run build",
-    "deploy-all": "npm run deploy"
+    "deploy-all": "npm run deploy",
+    "setup-env": "source scripts/setup-env.sh",
+    "env": "source scripts/setup-env.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.53.2",

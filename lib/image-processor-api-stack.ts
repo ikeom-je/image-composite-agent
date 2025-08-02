@@ -49,7 +49,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    // S3バケットの作成（アップロード用） - v2.4.0新機能
+    // S3バケットの作成（アップロード用） - v2.4.1新機能
     this.uploadBucket = new s3.Bucket(this, 'UploadBucket', {
       accessControl: s3.BucketAccessControl.PRIVATE,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -80,7 +80,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Python Lambda関数の作成（最適化設定） - v2.4.0
+    // Python Lambda関数の作成（最適化設定） - v2.4.1
     const imageProcessorFunction = new lambda.Function(this, 'ImageProcessorFunction', {
       runtime: lambda.Runtime.PYTHON_3_12,
       architecture: lambda.Architecture.X86_64,  // ライブラリ互換性重視
@@ -118,7 +118,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
         LOG_LEVEL: 'INFO',
         PYTHONPATH: '/var/runtime'
       },
-      description: 'Image composition processor with 2/3 image support - v2.4.0'
+      description: 'Image composition processor with 2/3 image support - v2.4.1'
     });
 
     // S3バケットへの読み取り権限を付与
@@ -140,7 +140,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Upload Manager Lambda関数の作成（最適化設定） - v2.4.0新機能
+    // Upload Manager Lambda関数の作成（最適化設定） - v2.4.1新機能
     const uploadManagerFunction = new lambda.Function(this, 'UploadManagerFunction', {
       runtime: lambda.Runtime.PYTHON_3_12,
       architecture: lambda.Architecture.X86_64,
@@ -176,14 +176,14 @@ export class ImageProcessorApiStack extends cdk.Stack {
         LOG_LEVEL: 'INFO',
         PYTHONPATH: '/var/runtime'
       },
-      description: 'Upload manager for presigned URLs and image listing - v2.4.0'
+      description: 'Upload manager for presigned URLs and image listing - v2.4.1'
     });
 
     // Upload Manager Lambda関数にS3権限を付与
     this.uploadBucket.grantReadWrite(uploadManagerFunction);
     this.uploadBucket.grantPutAcl(uploadManagerFunction);
 
-    // CloudWatchアラームの設定 - v2.4.0監視機能
+    // CloudWatchアラームの設定 - v2.4.1監視機能
 
     // Image Processor Lambda関数のエラーアラーム
     const imageProcessorErrorAlarm = new cloudwatch.Alarm(this, 'ImageProcessorErrorAlarm', {
@@ -226,10 +226,10 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
 
 
-    // API Gatewayの作成（CORS・エラーハンドリング強化） - v2.4.0
+    // API Gatewayの作成（CORS・エラーハンドリング強化） - v2.4.1
     const api = new apigateway.RestApi(this, 'ImageProcessorApi', {
-      restApiName: 'Image Processor API v2.4.0',
-      description: 'High-performance image composition API with upload support - v2.4.0',
+      restApiName: 'Image Processor API v2.4.1',
+      description: 'High-performance image composition API with upload support - v2.4.1',
       binaryMediaTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/tiff', 'image/*'],
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
@@ -319,7 +319,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'application/json': JSON.stringify({
               error: 'Bad Request',
               message: 'Invalid request parameters',
-              version: '2.4.0'
+              version: '2.4.1'
             }),
           },
         },
@@ -333,7 +333,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'application/json': JSON.stringify({
               error: 'Internal Server Error',
               message: 'An error occurred while processing your request',
-              version: '2.4.0'
+              version: '2.4.1'
             }),
           },
         },
@@ -366,7 +366,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       ],
     });
 
-    // アップロード関連のAPIリソース - v2.4.0新機能
+    // アップロード関連のAPIリソース - v2.4.1新機能
     const upload = api.root.addResource('upload', {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
@@ -397,7 +397,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'application/json': JSON.stringify({
               error: 'Bad Request',
               message: 'Invalid upload parameters',
-              version: '2.4.0'
+              version: '2.4.1'
             }),
           },
         },
@@ -411,7 +411,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'application/json': JSON.stringify({
               error: 'Internal Server Error',
               message: 'Upload service temporarily unavailable',
-              version: '2.4.0'
+              version: '2.4.1'
             }),
           },
         },
@@ -508,7 +508,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       })
     );
 
-    // CloudFrontディストリビューション（キャッシュ機能強化） - v2.4.0
+    // CloudFrontディストリビューション（キャッシュ機能強化） - v2.4.1
     this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
       defaultBehavior: {
@@ -621,7 +621,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
         },
       ],
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // コスト最適化
-      comment: 'Image Processor Frontend Distribution with optimized caching - v2.4.0',
+      comment: 'Image Processor Frontend Distribution with optimized caching - v2.4.1',
       enabled: true,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
@@ -635,7 +635,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {
       name: 'Image Processor API Usage Plan',
-      description: 'Usage plan for Image Processor API - v2.4.0',
+      description: 'Usage plan for Image Processor API - v2.4.1',
       throttle: {
         rateLimit: 100,  // 1秒あたり100リクエスト
         burstLimit: 200  // バースト時200リクエスト
@@ -649,7 +649,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // APIキーの作成
     const apiKey = api.addApiKey('ImageProcessorApiKey', {
       apiKeyName: 'image-processor-api-key',
-      description: 'API Key for Image Processor API - v2.4.0'
+      description: 'API Key for Image Processor API - v2.4.1'
     });
 
     usagePlan.addApiKey(apiKey);
@@ -657,7 +657,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       stage: api.deploymentStage
     });
 
-    // API Gateway メトリクスアラーム - v2.4.0監視機能
+    // API Gateway メトリクスアラーム - v2.4.1監視機能
     const apiGatewayErrorAlarm = new cloudwatch.Alarm(this, 'ApiGatewayErrorAlarm', {
       alarmName: 'api-gateway-4xx-errors',
       alarmDescription: 'API Gateway 4XX errors',
@@ -694,9 +694,9 @@ export class ImageProcessorApiStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
-    // CloudWatchダッシュボードの作成 - v2.4.0監視機能
+    // CloudWatchダッシュボードの作成 - v2.4.1監視機能
     const dashboard = new cloudwatch.Dashboard(this, 'ImageProcessorDashboard', {
-      dashboardName: 'image-processor-api-v2-4-0',
+      dashboardName: 'image-processor-api-v2-4-1',
       widgets: [
         [
           // API Gateway メトリクス
@@ -894,7 +894,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     const customDomain = this.node.tryGetContext('customDomain');
     const enableAnalytics = this.node.tryGetContext('enableAnalytics') !== 'false'; // デフォルトで有効
 
-    // 設定ファイルの内容を動的生成（環境固有設定対応） - v2.4.0
+    // 設定ファイルの内容を動的生成（環境固有設定対応） - v2.4.1
     const configContent = {
       // 基本API設定
       apiUrl: this.apiEndpoint,
@@ -910,7 +910,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       },
 
       // バージョンと環境情報
-      version: process.env.npm_package_version || '2.4.0',
+      version: process.env.npm_package_version || '2.4.1',
       environment: environment,
       buildTimestamp: new Date().toISOString(),
       region: this.region,
