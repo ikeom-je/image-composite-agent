@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, List
 from PIL import Image
+from botocore.exceptions import ClientError
 
 # ログ設定
 logger = logging.getLogger()
@@ -175,8 +176,10 @@ def list_uploaded_images(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             Params={'Bucket': upload_bucket, 'Key': thumbnail_key},
                             ExpiresIn=3600
                         )
-                    except s3_client.exceptions.NoSuchKey:
+                        logger.info(f"Using thumbnail for {obj['Key']}: {thumbnail_key}")
+                    except Exception as e:
                         # サムネイルが存在しない場合は元画像を使用
+                        logger.info(f"Thumbnail not found for {obj['Key']}, using original image")
                         thumbnail_url = s3_client.generate_presigned_url(
                             'get_object',
                             Params={'Bucket': upload_bucket, 'Key': obj['Key']},
@@ -193,8 +196,15 @@ def list_uploaded_images(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'thumbnailUrl': thumbnail_url
                     })
                     
+                except ClientError as e:
+                    error_code = e.response['Error']['Code']
+                    if error_code == '404' or error_code == 'NoSuchKey':
+                        logger.info(f"Object {obj['Key']} not found, skipping")
+                    else:
+                        logger.warning(f"Error processing object {obj['Key']}: {e}")
+                    continue
                 except Exception as e:
-                    logger.warning(f"Error processing object {obj['Key']}: {e}")
+                    logger.warning(f"Unexpected error processing object {obj['Key']}: {e}")
                     continue
         
         # レスポンス構築

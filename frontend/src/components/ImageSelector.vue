@@ -19,9 +19,16 @@
           v-for="image in s3Images" 
           :key="image.key"
           :value="image.s3Path"
+          :title="`${image.fileName} (${formatFileSize(image.size)})`"
         >
-          {{ truncateFileName(image.fileName) }}
+          📷 {{ truncateFileName(image.fileName) }}
         </option>
+      </optgroup>
+      <optgroup v-else-if="!loadingImages" label="S3アップロード画像">
+        <option disabled>アップロードされた画像がありません</option>
+      </optgroup>
+      <optgroup v-else label="S3アップロード画像">
+        <option disabled>読み込み中...</option>
       </optgroup>
     </select>
     
@@ -40,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useConfigStore } from '@/stores/config'
 import { useNotificationStore } from '@/stores/notification'
 import axios from 'axios'
@@ -127,22 +134,36 @@ const loadS3Images = async () => {
   try {
     const config = configStore.config
     if (!config?.apiUrl) {
-      console.warn('API設定が読み込まれていません')
+      console.warn('[ImageSelector] API設定が読み込まれていません')
       return
     }
     
-    const uploadApiUrl = config.apiUrl.replace('/images/composite', '/upload/images')
+    // アップロードAPIのURLを正しく構築
+    const baseApiUrl = config.apiUrl.replace('/images/composite', '')
+    const uploadApiUrl = `${baseApiUrl}/upload/images`
+    
+    console.log(`[ImageSelector] Loading S3 images from: ${uploadApiUrl}`)
+    
     const params = new URLSearchParams({
-      maxKeys: '10' // テーブル用なので少なめに
+      maxKeys: '20' // 表示用に増やす
     })
     
-    const response = await axios.get(`${uploadApiUrl}?${params.toString()}`)
-    const data = response.data
+    const response = await axios.get(`${uploadApiUrl}?${params.toString()}`, {
+      timeout: 10000 // 10秒タイムアウト
+    })
     
+    console.log('[ImageSelector] S3 images response:', response.data)
+    
+    const data = response.data
     s3Images.value = data.images || []
     
+    console.log(`[ImageSelector] Loaded ${s3Images.value.length} S3 images`)
+    
   } catch (err: any) {
-    console.error('Failed to load S3 images:', err)
+    console.error('[ImageSelector] Failed to load S3 images:', err)
+    if (err.response) {
+      console.error('[ImageSelector] Response error:', err.response.status, err.response.data)
+    }
     s3Images.value = []
   } finally {
     loadingImages.value = false
@@ -157,6 +178,8 @@ const refreshImages = async () => {
 }
 
 const updateSelectionFromValue = (value: string) => {
+  console.log(`[ImageSelector] Updating selection from value: ${value}`)
+  
   if (!value) {
     selectedValue.value = ''
   } else if (value === 'test') {
@@ -180,19 +203,38 @@ const updateSelectionFromValue = (value: string) => {
       }
     } else {
       // S3アップロード画像
+      console.log(`[ImageSelector] Setting S3 upload image: ${value}`)
       selectedValue.value = value
+      
+      // S3画像一覧が空の場合は読み込む
       if (s3Images.value.length === 0) {
+        console.log('[ImageSelector] Loading S3 images because list is empty')
         loadS3Images()
+      } else {
+        // 既存の画像一覧に含まれているかチェック
+        const foundImage = s3Images.value.find(img => img.s3Path === value)
+        if (!foundImage) {
+          console.log('[ImageSelector] Image not found in current list, refreshing')
+          loadS3Images()
+        }
       }
     }
   }
 }
 
 const truncateFileName = (fileName: string): string => {
-  if (fileName.length <= 15) return fileName
+  if (fileName.length <= 20) return fileName
   const ext = fileName.split('.').pop()
   const name = fileName.substring(0, fileName.lastIndexOf('.'))
-  return `${name.substring(0, 10)}...${ext ? '.' + ext : ''}`
+  return `${name.substring(0, 15)}...${ext ? '.' + ext : ''}`
+}
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
 // Watchers
@@ -203,6 +245,23 @@ onMounted(() => {
   updateSelectionFromValue(props.modelValue)
   // 初期S3画像読み込み
   loadS3Images()
+  
+  // アップロード完了イベントをリッスン
+  const handleS3ImagesUpdated = (event: CustomEvent) => {
+    console.log('[ImageSelector] S3 images updated event received:', event.detail)
+    // 画像一覧を更新
+    loadS3Images()
+  }
+  
+  window.addEventListener('s3-images-updated', handleS3ImagesUpdated as EventListener)
+  
+  // クリーンアップ
+  const cleanup = () => {
+    window.removeEventListener('s3-images-updated', handleS3ImagesUpdated as EventListener)
+  }
+  
+  // Vue 3のunmountedフックでクリーンアップ
+  onUnmounted(cleanup)
 })
 </script>
 
