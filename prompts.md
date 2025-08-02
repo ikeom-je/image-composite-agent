@@ -1,0 +1,1 @@
+本システムは.amazonqディレクトリのmarkdownのルールにしたがったプロンプトで必ず動作させます。システムはAmazonQ, Readme, historyのmarkdownをもとに作っていきます。そこから生成されたrequirements, design,taskでコードを生成してデプロイとテストを行います。

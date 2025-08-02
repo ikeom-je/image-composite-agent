@@ -4,6 +4,10 @@
 
 高性能・アルファチャンネル対応の画像合成REST APIシステムの包括的な設計。AWS CDK + Lambda + API Gateway + S3 + CloudFront構成で、2つまたは3つの画像を合成してPNG形式で出力する。Vue.js 3フロントエンドによる直感的なWebインターフェースを提供し、動的設定管理による環境非依存性を実現する。
 
+**新機能追加:**
+- **S3画像アップロード機能**: 署名付きURLを使用した安全な画像ファイルのアップロード
+- **画像合成用画像選択機能**: 未選択・テスト画像・S3アップロード画像からの選択
+
 **設計原則:**
 - **後方互換性の完全保持**: 既存の2画像合成機能を維持しつつ3画像合成を追加
 - **アルファチャンネル完全対応**: 透過情報を保持した高品質な画像合成
@@ -26,6 +30,12 @@
 │   S3 Resources  │◀───│   AWS Lambda     │───▶│   S3 Test Images│
 │ (Images/Assets) │    │ (Image Processor)│    │ (Test Assets)   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │                         │
+                                ▼                         ▼
+                       ┌──────────────────┐    ┌─────────────────┐
+                       │   AWS Lambda     │    │ S3 Upload Bucket│
+                       │ (Upload Manager) │───▶│ (Images)        │
+                       └──────────────────┘    └─────────────────┘
 ```
 
 ### データフロー
@@ -34,6 +44,10 @@
 3. **画像取得**: Lambda → S3/HTTP (並列処理)
 4. **画像合成**: Lambda内でPillow処理
 5. **レスポンス**: HTML/PNG → API Gateway → Frontend
+
+**新機能のデータフロー:**
+6. **画像アップロード**: Frontend → Upload Manager Lambda → 署名付きURL生成 → S3直接アップロード
+7. **画像一覧取得**: Frontend → Upload Manager Lambda → S3画像リスト取得 → サムネイル生成
 
 ## コンポーネント設計
 
@@ -46,9 +60,11 @@ export class ImageProcessorApiStack extends cdk.Stack {
   private resourcesBucket: s3.Bucket;
   private testImagesBucket: s3.Bucket;
   private frontendBucket: s3.Bucket;
+  private uploadBucket: s3.Bucket;  // 新規追加: アップロード用バケット
   
   // Lambda関数
   private imageProcessorFunction: lambda.Function;
+  private uploadManagerFunction: lambda.Function;  // 新規追加: アップロード管理
   
   // API Gateway
   private api: apigateway.RestApi;
@@ -69,7 +85,7 @@ const configContent = {
     testImages: this.testImagesBucket.bucketName,
     frontend: this.frontendBucket.bucketName,
   },
-  version: process.env.npm_package_version || '2.3.0',
+  version: process.env.npm_package_version || '2.4.0',
   environment: this.node.tryGetContext('environment') || 'production'
 };
 
@@ -86,6 +102,204 @@ new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
 ```
 
 ### 2. Lambda関数の画像処理エンジン
+
+### 3. Upload Manager Lambda関数
+
+#### 3.1 署名付きURL生成機能
+
+**設計判断**: 署名付きURLを使用することで、フロントエンドから直接S3にアップロードでき、Lambda関数の負荷を軽減し、アップロード速度を向上させる。
+
+```python
+import boto3
+import json
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, Any
+
+def generate_presigned_upload_url(event, context):
+    """
+    画像アップロード用の署名付きURL生成
+    """
+    try:
+        # リクエストボディの解析
+        body = json.loads(event.get('body', '{}'))
+        file_name = body.get('fileName')
+        file_type = body.get('fileType')
+        file_size = body.get('fileSize', 0)
+        
+        # パラメータ検証
+        if not file_name or not file_type:
+            return format_response(400, {'error': 'fileName and fileType are required'})
+        
+        # ファイルサイズ制限（10MB）
+        if file_size > 10 * 1024 * 1024:
+            return format_response(400, {'error': 'File size exceeds 10MB limit'})
+        
+        # 対応ファイル形式の検証（画像のみ）
+        allowed_types = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/tiff', 'image/x-tga'
+        ]
+        if file_type not in allowed_types:
+            return format_response(400, {'error': f'Unsupported file type: {file_type}'})
+        
+        # ユニークなファイル名生成
+        file_extension = file_name.split('.')[-1]
+        unique_filename = f"{uuid.uuid4()}-{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_extension}"
+        
+        # S3キーの生成（画像のみ）
+        s3_key = f"uploads/images/{unique_filename}"
+        
+        # 署名付きURL生成
+        s3_client = boto3.client('s3')
+        presigned_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': os.environ['UPLOAD_BUCKET'],
+                'Key': s3_key,
+                'ContentType': file_type
+            },
+            ExpiresIn=3600  # 1時間有効
+        )
+        
+        return format_response(200, {
+            'uploadUrl': presigned_url,
+            's3Key': s3_key,
+            'bucketName': os.environ['UPLOAD_BUCKET'],
+            'expiresIn': 3600
+        })
+        
+    except Exception as e:
+        logger.error(f"Presigned URL generation error: {e}")
+        return format_response(500, {'error': str(e)})
+
+def list_uploaded_images(event, context):
+    """
+    アップロードされた画像の一覧取得
+    """
+    try:
+        s3_client = boto3.client('s3')
+        bucket_name = os.environ['UPLOAD_BUCKET']
+        
+        # 画像ファイルのみを取得
+        response = s3_client.list_objects_v2(
+            Bucket=bucket_name,
+            Prefix='uploads/images/',
+            MaxKeys=100
+        )
+        
+        images = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                # メタデータ取得
+                head_response = s3_client.head_object(
+                    Bucket=bucket_name,
+                    Key=obj['Key']
+                )
+                
+                # サムネイルURL生成（PNG形式のサムネイル）
+                thumbnail_key = obj['Key'].replace('uploads/images/', 'thumbnails/').replace(
+                    obj['Key'].split('.')[-1], 'png'
+                )
+                
+                # サムネイルが存在するかチェック
+                try:
+                    s3_client.head_object(Bucket=bucket_name, Key=thumbnail_key)
+                    thumbnail_url = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': bucket_name, 'Key': thumbnail_key},
+                        ExpiresIn=3600
+                    )
+                except s3_client.exceptions.NoSuchKey:
+                    # サムネイルが存在しない場合は元画像を使用
+                    thumbnail_url = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': bucket_name, 'Key': obj['Key']},
+                        ExpiresIn=3600
+                    )
+                
+                images.append({
+                    'key': obj['Key'],
+                    's3Path': f"s3://{bucket_name}/{obj['Key']}",
+                    'fileName': obj['Key'].split('/')[-1],
+                    'size': obj['Size'],
+                    'lastModified': obj['LastModified'].isoformat(),
+                    'contentType': head_response.get('ContentType', 'image/jpeg'),
+                    'thumbnailUrl': thumbnail_url
+                })
+        
+        return format_response(200, {
+            'images': images,
+            'count': len(images)
+        })
+        
+    except Exception as e:
+        logger.error(f"Image list error: {e}")
+        return format_response(500, {'error': str(e)})
+```
+
+#### 3.2 アップロード完了通知処理
+
+```python
+def handle_upload_completion(event, context):
+    """
+    S3アップロード完了時の処理（S3イベント経由）
+    """
+    try:
+        for record in event['Records']:
+            bucket_name = record['s3']['bucket']['name']
+            object_key = record['s3']['object']['key']
+            
+            # 画像の場合はサムネイル生成
+            if object_key.startswith('uploads/images/'):
+                generate_thumbnail(bucket_name, object_key)
+            
+            logger.info(f"Upload completed: {object_key}")
+        
+        return {'statusCode': 200}
+        
+    except Exception as e:
+        logger.error(f"Upload completion handler error: {e}")
+        return {'statusCode': 500}
+
+def generate_thumbnail(bucket_name: str, object_key: str):
+    """
+    画像のサムネイル生成（PNG形式で統一）
+    """
+    try:
+        s3_client = boto3.client('s3')
+        
+        # 元画像を取得
+        response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+        image = Image.open(io.BytesIO(response['Body'].read()))
+        
+        # RGBAモードに変換（透過情報保持）
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        
+        # サムネイル生成（200x200、アスペクト比保持）
+        image.thumbnail((200, 200), Image.LANCZOS)
+        
+        # PNG形式でサムネイルを保存
+        thumbnail_key = object_key.replace('uploads/images/', 'thumbnails/').replace(
+            object_key.split('.')[-1], 'png'
+        )
+        thumbnail_buffer = io.BytesIO()
+        image.save(thumbnail_buffer, format='PNG', optimize=True)
+        thumbnail_buffer.seek(0)
+        
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=thumbnail_key,
+            Body=thumbnail_buffer.getvalue(),
+            ContentType='image/png'
+        )
+        
+        logger.info(f"PNG thumbnail generated: {thumbnail_key}")
+        
+    except Exception as e:
+        logger.error(f"Thumbnail generation error: {e}")
+```
 
 #### 2.1 テスト画像生成機能
 
@@ -355,9 +569,9 @@ def create_composite_image(base_img: Image.Image,
     return composite
 ```
 
-### 3. Vue.js 3フロントエンド
+### 4. Vue.js 3フロントエンド
 
-#### 3.1 動的設定管理
+#### 4.1 動的設定管理
 ```javascript
 // utils/config.js
 class ConfigManager {
@@ -394,7 +608,7 @@ class ConfigManager {
   getDefaultConfig() {
     return {
       apiUrl: import.meta.env.VITE_API_URL || '',
-      version: '2.3.0',
+      version: '2.4.0',
       environment: 'development',
       s3BucketNames: {
         testImages: 'default-test-bucket'
@@ -406,7 +620,364 @@ class ConfigManager {
 export const configManager = new ConfigManager();
 ```
 
-#### 3.2 メインアプリケーションコンポーネント
+#### 4.2 画像アップロード機能
+
+```javascript
+// components/ImageUploader.vue
+<template>
+  <div class="image-uploader">
+    <h3>画像アップロード</h3>
+    
+    <!-- ファイル選択 -->
+    <div class="upload-area" @drop="handleDrop" @dragover.prevent>
+      <input 
+        ref="fileInput" 
+        type="file" 
+        accept="image/*" 
+        @change="handleFileSelect"
+        style="display: none"
+      />
+      <button @click="$refs.fileInput.click()" class="upload-button">
+        📁 画像ファイルを選択
+      </button>
+      <p>または、画像ファイルをここにドラッグ&ドロップ</p>
+    </div>
+    
+    <!-- アップロード進行状況 -->
+    <div v-if="uploading" class="upload-progress">
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{width: uploadProgress + '%'}"></div>
+      </div>
+      <p>{{ uploadProgress }}% アップロード中...</p>
+    </div>
+    
+    <!-- エラー表示 -->
+    <div v-if="error" class="error-message">
+      {{ error }}
+    </div>
+    
+    <!-- 成功メッセージ -->
+    <div v-if="uploadSuccess" class="success-message">
+      ✅ アップロード完了: {{ uploadedFileName }}
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'ImageUploader',
+  
+  data() {
+    return {
+      uploading: false,
+      uploadProgress: 0,
+      error: null,
+      uploadSuccess: false,
+      uploadedFileName: ''
+    };
+  },
+  
+  methods: {
+    handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (file) {
+        this.uploadFile(file);
+      }
+    },
+    
+    handleDrop(event) {
+      event.preventDefault();
+      const file = event.dataTransfer.files[0];
+      if (file) {
+        this.uploadFile(file);
+      }
+    },
+    
+    async uploadFile(file) {
+      // ファイル検証
+      if (!this.validateFile(file)) {
+        return;
+      }
+      
+      this.uploading = true;
+      this.uploadProgress = 0;
+      this.error = null;
+      this.uploadSuccess = false;
+      
+      try {
+        // 署名付きURL取得
+        const presignedResponse = await this.getPresignedUrl(file);
+        
+        // S3に直接アップロード
+        await this.uploadToS3(file, presignedResponse.uploadUrl);
+        
+        this.uploadSuccess = true;
+        this.uploadedFileName = file.name;
+        this.$emit('upload-complete', {
+          fileName: file.name,
+          s3Key: presignedResponse.s3Key,
+          s3Path: `s3://${presignedResponse.bucketName}/${presignedResponse.s3Key}`
+        });
+        
+      } catch (error) {
+        this.error = this.handleUploadError(error);
+      } finally {
+        this.uploading = false;
+      }
+    },
+    
+    validateFile(file) {
+      // ファイルサイズ制限（10MB）
+      if (file.size > 10 * 1024 * 1024) {
+        this.error = 'ファイルサイズは10MB以下にしてください';
+        return false;
+      }
+      
+      // ファイル形式チェック（画像のみ）
+      const allowedTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'image/tiff', 'image/x-tga'
+      ];
+      
+      if (!allowedTypes.includes(file.type)) {
+        this.error = `対応していない画像形式です: ${file.type}`;
+        return false;
+      }
+      
+      return true;
+    },
+    
+    async getPresignedUrl(file) {
+      const response = await axios.post('/api/upload/presigned-url', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size
+      });
+      
+      return response.data;
+    },
+    
+    async uploadToS3(file, uploadUrl) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            this.uploadProgress = Math.round((event.loaded / event.total) * 100);
+          }
+        });
+        
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            resolve();
+          } else {
+            reject(new Error(`Upload failed: ${xhr.status}`));
+          }
+        });
+        
+        xhr.addEventListener('error', () => {
+          reject(new Error('Upload failed'));
+        });
+        
+        xhr.open('PUT', uploadUrl);
+        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.send(file);
+      });
+    },
+    
+    handleUploadError(error) {
+      if (error.response?.status === 400) {
+        return error.response.data.error || 'アップロードパラメータが無効です';
+      } else if (error.response?.status === 413) {
+        return 'ファイルサイズが大きすぎます';
+      } else {
+        return 'アップロードに失敗しました。再試行してください。';
+      }
+    }
+  }
+};
+</script>
+```
+
+#### 4.3 画像選択コンポーネント
+
+```javascript
+// components/ImageSelector.vue
+<template>
+  <div class="image-selector">
+    <label class="form-label">{{ label }}:</label>
+    
+    <select v-model="selectedType" @change="handleTypeChange" class="form-select">
+      <option value="">未選択</option>
+      <option value="test">既存テスト画像</option>
+      <option value="s3">S3アップロード画像</option>
+    </select>
+    
+    <!-- テスト画像選択 -->
+    <div v-if="selectedType === 'test'" class="test-image-selection">
+      <select v-model="selectedTestImage" @change="handleTestImageChange" class="form-select">
+        <option value="">テスト画像を選択</option>
+        <option value="test">自動選択（image1=円、image2=四角、image3=三角）</option>
+        <option value="circle">赤い円</option>
+        <option value="rectangle">青い四角</option>
+        <option value="triangle">緑の三角</option>
+      </select>
+    </div>
+    
+    <!-- S3画像選択 -->
+    <div v-if="selectedType === 's3'" class="s3-image-selection">
+      <div v-if="loadingImages" class="loading">
+        画像一覧を読み込み中...
+      </div>
+      
+      <div v-else-if="s3Images.length === 0" class="no-images">
+        アップロードされた画像がありません
+      </div>
+      
+      <div v-else class="image-grid">
+        <div 
+          v-for="image in s3Images" 
+          :key="image.key"
+          class="image-item"
+          :class="{ selected: selectedS3Image === image.s3Path }"
+          @click="selectS3Image(image)"
+        >
+          <img :src="image.thumbnailUrl" :alt="image.fileName" />
+          <p class="image-name">{{ image.fileName }}</p>
+          <p class="image-size">{{ formatFileSize(image.size) }}</p>
+        </div>
+      </div>
+      
+      <button @click="refreshImages" class="refresh-button">
+        🔄 画像一覧を更新
+      </button>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'ImageSelector',
+  
+  props: {
+    label: {
+      type: String,
+      required: true
+    },
+    modelValue: {
+      type: String,
+      default: ''
+    },
+    imageType: {
+      type: String,
+      required: true // 'image1', 'image2', 'image3'
+    }
+  },
+  
+  emits: ['update:modelValue'],
+  
+  data() {
+    return {
+      selectedType: '',
+      selectedTestImage: '',
+      selectedS3Image: '',
+      s3Images: [],
+      loadingImages: false
+    };
+  },
+  
+  watch: {
+    modelValue: {
+      immediate: true,
+      handler(newValue) {
+        this.updateSelectionFromValue(newValue);
+      }
+    }
+  },
+  
+  methods: {
+    handleTypeChange() {
+      if (this.selectedType === '') {
+        this.$emit('update:modelValue', '');
+      } else if (this.selectedType === 'test') {
+        this.selectedTestImage = 'test';
+        this.handleTestImageChange();
+      } else if (this.selectedType === 's3') {
+        this.loadS3Images();
+      }
+    },
+    
+    handleTestImageChange() {
+      if (this.selectedTestImage === 'test') {
+        this.$emit('update:modelValue', 'test');
+      } else if (this.selectedTestImage) {
+        // 特定のテスト画像を選択した場合のS3パス
+        const testImageMap = {
+          'circle': 's3://test-bucket/images/circle_red.png',
+          'rectangle': 's3://test-bucket/images/rectangle_blue.png',
+          'triangle': 's3://test-bucket/images/triangle_green.png'
+        };
+        this.$emit('update:modelValue', testImageMap[this.selectedTestImage]);
+      }
+    },
+    
+    selectS3Image(image) {
+      this.selectedS3Image = image.s3Path;
+      this.$emit('update:modelValue', image.s3Path);
+    },
+    
+    async loadS3Images() {
+      this.loadingImages = true;
+      try {
+        const response = await axios.get('/api/upload/images');
+        this.s3Images = response.data.images;
+      } catch (error) {
+        console.error('Failed to load S3 images:', error);
+        this.s3Images = [];
+      } finally {
+        this.loadingImages = false;
+      }
+    },
+    
+    async refreshImages() {
+      await this.loadS3Images();
+    },
+    
+    updateSelectionFromValue(value) {
+      if (!value) {
+        this.selectedType = '';
+      } else if (value === 'test') {
+        this.selectedType = 'test';
+        this.selectedTestImage = 'test';
+      } else if (value.startsWith('s3://')) {
+        if (value.includes('/images/circle_red.png') || 
+            value.includes('/images/rectangle_blue.png') || 
+            value.includes('/images/triangle_green.png')) {
+          this.selectedType = 'test';
+          // 特定のテスト画像の逆マッピング
+        } else {
+          this.selectedType = 's3';
+          this.selectedS3Image = value;
+          if (this.s3Images.length === 0) {
+            this.loadS3Images();
+          }
+        }
+      }
+    },
+    
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+  }
+};
+</script>
+```
+
+#### 4.4 メインアプリケーションコンポーネント
 ```vue
 <template>
   <div class="app-container">
@@ -718,6 +1289,35 @@ interface ImageCompositeRequest {
   image3X?: number; image3Y?: number;
   image3Width?: number; image3Height?: number;
 }
+
+// 新規追加: アップロード関連モデル
+interface PresignedUrlRequest {
+  fileName: string;
+  fileType: string; // 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'image/tiff' | 'image/x-tga'
+  fileSize: number;
+}
+
+interface PresignedUrlResponse {
+  uploadUrl: string;
+  s3Key: string;
+  bucketName: string;
+  expiresIn: number;
+}
+
+interface UploadedImage {
+  key: string;
+  s3Path: string;
+  fileName: string;
+  size: number;
+  lastModified: string;
+  contentType: string;
+  thumbnailUrl: string;
+}
+
+interface ImageListResponse {
+  images: UploadedImage[];
+  count: number;
+}
 ```
 
 ### Lambda内部モデル
@@ -739,6 +1339,78 @@ class CompositeRequest:
     image2_params: ImageParams
     image3_params: Optional[ImageParams]
     format: str
+```
+
+## API設計
+
+### 新規エンドポイント
+
+#### 1. 署名付きURL生成エンドポイント
+```
+POST /api/upload/presigned-url
+Content-Type: application/json
+
+Request Body:
+{
+  "fileName": "image.jpg",
+  "fileType": "image/jpeg",
+  "fileSize": 5000000
+}
+
+対応形式: JPEG, PNG, GIF, WebP, TIFF, TGA
+
+Response (200):
+{
+  "uploadUrl": "https://s3.amazonaws.com/bucket/key?signature=...",
+  "s3Key": "uploads/images/uuid-timestamp.jpg",
+  "bucketName": "upload-bucket",
+  "expiresIn": 3600
+}
+
+Response (400):
+{
+  "error": "File size exceeds 10MB limit"
+}
+```
+
+#### 2. アップロード画像一覧エンドポイント
+```
+GET /api/upload/images
+
+Response (200):
+{
+  "images": [
+    {
+      "key": "uploads/images/uuid-timestamp.jpg",
+      "s3Path": "s3://bucket/uploads/images/uuid-timestamp.jpg",
+      "fileName": "my-image.jpg",
+      "size": 1024000,
+      "lastModified": "2025-07-31T10:00:00Z",
+      "contentType": "image/jpeg",
+      "thumbnailUrl": "https://s3.amazonaws.com/bucket/thumbnails/uuid-timestamp.jpg?signature=..."
+    }
+  ],
+  "count": 1
+}
+
+Response (500):
+{
+  "error": "Failed to list images"
+}
+```
+
+#### 3. 既存エンドポイントの拡張
+```
+GET /images/composite
+
+新しいパラメータ:
+- image1, image2, image3: 空文字列の場合は未選択として扱う
+- 未選択の画像がある場合は、選択された画像のみで合成を実行
+
+例:
+- image1=test&image2=&image3= → image1のみで合成（1画像モード）
+- image1=test&image2=test&image3= → image1とimage2で合成（2画像モード）
+- image1=test&image2=test&image3=test → 3画像で合成（3画像モード）
 ```
 
 ## エラーハンドリング

@@ -43,6 +43,27 @@ export default defineConfig({
         baseURL: 'http://localhost:5173',
       },
     },
+    {
+      name: 'upload-tests',
+      testMatch: /upload-functionality\.spec\.ts/,
+      use: {
+        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+      },
+    },
+    {
+      name: 'selection-tests',
+      testMatch: /image-selection\.spec\.ts/,
+      use: {
+        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+      },
+    },
+    {
+      name: 'integration-tests',
+      testMatch: /integration-workflow\.spec\.ts/,
+      use: {
+        baseURL: process.env.FRONTEND_URL || 'https://d66gmb5py5515.cloudfront.net',
+      },
+    },
   ],
   outputDir: 'test-results',
   webServer: process.env.LOCAL_TEST ? {
