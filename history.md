@@ -136,30 +136,6 @@
 - AmazonQ.mdの更新（フロントエンド実装ガイドの強化）
 - history.mdへの変更履歴の追加
 
-## 今後の計画
-
-### 機能拡張
-- 画像合成テンプレートの保存と再利用
-- 追加の画像処理フィルター（グレースケール、セピア、ぼかしなど）
-- 画像のアップロード機能
-- 複数画像の一括処理
-
-### インフラストラクチャの改善
-- CloudFrontによるコンテンツ配信の高速化
-- Route 53によるカスタムドメイン設定
-- AWS WAFによるセキュリティ強化
-- Amazon Cognitoによる認証機能の追加
-
-### CI/CD
-- GitHub Actionsによる自動ビルドとデプロイ
-- テスト自動化（単体テスト、統合テスト）
-- コード品質チェックの導入
-
-### モニタリングと運用
-- CloudWatchによるメトリクス監視
-- X-Rayによるトレース分析
-- アラート設定
-- コスト最適化
 ## 2025-07-06: セキュリティ強化 - CloudFrontの導入
 
 ### セキュリティ改善
@@ -185,3 +161,214 @@
 - READMEのアーキテクチャ図を更新
 - デプロイ手順の更新
 - セキュリティ情報の追加
+
+## 2025-07-17: フロントエンドのViteとTailwind CSS移行
+
+### フロントエンド技術スタックの更新
+- Vue CLI から Vite への移行
+  - ビルド速度の大幅な向上
+  - 開発体験の改善（HMRの高速化）
+  - より最新のエコシステムへの対応
+- Tailwind CSSの導入
+  - ユーティリティファーストのCSSフレームワーク
+  - カスタマイズ性の向上
+  - コンポーネントスタイリングの一貫性確保
+
+### 実装の変更点
+- ビルドツールの変更
+  - vue.config.js から vite.config.js への移行
+  - 環境変数の接頭辞を VUE_APP_ から VITE_ に変更
+- スタイリングの変更
+  - インラインCSSからTailwind CSSクラスへの移行
+  - レスポンシブデザインの改善
+  - カラーテーマの一元管理
+- プロジェクト構成の最適化
+  - ディレクトリ構造の整理
+  - 不要なファイルの削除
+  - 設定ファイルの最新化
+
+### パフォーマンスの改善
+- ビルド時間の短縮
+- バンドルサイズの最適化
+- 初期読み込み速度の向上
+- コード分割の改善
+
+### デプロイプロセスの更新
+- デプロイスクリプトの更新
+- 環境変数の取り扱い方法の変更
+- CloudFrontキャッシュ無効化プロセスの改善
+
+### ドキュメント更新
+- フロントエンドREADMEの更新
+- 開発環境セットアップ手順の更新
+- ビルドとデプロイ手順の更新
+- プロジェクト構造の説明の更新
+- history.mdへの変更履歴の追加
+
+## 今後の計画
+
+### 機能拡張
+- 画像合成テンプレートの保存と再利用
+- 追加の画像処理フィルター（グレースケール、セピア、ぼかしなど）
+- 画像のアップロード機能
+- 複数画像の一括処理
+
+### インフラストラクチャの改善
+- CloudFrontによるコンテンツ配信の高速化
+- Route 53によるカスタムドメイン設定
+- AWS WAFによるセキュリティ強化
+- Amazon Cognitoによる認証機能の追加
+
+### CI/CD
+- GitHub Actionsによる自動ビルドとデプロイ
+- テスト自動化（単体テスト、統合テスト）
+- コード品質チェックの導入
+
+### モニタリングと運用
+- CloudWatchによるメトリクス監視
+- X-Rayによるトレース分析
+- アラート設定
+- コスト最適化
+
+## 2025-07-29: S3パス指定時の500エラー修正 v2.0.1
+
+### 問題の特定と修正
+- **問題**: プレビュー画面でS3パスを指定すると「Request failed with status code 500」エラーが発生
+- **原因**: Lambda関数の`image_processor.py`でS3パスを解析する正規表現パターンが不完全
+  - 106行目で正規表現パターンの文字列が途中で切れていた
+  - `s3_pattern = r'^(?:s3://)?([^/]+)/(.+)` → 文字列の終端`$`が欠けていた
+
+### 修正内容
+1. **Lambda関数の修正**:
+   - `lambda/python/image_processor.py`の正規表現パターンを修正
+   - `s3_pattern = r'^(?:s3://)?([^/]+)/(.+)$'` に変更
+   - S3パスの解析が正常に動作するように修正
+
+2. **フロントエンドの修正**:
+   - `frontend/src/App.vue`の環境変数参照を修正
+   - `process.env.VUE_APP_API_URL` → `import.meta.env.VITE_API_URL` に変更
+   - Viteの環境変数仕様に合わせて修正
+
+### 技術的詳細
+- **エラー修正**: マイナーマイナーバージョンを1上げて v2.0.1 に更新
+- **影響範囲**: S3パスを使用した画像合成機能
+- **テスト対象**: S3パス指定での画像合成処理
+
+### 修正後の動作
+- S3パス（`s3://bucket/key`形式）での画像指定が正常に動作
+- フロントエンドのプルダウンメニューからS3パスを選択した際のエラーが解消
+- 既存のテスト画像指定機能には影響なし
+
+### 検証方法
+```bash
+# API直接テスト
+curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png&image2=test"
+
+# フロントエンドでのテスト
+# 1. https://d7kz1a65nk29c.cloudfront.net/ にアクセス
+# 2. 画像1または画像2のプルダウンでS3パスを選択
+# 3. 「画像を生成」ボタンをクリック
+# 4. エラーなく画像が生成されることを確認
+```## 
+2025-07-29: S3パス指定時の500エラー完全修正 v2.0.2
+
+### 問題の完全解決
+- **問題**: S3パス指定時の「Request failed with status code 500」エラーが継続
+- **根本原因**: 
+  1. Lambda関数の正規表現パターンの構文エラー（文字列の不完全な終了）
+  2. ARM64アーキテクチャでのPillowライブラリの互換性問題
+
+### 修正内容
+1. **Lambda関数の完全再作成**:
+   - `lambda/python/image_processor.py`を完全に再作成
+   - S3パス解析の正規表現パターンを正しく修正: `r'^(?:s3://)?([^/]+)/(.+)$'`
+   - 構文エラーの完全解消
+
+2. **アーキテクチャの変更**:
+   - `lib/image-processor-api-stack.ts`でLambdaアーキテクチャをARM64からX86_64に変更
+   - Pillowライブラリの互換性問題を解決
+
+3. **バージョン更新**:
+   - エラー修正のため、マイナーマイナーバージョンを1上げて v2.0.2 に更新
+   - HTMLレスポンスとファイル名にバージョン情報を反映
+
+### 技術的改善点
+- **正規表現パターンの修正**: S3パス（`s3://bucket/key`形式）の正確な解析
+- **アーキテクチャ最適化**: x86_64アーキテクチャでのライブラリ互換性確保
+- **エラーハンドリング強化**: より詳細なログ出力とエラー情報
+
+### 修正後の動作確認
+1. **基本テスト**:
+```bash
+curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
+```
+✅ 正常動作確認済み
+
+2. **S3パステスト**:
+```bash
+curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://imageprocessorapistack-testimagesbucket4ab1f113-swy6fmlebf8o/images/circle_red.png&image2=test"
+```
+✅ 正常動作確認済み
+
+### デプロイ情報
+- **API URL**: `https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+- **フロントエンドURL**: `https://d2jigwof3rswvi.cloudfront.net`
+- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-swy6fmlebf8o`
+
+### 検証結果
+- S3パス指定での画像合成が正常に動作
+- フロントエンドのプルダウンメニューからS3パスを選択した際のエラーが完全に解消
+- 既存のテスト画像指定機能も正常動作
+- アルファチャンネル（透過）処理も正常動作## 202
+5-07-29: フロントエンドAPI接続エラー修正 v2.0.3
+
+### 問題の特定と修正
+- **問題**: フロントエンドで画像生成ボタンを押した際に「Failed to load resource: net::ERR_NAME_NOT_RESOLVED」エラーが発生
+- **原因**: フロントエンドのデフォルトAPI URLが古い値に設定されていた
+  - 設定されていたURL: `https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+  - 実際のURL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+
+### 修正内容
+1. **フロントエンドのAPI URL修正**:
+   - `frontend/src/App.vue`のデフォルトAPI URLを正しい値に更新
+   - S3バケット名も正しい値に更新: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+
+2. **Playwrightテストの更新**:
+   - `test/e2e/frontend-api.spec.ts`のテストURLを正しい値に更新
+   - フロントエンドURL: `https://d2jokx0x4ou6mb.cloudfront.net`
+   - API URL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+
+3. **CloudFrontキャッシュ無効化**:
+   - 更新されたフロントエンドが即座に配信されるようにキャッシュを無効化
+
+### 技術的詳細
+- **エラー修正**: マイナーマイナーバージョンを1上げて v2.0.3 に更新
+- **影響範囲**: フロントエンドからのAPI接続機能
+- **テスト対象**: 全てのフロントエンド機能とAPI接続
+
+### 修正後の動作確認
+**Playwrightテスト結果**: 全7テストがパス
+1. ✅ フロントエンドページが正常に読み込まれる
+2. ✅ UI要素が正しく表示される  
+3. ✅ 基本的な画像生成が動作する
+4. ✅ S3パス指定での画像生成が動作する
+5. ✅ エラーハンドリングが正しく動作する
+6. ✅ API URLが正しく設定されている
+7. ✅ ネットワークエラーが発生しない
+
+**手動テスト結果**:
+- ✅ 基本的な画像合成API: 正常動作
+- ✅ S3パス指定での画像合成API: 正常動作
+- ✅ フロントエンドからのAPI接続: エラー解消
+
+### デプロイ情報
+- **フロントエンドURL**: `https://d2jokx0x4ou6mb.cloudfront.net`
+- **API URL**: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+
+### 検証結果
+- フロントエンドからの画像生成機能が正常に動作
+- S3パス指定での画像合成が正常に動作
+- 「net::ERR_NAME_NOT_RESOLVED」エラーが完全に解消
+- 全てのPlaywrightテストがパス
+- ブラウザコンソールでのネットワークエラーが解消

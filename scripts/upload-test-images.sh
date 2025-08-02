@@ -35,10 +35,14 @@ fi
 echo "👤 AWS Profile: default"
 echo "🌏 AWS Region: \${AWS_DEFAULT_REGION:-default}"
 
-# 画像ファイルの存在確認
-IMAGE_DIR="../lambda/python/images"
+# 画像ファイルの存在確認（スクリプトの場所から相対パス）
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+IMAGE_DIR="$SCRIPT_DIR/../lambda/python/images"
+
 if [ ! -d "$IMAGE_DIR" ]; then
     echo "❌ エラー: 画像ディレクトリが見つかりません: $IMAGE_DIR"
+    echo "💡 スクリプトディレクトリ: $SCRIPT_DIR"
+    echo "💡 探索パス: $IMAGE_DIR"
     exit 1
 fi
 
