@@ -61,14 +61,16 @@
     "@awslabs.aws-api-mcp-server",
     "@awslabs.cdk-mcp-server",
     "@awslabs.cfn-mcp-server",
-    "@awslabs.aws-diagram-mcp-server"
+    "@awslabs.aws-diagram-mcp-server",
+    "codeReview"
   ],
   "allowedTools": [
     "fsRead",
     "fsWrite",
     "fsReplace",
     "listDirectory",
-    "fileSearch"
+    "fileSearch",
+    "codeReview"
   ],
   "toolsSettings": {
     "execute_bash": {

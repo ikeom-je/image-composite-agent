@@ -1,17 +1,156 @@
 # 画像合成REST API実装ガイド
 
+本システムは.amazonqディレクトリのmarkdownのルールにしたがったプロンプトで必ず動作させます。システムはAmazonQ, Readme, historyのmarkdownをもとに作っていきます。そこから生成されたrequirements, design,taskでコードを生成してデプロイとテストを行います。
+
 このドキュメントでは、AWS CDKを使用して画像合成REST APIを実装する手順を説明します。Python + Pillowライブラリを使用してLambda関数で画像処理を行い、それをAPI Gatewayで公開します。フロントエンドはVue.js 3で実装し、S3にホスティングしてCloudFrontで配信します。
+
+## 🆕 v2.4.0 新機能: S3画像アップロード機能
+
+### アップロード機能の概要
+
+S3画像アップロード機能により、ユーザーは独自の画像をアップロードして画像合成で使用できます：
+
+- **ドラッグ&ドロップ対応**: 画像ファイルを直接ドラッグ&ドロップでアップロード
+- **署名付きURL**: セキュアな直接S3アップロード
+- **サムネイル生成**: 自動PNG形式サムネイル生成
+- **画像選択UI**: 3択選択（未選択・テスト画像・S3画像）
+- **ページネーション**: 大量画像対応
+
+### Upload Manager Lambda関数の実装
+
+```python
+def generate_presigned_upload_url(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """画像アップロード用の署名付きURL生成"""
+    try:
+        body = json.loads(event.get('body', '{}'))
+        file_name = body.get('fileName')
+        file_type = body.get('fileType')
+        file_size = body.get('fileSize', 0)
+        
+        # ファイルサイズ制限（10MB）
+        if file_size > 10 * 1024 * 1024:
+            return format_response(400, {'error': 'File size exceeds 10MB limit'})
+        
+        # 対応ファイル形式の検証
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff', 'image/x-tga']
+        if file_type not in allowed_types:
+            return format_response(400, {'error': f'Unsupported file type: {file_type}'})
+        
+        # 署名付きURL生成
+        presigned_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={'Bucket': upload_bucket, 'Key': s3_key, 'ContentType': file_type},
+            ExpiresIn=3600
+        )
+        
+        return format_response(200, {
+            'uploadUrl': presigned_url, 's3Key': s3_key, 'bucketName': upload_bucket, 'expiresIn': 3600
+        })
+    except Exception as e:
+        return format_response(500, {'error': str(e)})
+
+def list_uploaded_images(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """アップロードされた画像の一覧取得"""
+    try:
+        response = s3_client.list_objects_v2(Bucket=upload_bucket, Prefix='uploads/images/', MaxKeys=50)
+        images = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                # サムネイルURL生成
+                thumbnail_key = obj['Key'].replace('uploads/images/', 'thumbnails/').replace(obj['Key'].split('.')[-1], 'png')
+                thumbnail_url = s3_client.generate_presigned_url('get_object', Params={'Bucket': upload_bucket, 'Key': thumbnail_key}, ExpiresIn=3600)
+                
+                images.append({
+                    'key': obj['Key'], 's3Path': f"s3://{upload_bucket}/{obj['Key']}", 'fileName': obj['Key'].split('/')[-1],
+                    'size': obj['Size'], 'lastModified': obj['LastModified'].isoformat(), 'thumbnailUrl': thumbnail_url
+                })
+        return format_response(200, {'images': images, 'count': len(images)})
+    except Exception as e:
+        return format_response(500, {'error': str(e)})
+```
+
+### フロントエンド画像アップロード・選択コンポーネント
+
+```vue
+<!-- ImageUploader.vue -->
+<template>
+  <div class="image-uploader">
+    <div class="upload-area" @drop="handleDrop" @dragover.prevent @dragleave.prevent>
+      <input ref="fileInput" type="file" accept="image/*" @change="handleFileSelect" style="display: none" />
+      <button @click="$refs.fileInput.click()">📁 画像ファイルを選択</button>
+      <p>または、画像ファイルをここにドラッグ&ドロップ</p>
+      <small>対応形式: JPEG, PNG, GIF, WebP, TIFF, TGA | 最大サイズ: 10MB</small>
+    </div>
+    <div v-if="uploading" class="upload-progress">
+      <div class="progress-bar"><div class="progress-fill" :style="{width: uploadProgress + '%'}"></div></div>
+      <p>{{ uploadProgress }}% 完了</p>
+    </div>
+  </div>
+</template>
+
+<!-- ImageSelector.vue -->
+<template>
+  <div class="image-selector">
+    <select v-model="selectedType" @change="handleTypeChange">
+      <option value="">未選択</option>
+      <option value="test">既存テスト画像</option>
+      <option value="s3">S3アップロード画像</option>
+    </select>
+    
+    <!-- S3画像一覧 -->
+    <div v-if="selectedType === 's3'" class="s3-image-selection">
+      <div class="image-grid">
+        <div v-for="image in s3Images" :key="image.key" class="image-item" @click="selectS3Image(image)">
+          <img :src="image.thumbnailUrl" :alt="image.fileName" />
+          <p>{{ truncateFileName(image.fileName) }}</p>
+          <small>{{ formatFileSize(image.size) }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+### CDKスタック拡張
+
+```typescript
+// アップロード用S3バケット
+this.uploadBucket = new s3.Bucket(this, 'UploadBucket', {
+  accessControl: s3.BucketAccessControl.PRIVATE,
+  blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+  cors: [{
+    allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
+    allowedOrigins: ['*'], allowedHeaders: ['*'], maxAge: 3600,
+  }],
+});
+
+// Upload Manager Lambda関数
+const uploadManagerFunction = new lambda.Function(this, 'UploadManagerFunction', {
+  runtime: lambda.Runtime.PYTHON_3_12,
+  handler: 'upload_manager.handler',
+  environment: { UPLOAD_BUCKET: this.uploadBucket.bucketName },
+  memorySize: 768, timeout: cdk.Duration.seconds(45),
+});
+
+// API Gateway統合
+const upload = api.root.addResource('upload');
+const presignedUrl = upload.addResource('presigned-url');
+presignedUrl.addMethod('POST', new apigateway.LambdaIntegration(uploadManagerFunction));
+const imagesList = upload.addResource('images');
+imagesList.addMethod('GET', new apigateway.LambdaIntegration(uploadManagerFunction));
+```
 
 ## アーキテクチャ概要
 
 このソリューションは以下のコンポーネントで構成されています：
 
-- **AWS Lambda**: Python 3.11ランタイムを使用し、画像処理ロジックを実装
+- **AWS Lambda**: Python 3.12ランタイムを使用し、画像処理ロジックを実装
+- **Upload Manager Lambda**: 画像アップロード・管理機能を提供
 - **Amazon API Gateway**: RESTful APIエンドポイントを提供
-- **Amazon S3**: 画像リソースとテスト画像を保存、フロントエンドを保存（プライベート）
+- **Amazon S3**: 画像リソース、テスト画像、アップロード画像を保存
 - **Amazon CloudFront**: フロントエンドの安全な配信とキャッシング
 - **AWS CDK**: インフラストラクチャをコードとして定義・管理
-- **Vue.js 3**: フロントエンドアプリケーション
+- **Vue.js 3**: フロントエンドアプリケーション（アップロード機能付き）
 
 ## 前提条件
 

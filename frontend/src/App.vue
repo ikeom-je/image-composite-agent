@@ -1,15 +1,24 @@
 <template>
   <div class="app-container">
+    <!-- 通知システム -->
+    <NotificationSystem />
+    
+    <!-- ローディングオーバーレイ -->
+    <LoadingOverlay v-if="appStore.isLoading" :message="appStore.loading.message" />
+    
+    <!-- パフォーマンス監視 -->
+    <PerformanceMonitor v-if="configStore.isDebugMode || configStore.isDevelopment" />
+
     <header>
-      <h1>🎨 画像合成REST API デモ</h1>
-      <p class="subtitle">高性能・アルファチャンネル対応の画像合成REST API</p>
-      <div v-if="config" class="config-info">
-        <small>Version: {{ config.version }} | Environment: {{ config.environment }}</small>
+      <h1>🎨 画像合成REST API v2.4</h1>
+      <p class="subtitle">S3画像アップロード機能付き | 3画像合成対応 | Vue.js 3 + AWS Lambda + S3</p>
+      <div v-if="configStore.config" class="config-info">
+        <small>Version: {{ configStore.version }} | Environment: {{ configStore.environment }}</small>
       </div>
     </header>
 
     <!-- 設定読み込み中の表示 -->
-    <div v-if="!configLoaded" class="config-loading">
+    <div v-if="!configStore.isLoaded" class="config-loading">
       <div class="spinner"></div>
       <p>設定を読み込み中...</p>
     </div>
@@ -17,6 +26,11 @@
     <div v-else class="main-content">
       <div class="form-container">
         <h2>画像合成パラメータ</h2>
+
+        <!-- 画像アップロード機能 -->
+        <div class="upload-section">
+          <ImageUploader @upload-complete="handleUploadComplete" />
+        </div>
 
         <!-- ベース画像選択 -->
         <div class="form-group">
@@ -27,151 +41,11 @@
           </select>
         </div>
 
-        <!-- 3画像の選択と設定を横並びテーブル形式で表示 -->
-        <div class="images-config-section">
-          <h3 class="text-lg font-semibold mb-4">画像設定</h3>
-
-          <!-- 画像選択テーブル -->
-          <div class="table-container mb-6">
-            <table class="config-table">
-              <thead>
-                <tr>
-                  <th>画像</th>
-                  <th>画像1 (必須)</th>
-                  <th>画像2 (必須)</th>
-                  <th>画像3 (オプション)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="row-header">画像選択</td>
-                  <td>
-                    <select v-model="params.image1" class="form-select">
-                      <option value="test">テスト画像 (円)</option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
-                        S3: circle_red.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
-                        S3: rectangle_blue.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
-                        S3: triangle_green.png
-                      </option>
-                    </select>
-                  </td>
-                  <td>
-                    <select v-model="params.image2" class="form-select">
-                      <option value="test">テスト画像 (四角)</option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
-                        S3: circle_red.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
-                        S3: rectangle_blue.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
-                        S3: triangle_green.png
-                      </option>
-                    </select>
-                  </td>
-                  <td>
-                    <select v-model="params.image3" class="form-select" :class="{ 'disabled': !params.image3 }">
-                      <option value="">選択しない</option>
-                      <option value="test">テスト画像 (三角)</option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
-                        S3: circle_red.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
-                        S3: rectangle_blue.png
-                      </option>
-                      <option v-if="config?.s3BucketNames?.testImages"
-                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
-                        S3: triangle_green.png
-                      </option>
-                    </select>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 位置・サイズ設定テーブル -->
-          <div class="table-container mb-6">
-            <table class="config-table">
-              <thead>
-                <tr>
-                  <th>設定項目</th>
-                  <th>画像1</th>
-                  <th>画像2</th>
-                  <th :class="{ 'disabled-header': !params.image3 }">
-                    画像3 {{ params.image3 ? '' : '(無効)' }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="row-header">X座標</td>
-                  <td>
-                    <input v-model.number="params.image1X" type="number" class="form-input" />
-                  </td>
-                  <td>
-                    <input v-model.number="params.image2X" type="number" class="form-input" />
-                  </td>
-                  <td :class="{ 'disabled-cell': !params.image3 }">
-                    <input v-model.number="params.image3X" type="number" class="form-input"
-                      :disabled="!params.image3" />
-                  </td>
-                </tr>
-                <tr>
-                  <td class="row-header">Y座標</td>
-                  <td>
-                    <input v-model.number="params.image1Y" type="number" class="form-input" />
-                  </td>
-                  <td>
-                    <input v-model.number="params.image2Y" type="number" class="form-input" />
-                  </td>
-                  <td :class="{ 'disabled-cell': !params.image3 }">
-                    <input v-model.number="params.image3Y" type="number" class="form-input"
-                      :disabled="!params.image3" />
-                  </td>
-                </tr>
-                <tr>
-                  <td class="row-header">幅</td>
-                  <td>
-                    <input v-model.number="params.image1Width" type="number" class="form-input" />
-                  </td>
-                  <td>
-                    <input v-model.number="params.image2Width" type="number" class="form-input" />
-                  </td>
-                  <td :class="{ 'disabled-cell': !params.image3 }">
-                    <input v-model.number="params.image3Width" type="number" class="form-input"
-                      :disabled="!params.image3" />
-                  </td>
-                </tr>
-                <tr>
-                  <td class="row-header">高さ</td>
-                  <td>
-                    <input v-model.number="params.image1Height" type="number" class="form-input" />
-                  </td>
-                  <td>
-                    <input v-model.number="params.image2Height" type="number" class="form-input" />
-                  </td>
-                  <td :class="{ 'disabled-cell': !params.image3 }">
-                    <input v-model.number="params.image3Height" type="number" class="form-input"
-                      :disabled="!params.image3" />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <!-- 画像設定テーブル -->
+        <ImageConfigTable 
+          :image-configs="imageConfigs"
+          @update-config="handleConfigUpdate"
+        />
 
         <!-- 出力形式選択 -->
         <div class="form-group">
@@ -184,9 +58,12 @@
 
         <!-- 画像生成ボタン（目立つデザイン） -->
         <div class="generate-button-section">
-          <button @click="generateImage" :disabled="isLoading || !params.image1 || !params.image2"
-            class="generate-button">
-            <span v-if="isLoading" class="loading-content">
+          <button 
+            @click="generateImage" 
+            :disabled="appStore.isLoading || !imageConfigs.image1.source || !imageConfigs.image2.source"
+            class="generate-button"
+          >
+            <span v-if="appStore.isLoading" class="loading-content">
               <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor"
@@ -196,39 +73,24 @@
               生成中...
             </span>
             <span v-else class="button-content">
-              🎨 {{ params.image3 ? '3画像を合成' : '2画像を合成' }}
+              🎨 {{ imageConfigs.image3.source ? '3画像を合成' : '2画像を合成' }}
             </span>
           </button>
         </div>
       </div>
 
+      <!-- 結果表示コンポーネント -->
       <div class="result-container">
-        <h2>生成結果</h2>
-
-        <div v-if="isLoading" class="loading">
-          <div class="spinner"></div>
-          <p>画像を生成中...</p>
-        </div>
-
-        <div v-else-if="error" class="error">
-          <p>エラーが発生しました: {{ error }}</p>
-        </div>
-
-        <div v-else-if="resultUrl" class="result">
-          <img :src="resultUrl" alt="合成画像" class="result-image" @error="handleImageError" />
-          <div class="actions">
-            <button @click="downloadImage">画像をダウンロード</button>
-            <button @click="copyApiUrl">API URLをコピー</button>
-          </div>
-          <div class="api-url">
-            <p>API URL:</p>
-            <code>{{ apiUrl }}</code>
-          </div>
-        </div>
-
-        <div v-else class="empty-result">
-          <p>「画像を生成」ボタンをクリックして画像を合成してください</p>
-        </div>
+        <ResultDisplay
+          :result-url="resultUrl"
+          :api-url="apiUrl"
+          :is-loading="appStore.isLoading"
+          :error="error"
+          @download-image="downloadImage"
+          @copy-api-url="copyApiUrl"
+          @retry-generation="handleRetryGeneration"
+          @clear-error="handleClearError"
+        />
       </div>
     </div>
 
@@ -248,356 +110,402 @@
   </div>
 </template>
 
-<script>
-import axios from 'axios';
-import { configManager } from './utils/config.js';
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useAppStore } from '@/stores/app'
+import { useConfigStore } from '@/stores/config'
+import { useNotificationStore } from '@/stores/notification'
+import NotificationSystem from '@/components/NotificationSystem.vue'
+import LoadingOverlay from '@/components/LoadingOverlay.vue'
+import PerformanceMonitor from '@/components/PerformanceMonitor.vue'
+import ImageUploader from '@/components/ImageUploader.vue'
+import ImageConfigTable from '@/components/ImageConfigTable.vue'
+import ResultDisplay from '@/components/ResultDisplay.vue'
+import axios from 'axios'
 
-export default {
-  name: 'App',
-  data() {
-    return {
-      // 動的設定
-      config: null,
-      configLoaded: false,
+// ストアの使用
+const appStore = useAppStore()
+const configStore = useConfigStore()
+const notificationStore = useNotificationStore()
 
-      // API設定（動的に設定される）
-      apiBaseUrl: '',
-      params: {
-        baseImage: 'test',
-        image1: 'test',
-        image1X: 1600,
-        image1Y: 20,
-        image1Width: 300,
-        image1Height: 200,
-        image2: 'test',
-        image2X: 1600,
-        image2Y: 240,
-        image2Width: 300,
-        image2Height: 200,
-        // 新規追加: 第3画像パラメータ
-        image3: '',
-        image3X: 20,
-        image3Y: 20,
-        image3Width: 300,
-        image3Height: 200,
-        format: 'html'
-      },
-      resultUrl: '',
-      apiUrl: '',
-      isLoading: false,
-      error: null,
-      examples: [
-        {
-          title: '🎨 基本的な3画像合成',
-          description: '円・四角・三角の3つの図形を合成',
-          params: {
-            baseImage: 'test',
-            image1: 'test',
-            image1X: 1600,
-            image1Y: 20,
-            image1Width: 300,
-            image1Height: 200,
-            image2: 'test',
-            image2X: 1600,
-            image2Y: 240,
-            image2Width: 300,
-            image2Height: 200,
-            image3: 'test',
-            image3X: 20,
-            image3Y: 20,
-            image3Width: 300,
-            image3Height: 200,
-            format: 'html'
-          }
-        },
-        {
-          title: '🔺 三角形を中央配置',
-          description: '三角形を画面中央に大きく配置',
-          params: {
-            baseImage: 'transparent',
-            image1: 'test',
-            image1X: 100,
-            image1Y: 100,
-            image1Width: 300,
-            image1Height: 200,
-            image2: 'test',
-            image2X: 1500,
-            image2Y: 100,
-            image2Width: 300,
-            image2Height: 200,
-            image3: 'test',
-            image3X: 800,
-            image3Y: 400,
-            image3Width: 400,
-            image3Height: 300,
-            format: 'html'
-          }
-        },
-        {
-          title: '📐 基本的な2画像合成',
-          description: '従来の2画像合成（後方互換性）',
-          params: {
-            baseImage: 'test',
-            image1: 'test',
-            image1X: 1600,
-            image1Y: 20,
-            image1Width: 300,
-            image1Height: 200,
-            image2: 'test',
-            image2X: 1600,
-            image2Y: 240,
-            image2Width: 300,
-            image2Height: 200,
-            image3: '',
-            format: 'html'
-          }
-        },
-        {
-          title: '☁️ S3画像を使用した3画像合成',
-          description: 'S3に保存された画像を使用',
-          params: {
-            baseImage: 'test',
-            image1: 's3://placeholder/images/circle_red.png',
-            image1X: 1600,
-            image1Y: 20,
-            image1Width: 300,
-            image1Height: 200,
-            image2: 's3://placeholder/images/rectangle_blue.png',
-            image2X: 1600,
-            image2Y: 240,
-            image2Width: 300,
-            image2Height: 200,
-            image3: 's3://placeholder/images/triangle_green.png',
-            image3X: 20,
-            image3Y: 20,
-            image3Width: 300,
-            image3Height: 200,
-            format: 'html'
-          }
-        }
-      ]
-    };
+// パラメータ（1920x1080固定キャンバス）
+const params = ref({
+  baseImage: 'test',
+  canvas_width: 1920,
+  canvas_height: 1080,
+  format: 'html'
+})
+
+// 画像設定（ImageConfigTableで使用）
+const imageConfigs = ref({
+  image1: {
+    source: 'test',
+    x: 100,
+    y: 100,
+    width: 400,
+    height: 300
   },
-
-  async created() {
-    await this.loadConfiguration();
+  image2: {
+    source: 'test',
+    x: 600,
+    y: 100,
+    width: 400,
+    height: 300
   },
+  image3: {
+    source: '',
+    x: 350,
+    y: 400,
+    width: 400,
+    height: 300
+  }
+})
 
-  methods: {
-    /**
-     * 設定を読み込む
-     */
-    async loadConfiguration() {
-      try {
-        console.log('Loading application configuration...');
-        this.config = await configManager.loadConfig();
-        this.apiBaseUrl = this.config.apiUrl;
-        this.configLoaded = true;
+// 結果表示用
+const resultUrl = ref('')
+const apiUrl = ref('')
+const error = ref('')
 
-        console.log('Configuration loaded:', {
-          apiUrl: this.config.apiUrl,
-          version: this.config.version,
-          environment: this.config.environment
-        });
-
-        // S3バケット名を使用例に反映
-        this.updateExamplesWithS3Paths();
-
-        // フォームのS3パス選択肢も更新
-        this.updateFormS3Options();
-      } catch (error) {
-        console.error('Configuration loading failed:', error);
-        this.apiBaseUrl = import.meta.env.VITE_API_URL || '';
-        this.configLoaded = true;
-      }
-    },
-
-    /**
-     * 使用例のS3パスを動的に更新（3画像対応）
-     */
-    updateExamplesWithS3Paths() {
-      if (this.config?.s3BucketNames?.testImages) {
-        const bucketName = this.config.s3BucketNames.testImages;
-        console.log('Updating examples with S3 bucket:', bucketName);
-
-        this.examples.forEach(example => {
-          if (example.params.image1?.startsWith('s3://placeholder')) {
-            example.params.image1 = `s3://${bucketName}/images/circle_red.png`;
-          }
-          if (example.params.image2?.startsWith('s3://placeholder')) {
-            example.params.image2 = `s3://${bucketName}/images/rectangle_blue.png`;
-          }
-          if (example.params.image3?.startsWith('s3://placeholder')) {
-            example.params.image3 = `s3://${bucketName}/images/triangle_green.png`;
-          }
-        });
-      }
-    },
-
-    /**
-     * フォームのS3パス選択肢を更新
-     */
-    updateFormS3Options() {
-      // この関数は将来的にフォームの選択肢を動的に更新するために使用
-      // 現在はテンプレート内で直接参照しているため、後で実装
-    },
-    buildApiUrl() {
-      const url = new URL(this.apiBaseUrl);
-
-      // 必須パラメータを追加
-      if (this.params.baseImage) url.searchParams.set('baseImage', this.params.baseImage);
-      url.searchParams.set('image1', this.params.image1);
-      url.searchParams.set('image2', this.params.image2);
-
-      // 画像1のパラメータ
-      url.searchParams.set('image1X', this.params.image1X);
-      url.searchParams.set('image1Y', this.params.image1Y);
-      url.searchParams.set('image1Width', this.params.image1Width);
-      url.searchParams.set('image1Height', this.params.image1Height);
-
-      // 画像2のパラメータ
-      url.searchParams.set('image2X', this.params.image2X);
-      url.searchParams.set('image2Y', this.params.image2Y);
-      url.searchParams.set('image2Width', this.params.image2Width);
-      url.searchParams.set('image2Height', this.params.image2Height);
-
-      // 第3画像のパラメータ（指定されている場合のみ）
-      if (this.params.image3) {
-        url.searchParams.set('image3', this.params.image3);
-        url.searchParams.set('image3X', this.params.image3X);
-        url.searchParams.set('image3Y', this.params.image3Y);
-        url.searchParams.set('image3Width', this.params.image3Width);
-        url.searchParams.set('image3Height', this.params.image3Height);
-      }
-
-      // 出力形式
-      url.searchParams.set('format', this.params.format);
-
-      return url.toString();
-    },
-    async generateImage() {
-      this.isLoading = true;
-      this.error = null;
-      this.resultUrl = '';
-
-      try {
-        const apiUrl = this.buildApiUrl();
-        this.apiUrl = apiUrl;
-
-        // 常にBlobとして取得し、画像として表示する
-        const response = await axios.get(apiUrl, {
-          responseType: 'blob',
-          headers: {
-            'Accept': 'image/png, image/jpeg, image/*'
-          }
-        });
-
-        // レスポンスのContent-Typeを確認
-        const contentType = response.headers['content-type'];
-
-        if (contentType && contentType.includes('image')) {
-          // 画像の場合は直接表示
-          this.resultUrl = URL.createObjectURL(response.data);
-        } else if (contentType && contentType.includes('text/html')) {
-          // HTMLの場合は画像を抽出
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const htmlContent = e.target.result;
-            // HTML内の画像を抽出
-            const imgMatch = htmlContent.match(/<img[^>]+src="([^">]+)"/);
-            if (imgMatch && imgMatch[1]) {
-              this.resultUrl = imgMatch[1];
-            } else {
-              // 画像が見つからない場合はAPIを直接呼び出し
-              const pngUrl = new URL(apiUrl);
-              pngUrl.searchParams.set('format', 'png');
-              this.resultUrl = pngUrl.toString();
-            }
-          };
-          reader.readAsText(response.data);
-        } else {
-          // それ以外の場合はPNG形式で再リクエスト
-          const pngUrl = new URL(apiUrl);
-          pngUrl.searchParams.set('format', 'png');
-          const pngResponse = await axios.get(pngUrl.toString(), { responseType: 'blob' });
-          this.resultUrl = URL.createObjectURL(pngResponse.data);
-        }
-      } catch (error) {
-        console.error('Error generating image:', {
-          message: error.message,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          url: error.config?.url,
-          method: error.config?.method,
-          code: error.code
-        });
-
-        // より詳細なエラーメッセージを設定
-        if (error.code === 'ERR_NAME_NOT_RESOLVED') {
-          this.error = 'API サーバーに接続できません。ネットワーク接続を確認してください。';
-        } else if (error.response?.status === 500) {
-          this.error = 'サーバーエラーが発生しました。しばらく待ってから再試行してください。';
-        } else if (error.response?.status === 400) {
-          this.error = 'リクエストパラメータに問題があります。設定を確認してください。';
-        } else {
-          this.error = error.message || 'Unknown error';
-        }
-
-        // エラーが発生した場合、PNG形式で再試行
-        try {
-          const retryUrl = new URL(this.apiUrl);
-          retryUrl.searchParams.set('format', 'png');
-          const retryResponse = await axios.get(retryUrl.toString(), { responseType: 'blob' });
-          this.resultUrl = URL.createObjectURL(retryResponse.data);
-          this.error = null; // エラーをクリア
-        } catch (retryError) {
-          console.error('Retry failed:', {
-            message: retryError.message,
-            status: retryError.response?.status,
-            code: retryError.code
-          });
-          // 再試行も失敗した場合は元のエラーを表示
-        }
-      } finally {
-        this.isLoading = false;
-      }
-    },
-    handleImageError() {
-      console.error('画像の読み込みに失敗しました');
-      // PNG形式で再試行
-      if (this.apiUrl && !this.apiUrl.includes('format=png')) {
-        const pngUrl = new URL(this.apiUrl);
-        pngUrl.searchParams.set('format', 'png');
-        this.resultUrl = pngUrl.toString();
-      }
-    },
-    downloadImage() {
-      if (!this.resultUrl) return;
-
-      const link = document.createElement('a');
-      link.href = this.resultUrl;
-      link.download = 'composite-image.png';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    },
-    copyApiUrl() {
-      if (!this.apiUrl) return;
-
-      navigator.clipboard.writeText(this.apiUrl)
-        .then(() => {
-          alert('API URLをクリップボードにコピーしました');
-        })
-        .catch(err => {
-          console.error('Failed to copy: ', err);
-        });
-    },
-    loadExample(example) {
-      this.params = { ...example.params };
-      this.generateImage();
+// 使用例
+const examples = ref([
+  {
+    title: '🎨 基本的な3画像合成',
+    description: '円・四角・三角の3つの図形を合成',
+    params: {
+      baseImage: 'test',
+      image1: 'test',
+      image1_x: 100,
+      image1_y: 100,
+      image1_width: 400,
+      image1_height: 300,
+      image2: 'test',
+      image2_x: 600,
+      image2_y: 100,
+      image2_width: 400,
+      image2_height: 300,
+      image3: 'test',
+      image3_x: 350,
+      image3_y: 400,
+      image3_width: 400,
+      image3_height: 300,
+      format: 'html'
+    }
+  },
+  {
+    title: '🔺 透明背景での3画像合成',
+    description: '透明背景に3つの図形を配置',
+    params: {
+      baseImage: 'transparent',
+      image1: 'test',
+      image1_x: 100,
+      image1_y: 100,
+      image1_width: 400,
+      image1_height: 300,
+      image2: 'test',
+      image2_x: 1400,
+      image2_y: 100,
+      image2_width: 400,
+      image2_height: 300,
+      image3: 'test',
+      image3_x: 750,
+      image3_y: 400,
+      image3_width: 400,
+      image3_height: 300,
+      format: 'html'
+    }
+  },
+  {
+    title: '📐 基本的な2画像合成',
+    description: '従来の2画像合成（後方互換性）',
+    params: {
+      baseImage: 'test',
+      image1: 'test',
+      image1_x: 100,
+      image1_y: 100,
+      image1_width: 400,
+      image1_height: 300,
+      image2: 'test',
+      image2_x: 600,
+      image2_y: 100,
+      image2_width: 400,
+      image2_height: 300,
+      image3: '',
+      format: 'html'
     }
   }
-};
+])
+
+// メソッド
+const buildApiUrl = () => {
+  // API URLが設定されているかチェック
+  if (!configStore.apiUrl) {
+    throw new Error('API URL is not configured. Please check your configuration.')
+  }
+
+  const url = new URL(configStore.apiUrl)
+
+  // ベース画像パラメータを追加
+  if (params.value.baseImage) {
+    url.searchParams.set('baseImage', params.value.baseImage)
+  }
+
+  // 必須パラメータを追加
+  url.searchParams.set('image1', imageConfigs.value.image1.source)
+  url.searchParams.set('image2', imageConfigs.value.image2.source)
+
+  // 画像1のパラメータ（正しいパラメータ名を使用）
+  url.searchParams.set('image1X', imageConfigs.value.image1.x.toString())
+  url.searchParams.set('image1Y', imageConfigs.value.image1.y.toString())
+  url.searchParams.set('image1Width', imageConfigs.value.image1.width.toString())
+  url.searchParams.set('image1Height', imageConfigs.value.image1.height.toString())
+
+  // 画像2のパラメータ
+  url.searchParams.set('image2X', imageConfigs.value.image2.x.toString())
+  url.searchParams.set('image2Y', imageConfigs.value.image2.y.toString())
+  url.searchParams.set('image2Width', imageConfigs.value.image2.width.toString())
+  url.searchParams.set('image2Height', imageConfigs.value.image2.height.toString())
+
+  // 第3画像のパラメータ（指定されている場合のみ）
+  if (imageConfigs.value.image3.source) {
+    url.searchParams.set('image3', imageConfigs.value.image3.source)
+    url.searchParams.set('image3X', imageConfigs.value.image3.x.toString())
+    url.searchParams.set('image3Y', imageConfigs.value.image3.y.toString())
+    url.searchParams.set('image3Width', imageConfigs.value.image3.width.toString())
+    url.searchParams.set('image3Height', imageConfigs.value.image3.height.toString())
+  }
+
+  // キャンバスサイズ（1920x1080固定）
+  url.searchParams.set('canvas_width', params.value.canvas_width.toString())
+  url.searchParams.set('canvas_height', params.value.canvas_height.toString())
+
+  // 出力形式
+  url.searchParams.set('format', params.value.format)
+
+  console.log('[App] Built API URL:', url.toString())
+  return url.toString()
+}
+
+const generateImage = async () => {
+  appStore.startLoading('画像を生成中...')
+  error.value = ''
+  resultUrl.value = ''
+
+  try {
+    const url = buildApiUrl()
+    apiUrl.value = url
+
+    console.log('[App] Generating image with URL:', url)
+
+    // 常にBlobとして取得し、画像として表示する
+    const response = await axios.get(url, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'image/png, image/jpeg, image/*'
+      },
+      timeout: 30000 // 30秒タイムアウト
+    })
+
+    // レスポンスのContent-Typeを確認
+    const contentType = response.headers['content-type']
+    console.log('[App] Response content-type:', contentType)
+
+    if (contentType && contentType.includes('image')) {
+      // 画像の場合は直接表示
+      resultUrl.value = URL.createObjectURL(response.data)
+      console.log('[App] Image response processed successfully')
+    } else if (contentType && contentType.includes('text/html')) {
+      // HTMLの場合は画像を抽出
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const htmlContent = e.target?.result as string
+        console.log('[App] Processing HTML response')
+        
+        // HTML内の画像を抽出
+        const imgMatch = htmlContent.match(/<img[^>]+src="([^">]+)"/)
+        if (imgMatch && imgMatch[1]) {
+          resultUrl.value = imgMatch[1]
+          console.log('[App] Extracted image URL from HTML:', imgMatch[1])
+        } else {
+          // 画像が見つからない場合はPNG形式で再リクエスト
+          console.log('[App] No image found in HTML, retrying with PNG format')
+          retryWithPngFormat(url)
+        }
+      }
+      reader.onerror = () => {
+        console.error('[App] Failed to read HTML response')
+        retryWithPngFormat(url)
+      }
+      reader.readAsText(response.data)
+    } else {
+      // それ以外の場合はPNG形式で再リクエスト
+      console.log('[App] Unknown content type, retrying with PNG format')
+      await retryWithPngFormat(url)
+    }
+
+    notificationStore.showSuccess('画像の生成が完了しました！')
+  } catch (err: any) {
+    console.error('Error generating image:', err)
+    
+    // より詳細なエラーログ
+    console.error('Error details:', {
+      message: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      url: err.config?.url,
+      code: err.code
+    })
+    
+    if (err.message?.includes('API URL is not configured')) {
+      error.value = 'API設定が読み込まれていません。ページを再読み込みしてください。'
+    } else if (err.code === 'ERR_NAME_NOT_RESOLVED') {
+      error.value = 'API サーバーに接続できません。ネットワーク接続を確認してください。'
+    } else if (err.response?.status === 500) {
+      error.value = 'サーバーエラーが発生しました。しばらく待ってから再試行してください。'
+    } else if (err.response?.status === 400) {
+      error.value = 'リクエストパラメータに問題があります。設定を確認してください。'
+    } else if (err.code === 'ECONNABORTED') {
+      error.value = 'リクエストがタイムアウトしました。再試行してください。'
+    } else {
+      error.value = err.message || 'Unknown error'
+    }
+
+    notificationStore.showError(error.value)
+    
+    // エラーが発生した場合、PNG形式で再試行
+    if (apiUrl.value && !err.message?.includes('API URL is not configured')) {
+      try {
+        console.log('[App] Attempting retry with PNG format')
+        await retryWithPngFormat(apiUrl.value)
+        error.value = '' // エラーをクリア
+        notificationStore.showSuccess('PNG形式での再試行が成功しました')
+      } catch (retryError) {
+        console.error('Retry failed:', retryError)
+        // 再試行も失敗した場合は元のエラーを表示
+      }
+    }
+  } finally {
+    appStore.stopLoading()
+  }
+}
+
+// PNG形式での再試行ヘルパー関数
+const retryWithPngFormat = async (originalUrl: string) => {
+  const pngUrl = new URL(originalUrl)
+  pngUrl.searchParams.set('format', 'png')
+  console.log('[App] Retrying with PNG URL:', pngUrl.toString())
+  
+  const pngResponse = await axios.get(pngUrl.toString(), { 
+    responseType: 'blob',
+    timeout: 30000
+  })
+  resultUrl.value = URL.createObjectURL(pngResponse.data)
+  console.log('[App] PNG retry successful')
+}
+
+const handleImageError = () => {
+  console.error('画像の読み込みに失敗しました')
+  // PNG形式で再試行
+  if (apiUrl.value && !apiUrl.value.includes('format=png')) {
+    const pngUrl = new URL(apiUrl.value)
+    pngUrl.searchParams.set('format', 'png')
+    resultUrl.value = pngUrl.toString()
+  }
+}
+
+const downloadImage = () => {
+  if (!resultUrl.value) return
+
+  const link = document.createElement('a')
+  link.href = resultUrl.value
+  link.download = 'composite-image.png'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  
+  notificationStore.showSuccess('ダウンロードを開始しました')
+}
+
+const copyApiUrl = () => {
+  if (!apiUrl.value) return
+
+  navigator.clipboard.writeText(apiUrl.value)
+    .then(() => {
+      notificationStore.showSuccess('API URLをクリップボードにコピーしました')
+    })
+    .catch(err => {
+      console.error('Failed to copy: ', err)
+      notificationStore.showError('URLのコピーに失敗しました')
+    })
+}
+
+const loadExample = (example: any) => {
+  // ベース画像の設定
+  params.value.baseImage = example.params.baseImage || 'test'
+  
+  // 例のパラメータを画像設定に変換
+  if (example.params.image1) {
+    imageConfigs.value.image1.source = example.params.image1
+    imageConfigs.value.image1.x = example.params.image1_x || 100
+    imageConfigs.value.image1.y = example.params.image1_y || 100
+    imageConfigs.value.image1.width = example.params.image1_width || 400
+    imageConfigs.value.image1.height = example.params.image1_height || 300
+  }
+  
+  if (example.params.image2) {
+    imageConfigs.value.image2.source = example.params.image2
+    imageConfigs.value.image2.x = example.params.image2_x || 600
+    imageConfigs.value.image2.y = example.params.image2_y || 100
+    imageConfigs.value.image2.width = example.params.image2_width || 400
+    imageConfigs.value.image2.height = example.params.image2_height || 300
+  }
+  
+  if (example.params.image3) {
+    imageConfigs.value.image3.source = example.params.image3
+    imageConfigs.value.image3.x = example.params.image3_x || 350
+    imageConfigs.value.image3.y = example.params.image3_y || 400
+    imageConfigs.value.image3.width = example.params.image3_width || 400
+    imageConfigs.value.image3.height = example.params.image3_height || 300
+  } else {
+    imageConfigs.value.image3.source = ''
+  }
+  
+  params.value.format = example.params.format || 'html'
+  generateImage()
+}
+
+const handleUploadComplete = (uploadData: any) => {
+  notificationStore.showSuccess(`${uploadData.fileName} がアップロードされました。画像選択で使用できます。`)
+}
+
+const handleConfigUpdate = (imageKey: string, field: string, value: any) => {
+  if (imageConfigs.value[imageKey as keyof typeof imageConfigs.value]) {
+    (imageConfigs.value[imageKey as keyof typeof imageConfigs.value] as any)[field] = value
+  }
+}
+
+const handleRetryGeneration = () => {
+  generateImage()
+}
+
+const handleClearError = () => {
+  error.value = ''
+}
+
+// ライフサイクル
+onMounted(async () => {
+  try {
+    // アプリストアを初期化
+    appStore.initialize()
+    
+    // 設定を読み込み
+    await configStore.loadConfig()
+
+    console.log('[App] Application initialized successfully')
+  } catch (error) {
+    console.error('[App] Failed to initialize application:', error)
+    appStore.handleApiError(error)
+  }
+})
 </script>
 
 <style>
@@ -844,68 +752,9 @@ footer {
   border-radius: 8px;
 }
 
-/* 新しいテーブル形式UIのスタイル */
-.images-config-section {
-  background-color: #f8f9fa;
-  padding: 20px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+/* アップロードセクションのスタイル */
+.upload-section {
   margin: 20px 0;
-}
-
-.table-container {
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e0 #f7fafc;
-}
-
-.table-container::-webkit-scrollbar {
-  height: 8px;
-}
-
-.table-container::-webkit-scrollbar-track {
-  background: #f7fafc;
-}
-
-.table-container::-webkit-scrollbar-thumb {
-  background-color: #cbd5e0;
-  border-radius: 4px;
-}
-
-.config-table {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid var(--border-color);
-  background-color: white;
-}
-
-.config-table th,
-.config-table td {
-  border: 1px solid var(--border-color);
-  padding: 12px;
-  text-align: left;
-  vertical-align: middle;
-}
-
-.config-table th {
-  background-color: #f1f3f4;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.config-table .row-header {
-  background-color: #f8f9fa;
-  font-weight: 500;
-  min-width: 100px;
-}
-
-.config-table .disabled-header {
-  background-color: #e9ecef;
-  color: #6c757d;
-}
-
-.config-table .disabled-cell {
-  background-color: #f8f9fa;
 }
 
 .form-label {
@@ -914,23 +763,12 @@ footer {
   font-weight: 500;
 }
 
-.form-select,
-.form-input {
+.form-select {
   width: 100%;
   padding: 8px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 14px;
-}
-
-.form-input:disabled {
-  background-color: #f8f9fa;
-  color: #6c757d;
-  cursor: not-allowed;
-}
-
-.form-select.disabled {
-  background-color: #f8f9fa;
 }
 
 /* 目立つ画像生成ボタンのスタイル */
@@ -982,16 +820,6 @@ footer {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (max-width: 768px) {
   .main-content {
     flex-direction: column;
@@ -1006,17 +834,7 @@ footer {
     min-width: 100%;
   }
 
-  .config-table {
-    font-size: 12px;
-  }
-
-  .config-table th,
-  .config-table td {
-    padding: 8px;
-  }
-
-  .form-select,
-  .form-input {
+  .form-select {
     font-size: 12px;
     padding: 6px;
   }

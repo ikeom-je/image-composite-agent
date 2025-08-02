@@ -1,24 +1,33 @@
 {
-  "name": "image-processor-frontend",
-  "version": "2.3.0",
-  "private": true,
+  "name": "image-composite-frontend",
+  "version": "2.4.0",
+  "description": "Vue.js frontend for Image Composite Processor API",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
   },
   "dependencies": {
-    "axios": "^1.6.2",
-    "vue": "^3.3.4"
+    "axios": "^1.11.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.4.0",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^4.2.3",
-    "autoprefixer": "^10.4.14",
-    "eslint": "^8.45.0",
-    "eslint-plugin-vue": "^9.15.1",
-    "postcss": "^8.4.27",
-    "tailwindcss": "^3.3.3",
-    "vite": "^4.4.6"
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.20.0",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.11",
+    "terser": "^5.43.1",
+    "vite": "^5.0.0",
+    "vitest": "^1.2.0"
   }
 }
