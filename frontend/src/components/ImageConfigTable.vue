@@ -9,9 +9,11 @@
           <tr>
             <th>画像</th>
             <th>画像1 (必須)</th>
-            <th>画像2 (必須)</th>
+            <th :class="{ 'disabled-header': !hasImage2 }">
+              画像2 {{ hasImage2 ? '(オプション)' : '(未選択)' }}
+            </th>
             <th :class="{ 'disabled-header': !hasImage3 }">
-              画像3 {{ hasImage3 ? '(オプション)' : '(無効)' }}
+              画像3 {{ hasImage3 ? '(オプション)' : '(未選択)' }}
             </th>
           </tr>
         </thead>
@@ -27,12 +29,12 @@
                 @update:modelValue="updateConfig('image1', 'source', $event)"
               />
             </td>
-            <td>
+            <td :class="{ 'disabled-cell': !hasImage2 }">
               <ImageSelector
                 v-model="imageConfigs.image2.source"
                 label=""
                 image-type="image2"
-                :required="true"
+                :required="false"
                 @update:modelValue="updateConfig('image2', 'source', $event)"
               />
             </td>
@@ -57,7 +59,9 @@
           <tr>
             <th>設定項目</th>
             <th>画像1</th>
-            <th>画像2</th>
+            <th :class="{ 'disabled-header': !hasImage2 }">
+              画像2 {{ hasImage2 ? '' : '(無効)' }}
+            </th>
             <th :class="{ 'disabled-header': !hasImage3 }">
               画像3 {{ hasImage3 ? '' : '(無効)' }}
             </th>
@@ -76,7 +80,7 @@
                 max="1920"
               />
             </td>
-            <td>
+            <td :class="{ 'disabled-cell': !hasImage2 }">
               <input
                 type="number"
                 :value="imageConfigs.image2.x"
@@ -84,6 +88,7 @@
                 class="form-input"
                 min="0"
                 max="1920"
+                :disabled="!hasImage2"
               />
             </td>
             <td :class="{ 'disabled-cell': !hasImage3 }">
@@ -110,7 +115,7 @@
                 max="1080"
               />
             </td>
-            <td>
+            <td :class="{ 'disabled-cell': !hasImage2 }">
               <input
                 type="number"
                 :value="imageConfigs.image2.y"
@@ -118,6 +123,7 @@
                 class="form-input"
                 min="0"
                 max="1080"
+                :disabled="!hasImage2"
               />
             </td>
             <td :class="{ 'disabled-cell': !hasImage3 }">
@@ -144,7 +150,7 @@
                 max="1920"
               />
             </td>
-            <td>
+            <td :class="{ 'disabled-cell': !hasImage2 }">
               <input
                 type="number"
                 :value="imageConfigs.image2.width"
@@ -152,6 +158,7 @@
                 class="form-input"
                 min="10"
                 max="1920"
+                :disabled="!hasImage2"
               />
             </td>
             <td :class="{ 'disabled-cell': !hasImage3 }">
@@ -178,7 +185,7 @@
                 max="1080"
               />
             </td>
-            <td>
+            <td :class="{ 'disabled-cell': !hasImage2 }">
               <input
                 type="number"
                 :value="imageConfigs.image2.height"
@@ -186,6 +193,7 @@
                 class="form-input"
                 min="10"
                 max="1080"
+                :disabled="!hasImage2"
               />
             </td>
             <td :class="{ 'disabled-cell': !hasImage3 }">
@@ -273,6 +281,10 @@ const emit = defineEmits<{
 }>()
 
 // Computed
+const hasImage2 = computed(() => {
+  return props.imageConfigs.image2.source && props.imageConfigs.image2.source.trim() !== ''
+})
+
 const hasImage3 = computed(() => {
   return props.imageConfigs.image3.source && props.imageConfigs.image3.source.trim() !== ''
 })
@@ -280,7 +292,10 @@ const hasImage3 = computed(() => {
 const visibleImageConfigs = computed(() => {
   const configs: any = {
     image1: props.imageConfigs.image1,
-    image2: props.imageConfigs.image2,
+  }
+  
+  if (hasImage2.value) {
+    configs.image2 = props.imageConfigs.image2
   }
   
   if (hasImage3.value) {
@@ -292,42 +307,49 @@ const visibleImageConfigs = computed(() => {
 
 const validationErrors = computed(() => {
   const errors: string[] = []
-  const requiredImages = ['image1', 'image2']
-  const optionalImages = hasImage3.value ? ['image3'] : []
+  const requiredImages = ['image1'] // image1のみ必須
+  const optionalImages = []
+  
+  // 選択されている画像のみをチェック対象に追加
+  if (hasImage2.value) optionalImages.push('image2')
+  if (hasImage3.value) optionalImages.push('image3')
+  
   const allImages = [...requiredImages, ...optionalImages]
   
   allImages.forEach(key => {
     const config = props.imageConfigs[key as keyof typeof props.imageConfigs]
     
-    // 必須画像のソースチェック
+    // 必須画像のソースチェック（image1のみ）
     if (requiredImages.includes(key) && (!config.source || !config.source.trim())) {
       errors.push(`${key}のソースが選択されていません`)
     }
     
-    // 座標とサイズの範囲チェック（1920x1080対応）
-    if (config.x < 0 || config.x > 1920) {
-      errors.push(`${key}のX座標が範囲外です (0-1920)`)
-    }
-    
-    if (config.y < 0 || config.y > 1080) {
-      errors.push(`${key}のY座標が範囲外です (0-1080)`)
-    }
-    
-    if (config.width < 10 || config.width > 1920) {
-      errors.push(`${key}の幅が範囲外です (10-1920)`)
-    }
-    
-    if (config.height < 10 || config.height > 1080) {
-      errors.push(`${key}の高さが範囲外です (10-1080)`)
-    }
+    // 選択されている画像の座標とサイズの範囲チェック（1920x1080対応）
+    if (config.source && config.source.trim()) {
+      if (config.x < 0 || config.x > 1920) {
+        errors.push(`${key}のX座標が範囲外です (0-1920)`)
+      }
+      
+      if (config.y < 0 || config.y > 1080) {
+        errors.push(`${key}のY座標が範囲外です (0-1080)`)
+      }
+      
+      if (config.width < 10 || config.width > 1920) {
+        errors.push(`${key}の幅が範囲外です (10-1920)`)
+      }
+      
+      if (config.height < 10 || config.height > 1080) {
+        errors.push(`${key}の高さが範囲外です (10-1080)`)
+      }
 
-    // 画像がキャンバス外に出ていないかチェック（1920x1080対応）
-    if (config.x + config.width > 1920) {
-      errors.push(`${key}がキャンバスの右端を超えています`)
-    }
-    
-    if (config.y + config.height > 1080) {
-      errors.push(`${key}がキャンバスの下端を超えています`)
+      // 画像がキャンバス外に出ていないかチェック（1920x1080対応）
+      if (config.x + config.width > 1920) {
+        errors.push(`${key}がキャンバスの右端を超えています`)
+      }
+      
+      if (config.y + config.height > 1080) {
+        errors.push(`${key}がキャンバスの下端を超えています`)
+      }
     }
   })
   

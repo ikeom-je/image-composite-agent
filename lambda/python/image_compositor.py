@@ -157,16 +157,16 @@ def paste_image_with_alpha(base: Image.Image, overlay: Image.Image, position: Tu
 
 def create_composite_image(base_img: Optional[Image.Image], 
                           image1: Image.Image, 
-                          image2: Image.Image,
+                          image2: Optional[Image.Image],
                           image3: Optional[Image.Image],
                           params: Dict[str, Dict[str, int]]) -> Image.Image:
     """
-    2つまたは3つの画像を合成する（後方互換性対応）
+    1つ、2つ、または3つの画像を合成する（image1のみ必須）
     
     Args:
         base_img: ベース画像（Noneの場合は透明背景）
-        image1: 合成する1つ目の画像
-        image2: 合成する2つ目の画像
+        image1: 合成する1つ目の画像（必須）
+        image2: 合成する2つ目の画像（オプション）
         image3: 合成する3つ目の画像（オプション）
         params: 各画像の配置パラメータ
         
@@ -183,13 +183,16 @@ def create_composite_image(base_img: Optional[Image.Image],
         if validation_errors:
             raise ValueError(f"Invalid parameters: {', '.join(validation_errors)}")
         
-        image_count = 3 if image3 else 2
+        # 画像数をカウント
+        image_count = 1  # image1は必須
+        if image2: image_count += 1
+        if image3: image_count += 1
         logger.info(f"Creating composite with {image_count} images")
         
         # ベース画像の準備
         composite = create_base_image(base_img)
         
-        # 画像1の合成
+        # 画像1の合成（必須）
         logger.info(f"Compositing image1 at ({params['image1']['x']}, {params['image1']['y']})")
         img1_resized = resize_and_convert_image(
             image1, 
@@ -201,17 +204,18 @@ def create_composite_image(base_img: Optional[Image.Image],
             (params['image1']['x'], params['image1']['y'])
         )
         
-        # 画像2の合成
-        logger.info(f"Compositing image2 at ({params['image2']['x']}, {params['image2']['y']})")
-        img2_resized = resize_and_convert_image(
-            image2, 
-            (params['image2']['width'], params['image2']['height'])
-        )
-        composite = paste_image_with_alpha(
-            composite, 
-            img2_resized, 
-            (params['image2']['x'], params['image2']['y'])
-        )
+        # 画像2の合成（オプション）
+        if image2 and 'image2' in params:
+            logger.info(f"Compositing image2 at ({params['image2']['x']}, {params['image2']['y']})")
+            img2_resized = resize_and_convert_image(
+                image2, 
+                (params['image2']['width'], params['image2']['height'])
+            )
+            composite = paste_image_with_alpha(
+                composite, 
+                img2_resized, 
+                (params['image2']['x'], params['image2']['y'])
+            )
         
         # 画像3の合成（オプション）
         if image3 and 'image3' in params:

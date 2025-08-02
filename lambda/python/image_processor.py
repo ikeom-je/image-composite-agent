@@ -73,12 +73,9 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     """
     errors = []
     
-    # image1とimage2は必須
+    # image1のみ必須（image2とimage3はオプション）
     if not query_params.get('image1'):
         errors.append('image1パラメータは必須です')
-    
-    if not query_params.get('image2'):
-        errors.append('image2パラメータは必須です')
     
     # フォーマットパラメータの検証
     format_param = query_params.get('format', 'html')
@@ -460,14 +457,18 @@ def handler(event, context):
                 }
             )
         
-        # 画像の並列取得
+        # 画像の並列取得（指定された画像のみ）
         logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
         image_paths = {
             'base': base_image_param,
-            'image1': image1_param,
-            'image2': image2_param,
-            'image3': image3_param
+            'image1': image1_param,  # 必須
         }
+        
+        # オプション画像を追加
+        if image2_param:
+            image_paths['image2'] = image2_param
+        if image3_param:
+            image_paths['image3'] = image3_param
         
         try:
             images = fetch_images_parallel(image_paths)
@@ -486,9 +487,9 @@ def handler(event, context):
         try:
             composite_img = create_composite_image(
                 images.get('base'),
-                images['image1'],
-                images['image2'],
-                images.get('image3'),
+                images['image1'],  # 必須
+                images.get('image2'),  # オプション
+                images.get('image3'),  # オプション
                 img_params
             )
         except Exception as e:
