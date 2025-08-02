@@ -60,7 +60,7 @@
         <div class="generate-button-section">
           <button 
             @click="generateImage" 
-            :disabled="appStore.isLoading || !imageConfigs.image1.source || !imageConfigs.image2.source"
+            :disabled="appStore.isLoading || !imageConfigs.image1.source"
             class="generate-button"
           >
             <span v-if="appStore.isLoading" class="loading-content">
@@ -73,7 +73,7 @@
               生成中...
             </span>
             <span v-else class="button-content">
-              🎨 {{ imageConfigs.image3.source ? '3画像を合成' : '2画像を合成' }}
+              🎨 {{ getImageCountText() }}
             </span>
           </button>
         </div>
@@ -146,14 +146,14 @@ const imageConfigs = ref({
     height: 300
   },
   image2: {
-    source: 'test',
+    source: '', // デフォルトで未選択
     x: 600,
     y: 100,
     width: 400,
     height: 300
   },
   image3: {
-    source: '',
+    source: '', // デフォルトで未選択
     x: 350,
     y: 400,
     width: 400,
@@ -169,7 +169,41 @@ const error = ref('')
 // 使用例
 const examples = ref([
   {
-    title: '🎨 基本的な3画像合成',
+    title: '🎨 基本的な1画像合成',
+    description: '1つの図形のみを合成',
+    params: {
+      baseImage: 'test',
+      image1: 'test',
+      image1_x: 100,
+      image1_y: 100,
+      image1_width: 400,
+      image1_height: 300,
+      image2: '',
+      image3: '',
+      format: 'html'
+    }
+  },
+  {
+    title: '📐 基本的な2画像合成',
+    description: '円と四角の2つの図形を合成',
+    params: {
+      baseImage: 'test',
+      image1: 'test',
+      image1_x: 100,
+      image1_y: 100,
+      image1_width: 400,
+      image1_height: 300,
+      image2: 'test',
+      image2_x: 600,
+      image2_y: 100,
+      image2_width: 400,
+      image2_height: 300,
+      image3: '',
+      format: 'html'
+    }
+  },
+  {
+    title: '🔺 3画像合成',
     description: '円・四角・三角の3つの図形を合成',
     params: {
       baseImage: 'test',
@@ -190,48 +224,6 @@ const examples = ref([
       image3_height: 300,
       format: 'html'
     }
-  },
-  {
-    title: '🔺 透明背景での3画像合成',
-    description: '透明背景に3つの図形を配置',
-    params: {
-      baseImage: 'transparent',
-      image1: 'test',
-      image1_x: 100,
-      image1_y: 100,
-      image1_width: 400,
-      image1_height: 300,
-      image2: 'test',
-      image2_x: 1400,
-      image2_y: 100,
-      image2_width: 400,
-      image2_height: 300,
-      image3: 'test',
-      image3_x: 750,
-      image3_y: 400,
-      image3_width: 400,
-      image3_height: 300,
-      format: 'html'
-    }
-  },
-  {
-    title: '📐 基本的な2画像合成',
-    description: '従来の2画像合成（後方互換性）',
-    params: {
-      baseImage: 'test',
-      image1: 'test',
-      image1_x: 100,
-      image1_y: 100,
-      image1_width: 400,
-      image1_height: 300,
-      image2: 'test',
-      image2_x: 600,
-      image2_y: 100,
-      image2_width: 400,
-      image2_height: 300,
-      image3: '',
-      format: 'html'
-    }
   }
 ])
 
@@ -249,9 +241,8 @@ const buildApiUrl = () => {
     url.searchParams.set('baseImage', params.value.baseImage)
   }
 
-  // 必須パラメータを追加
+  // 必須パラメータ（image1のみ）
   url.searchParams.set('image1', imageConfigs.value.image1.source)
-  url.searchParams.set('image2', imageConfigs.value.image2.source)
 
   // 画像1のパラメータ（正しいパラメータ名を使用）
   url.searchParams.set('image1X', imageConfigs.value.image1.x.toString())
@@ -259,11 +250,14 @@ const buildApiUrl = () => {
   url.searchParams.set('image1Width', imageConfigs.value.image1.width.toString())
   url.searchParams.set('image1Height', imageConfigs.value.image1.height.toString())
 
-  // 画像2のパラメータ
-  url.searchParams.set('image2X', imageConfigs.value.image2.x.toString())
-  url.searchParams.set('image2Y', imageConfigs.value.image2.y.toString())
-  url.searchParams.set('image2Width', imageConfigs.value.image2.width.toString())
-  url.searchParams.set('image2Height', imageConfigs.value.image2.height.toString())
+  // 画像2のパラメータ（選択されている場合のみ）
+  if (imageConfigs.value.image2.source) {
+    url.searchParams.set('image2', imageConfigs.value.image2.source)
+    url.searchParams.set('image2X', imageConfigs.value.image2.x.toString())
+    url.searchParams.set('image2Y', imageConfigs.value.image2.y.toString())
+    url.searchParams.set('image2Width', imageConfigs.value.image2.width.toString())
+    url.searchParams.set('image2Height', imageConfigs.value.image2.height.toString())
+  }
 
   // 第3画像のパラメータ（指定されている場合のみ）
   if (imageConfigs.value.image3.source) {
@@ -489,6 +483,18 @@ const handleRetryGeneration = () => {
 
 const handleClearError = () => {
   error.value = ''
+}
+
+const getImageCountText = () => {
+  let count = 0
+  if (imageConfigs.value.image1.source) count++
+  if (imageConfigs.value.image2.source) count++
+  if (imageConfigs.value.image3.source) count++
+  
+  if (count === 1) return '1画像を合成'
+  if (count === 2) return '2画像を合成'
+  if (count === 3) return '3画像を合成'
+  return '画像を合成'
 }
 
 // ライフサイクル
