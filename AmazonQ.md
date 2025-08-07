@@ -2,7 +2,7 @@
 
 本システムは.amazonqディレクトリのmarkdownのルールにしたがったプロンプトで必ず動作させます。システムはAmazonQ, Readme, historyのmarkdownをもとに作っていきます。そこから生成されたrequirements, design,taskでコードを生成してデプロイとテストを行います。
 
-## 🌐 URL設定とセキュリティガイドライン (v2.5.4)
+## 🌐 URL設定とセキュリティガイドライン (v2.5.5)
 
 ### 環境変数による設定管理
 
@@ -37,7 +37,7 @@ if (rawApiUrl.startsWith('/')) {
 }
 ```
 
-## 🧪 テスト用画像管理ガイドライン (v2.5.2)
+## 🧪 テスト用画像管理ガイドライン (v2.5.5)
 
 ### 期待値画像の管理
 
@@ -67,7 +67,7 @@ if (rawApiUrl.startsWith('/')) {
 # 期待値画像の形式確認と修正
 python3 scripts/fix-test-assets.py
 
-# APIから期待値画像を再生成
+# APIから期待値画像を再生成（update-test-assets.shの機能を統合）
 python3 scripts/regenerate-expected-images.py
 ```
 
@@ -1084,8 +1084,7 @@ npm run preview
 ```
 
 これらの設定と実装により、高速な開発環境と最適化されたプロダクションビルドを実現し、モダンでレスポンシブなユーザーインターフェースを提供します。
-## 🔧 
-v2.5.1 テスト用画像管理ガイドライン
+## 🔧 v2.5.5 テスト用画像管理ガイドライン
 
 ### テスト用画像の分類
 
@@ -1119,7 +1118,7 @@ file test/test-assets/expected-*.png
 #### 2. base64エンコードファイルの修正
 ```bash
 # 自動修正スクリプトを実行
-python3 scripts/fix-test-assets.py
+npm run fix-test-assets
 
 # 結果確認
 file test/test-assets/expected-*.png
@@ -1127,11 +1126,11 @@ file test/test-assets/expected-*.png
 
 #### 3. 期待値画像の再生成
 ```bash
-# APIから新しい期待値を生成
-python3 scripts/regenerate-expected-images.py
+# APIから新しい期待値を生成（統合された機能）
+npm run regenerate-expected-images
 
-# 全て再生成する場合
-python3 scripts/regenerate-expected-images.py --all
+# 直接実行する場合
+python3 scripts/regenerate-expected-images.py
 ```
 
 ### テスト出力ファイルの管理
