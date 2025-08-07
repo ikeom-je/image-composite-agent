@@ -32,15 +32,55 @@ class ExpectedImageGenerator:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
     
     def get_test_patterns(self) -> List[Dict]:
-        """テストパターンの定義"""
+        """テストパターンの定義（update-test-assets.shの機能を統合）"""
         return [
+            {
+                'name': 'expected-transparent-base.png',
+                'description': '透明背景での1画像合成',
+                'params': {
+                    'baseImage': 'transparent',
+                    'image1': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '400',
+                    'image1Height': '300',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
+                    'format': 'png'
+                }
+            },
+            {
+                'name': 'expected-aws-logo-base.png',
+                'description': 'AWSロゴ背景での1画像合成',
+                'params': {
+                    'baseImage': 'test',
+                    'image1': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '400',
+                    'image1Height': '300',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
+                    'format': 'png'
+                }
+            },
             {
                 'name': 'expected-2-images.png',
                 'description': '2画像合成（基本パターン）',
                 'params': {
                     'baseImage': 'test',
                     'image1': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '400',
+                    'image1Height': '300',
                     'image2': 'test',
+                    'image2X': '600',
+                    'image2Y': '100',
+                    'image2Width': '400',
+                    'image2Height': '300',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
                     'format': 'png'
                 }
             },
@@ -50,47 +90,67 @@ class ExpectedImageGenerator:
                 'params': {
                     'baseImage': 'test',
                     'image1': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '400',
+                    'image1Height': '300',
                     'image2': 'test',
+                    'image2X': '600',
+                    'image2Y': '100',
+                    'image2Width': '400',
+                    'image2Height': '300',
                     'image3': 'test',
-                    'format': 'png'
-                }
-            },
-            {
-                'name': 'expected-aws-logo-base.png',
-                'description': 'AWSロゴベース画像',
-                'params': {
-                    'baseImage': 'aws-logo',
-                    'image1': 'test',
-                    'format': 'png'
-                }
-            },
-            {
-                'name': 'expected-transparent-base.png',
-                'description': '透明ベース画像',
-                'params': {
-                    'baseImage': 'transparent',
-                    'image1': 'test',
-                    'format': 'png'
-                }
-            },
-            {
-                'name': 'expected-three-images.png',
-                'description': '3画像合成（別パターン）',
-                'params': {
-                    'baseImage': 'test',
-                    'image1': 'test',
-                    'image2': 'test',
-                    'image3': 'test',
+                    'image3X': '350',
+                    'image3Y': '400',
+                    'image3Width': '400',
+                    'image3Height': '300',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
                     'format': 'png'
                 }
             },
             {
                 'name': 'expected-two-images.png',
-                'description': '2画像合成（別パターン）',
+                'description': '異なる配置での2画像合成',
                 'params': {
                     'baseImage': 'test',
                     'image1': 'test',
                     'image2': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '400',
+                    'image1Height': '300',
+                    'image2X': '600',
+                    'image2Y': '200',
+                    'image2Width': '300',
+                    'image2Height': '200',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
+                    'format': 'png'
+                }
+            },
+            {
+                'name': 'expected-three-images.png',
+                'description': '異なる配置での3画像合成',
+                'params': {
+                    'baseImage': 'test',
+                    'image1': 'test',
+                    'image2': 'test',
+                    'image3': 'test',
+                    'image1X': '100',
+                    'image1Y': '100',
+                    'image1Width': '300',
+                    'image1Height': '200',
+                    'image2X': '500',
+                    'image2Y': '150',
+                    'image2Width': '250',
+                    'image2Height': '150',
+                    'image3X': '800',
+                    'image3Y': '250',
+                    'image3Width': '200',
+                    'image3Height': '100',
+                    'canvasWidth': '1920',
+                    'canvasHeight': '1080',
                     'format': 'png'
                 }
             }

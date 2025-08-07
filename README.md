@@ -252,10 +252,10 @@ npm run test:all-e2e        # 全E2Eテスト実行
 
 ```bash
 # 期待値画像の形式確認と修正
-python3 scripts/fix-test-assets.py
+npm run fix-test-assets
 
-# APIから期待値画像を再生成
-python3 scripts/regenerate-expected-images.py
+# APIから期待値画像を再生成（統合された機能）
+npm run regenerate-expected-images
 ```
 
 ### テストカバレッジ

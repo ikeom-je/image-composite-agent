@@ -62,7 +62,8 @@
     "@awslabs.cdk-mcp-server",
     "@awslabs.cfn-mcp-server",
     "@awslabs.aws-diagram-mcp-server",
-    "codeReview"
+    "codeReview",
+    "displayFindings"
   ],
   "allowedTools": [
     "fsRead",
@@ -70,7 +71,8 @@
     "fsReplace",
     "listDirectory",
     "fileSearch",
-    "codeReview"
+    "codeReview",
+    "displayFindings"
   ],
   "toolsSettings": {
     "execute_bash": {

@@ -1,6 +1,6 @@
 {
   "name": "image-processor-api",
-  "version": "2.5.4",
+  "version": "2.5.5",
   "description": "Advanced Image Composition REST API with Alpha Channel Support",
   "author": "AWS CDK Team",
   "license": "MIT",
@@ -38,8 +38,8 @@
     "test:integration-e2e": "npx playwright test --config=test/playwright-api.config.ts test/e2e/integration-e2e.api.spec.ts --reporter=list",
     "test:api-all": "npm run test:api-validation && npm run test:upload-api",
     "test:api-comprehensive": "test/run-comprehensive-api-tests.sh",
-    "test:report": "scripts/generate-test-report.sh",
-    "update-test-assets": "scripts/update-test-assets.sh",
+    "regenerate-expected-images": "python3 scripts/regenerate-expected-images.py",
+    "fix-test-assets": "python3 scripts/fix-test-assets.py",
     "cdk": "cdk",
     "deploy": "npm run build && cdk deploy --all --require-approval never && npm run post-deploy",
     "deploy:api": "cdk deploy ImageProcessorApiStack --require-approval never",
