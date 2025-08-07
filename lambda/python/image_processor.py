@@ -1,5 +1,5 @@
 """
-画像合成REST API メインハンドラー - v2.4.2
+画像合成REST API メインハンドラー - v2.5.4
 
 2つまたは3つの画像を合成してPNG形式で出力するLambda関数。
 HTML表示とPNG直接ダウンロードの両方に対応。
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # バージョン情報
-VERSION = "2.4.2"
+VERSION = os.environ.get('VERSION', '2.5.4')
 
 
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
@@ -77,10 +77,10 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     if not query_params.get('image1'):
         errors.append('image1パラメータは必須です')
     
-    # フォーマットパラメータの検証
-    format_param = query_params.get('format', 'html')
-    if format_param not in ['html', 'png']:
-        errors.append('formatパラメータはhtmlまたはpngである必要があります')
+    # フォーマットパラメータの検証（PNG形式のみサポート）
+    format_param = query_params.get('format', 'png')
+    if format_param != 'png':
+        errors.append('formatパラメータはpngである必要があります（HTML形式は廃止されました）')
     
     return errors
 
@@ -367,31 +367,7 @@ def generate_html_response(composite_img: Image.Image, query_params: Dict[str, s
     return html_content.strip()
 
 
-def generate_png_response(composite_img: Image.Image) -> Dict:
-    """
-    PNG形式のレスポンスを生成
-    
-    Args:
-        composite_img: 合成画像
-        
-    Returns:
-        Dict: API Gateway用のレスポンス
-    """
-    # PNG形式でバイト配列に変換
-    img_buffer = io.BytesIO()
-    composite_img.save(img_buffer, format='PNG', optimize=True)
-    img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-    
-    return {
-        'statusCode': 200,
-        'headers': {
-            'Content-Type': 'image/png',
-            'Access-Control-Allow-Origin': '*',
-            'Content-Disposition': f'attachment; filename="composite-image-v{VERSION}-{datetime.now().strftime("%Y%m%d_%H%M%S")}.png"'
-        },
-        'body': img_base64,
-        'isBase64Encoded': True
-    }
+
 
 
 def handler(event, context):
@@ -440,7 +416,7 @@ def handler(event, context):
         image2_param = query_params.get('image2')
         image3_param = query_params.get('image3')  # オプション
         base_image_param = query_params.get('baseImage')
-        format_param = query_params.get('format', 'html')
+        format_param = query_params.get('format', 'png')
         
         logger.info(f"🎯 Images to process: image1={image1_param}, image2={image2_param}, image3={image3_param} [Request ID: {request_id}]")
         
@@ -506,23 +482,44 @@ def handler(event, context):
         processing_time = time.time() - start_time
         logger.info(f"⏱️ Processing completed in {processing_time:.2f} seconds [Request ID: {request_id}]")
         
-        # レスポンス生成
+        # レスポンス生成（PNG形式のみ）
         try:
-            if format_param == 'png':
-                logger.info(f"📤 Generating PNG response [Request ID: {request_id}]")
-                response = generate_png_response(composite_img)
-            else:
-                logger.info(f"📤 Generating HTML response [Request ID: {request_id}]")
-                html_content = generate_html_response(composite_img, query_params)
-                response = {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'text/html; charset=utf-8',
-                        'Access-Control-Allow-Origin': '*',
-                        'X-Request-ID': request_id
-                    },
-                    'body': html_content
-                }
+            logger.info(f"📤 Generating PNG binary response [Request ID: {request_id}]")
+            # PNG形式でバイナリデータを返す
+            img_buffer = io.BytesIO()
+            composite_img.save(
+                img_buffer, 
+                format='PNG', 
+                optimize=True, 
+                compress_level=6,
+                pnginfo=None  # メタデータを削除してファイルサイズを最適化
+            )
+            img_bytes = img_buffer.getvalue()
+            
+            # ファイル名を生成
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"composite-image-v{VERSION}-{timestamp}.png"
+            
+            # バイナリPNGデータを返す（API Gateway経由でBase64エンコード）
+            response = {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'image/png',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
+                    'Cache-Control': 'public, max-age=3600',
+                    'Content-Length': str(len(img_bytes)),
+                    'Content-Disposition': f'inline; filename="{filename}"',
+                    'X-Content-Type-Options': 'nosniff',
+                    'X-Request-ID': request_id,
+                    'Accept-Ranges': 'bytes'
+                },
+                'body': base64.b64encode(img_bytes).decode('utf-8'),
+                'isBase64Encoded': True
+            }
+            
+            logger.info(f"📊 PNG binary response generated: {len(img_bytes)} bytes [Request ID: {request_id}]")
             
             # レスポンス完了ログ
             log_response_info(request_id, response, processing_time)

@@ -14,8 +14,40 @@ export const useConfigStore = defineStore('config', () => {
   const lastLoadTime = ref<Date | null>(null)
   
   // Getters
-  const apiUrl = computed(() => config.value?.apiUrl || '/api')
-  const uploadApiUrl = computed(() => config.value?.uploadApiUrl || '/api/upload')
+  const apiUrl = computed(() => {
+    // 環境変数から取得を優先
+    const envApiUrl = import.meta.env.VITE_API_URL
+    if (envApiUrl) {
+      return envApiUrl
+    }
+    
+    // 設定ファイルから取得
+    const configApiUrl = config.value?.apiUrl
+    if (configApiUrl) {
+      // 相対パスの場合は絶対URLに変換
+      return configApiUrl.startsWith('/') ? window.location.origin + configApiUrl : configApiUrl
+    }
+    
+    // フォールバック: 動的に構築
+    return `${window.location.origin}/api/images/composite`
+  })
+  const uploadApiUrl = computed(() => {
+    // 環境変数から取得を優先
+    const envUploadUrl = import.meta.env.VITE_UPLOAD_API_URL
+    if (envUploadUrl) {
+      return envUploadUrl
+    }
+    
+    // 設定ファイルから取得
+    const configUploadUrl = config.value?.uploadApiUrl
+    if (configUploadUrl) {
+      // 相対パスの場合は絶対URLに変換
+      return configUploadUrl.startsWith('/') ? window.location.origin + configUploadUrl : configUploadUrl
+    }
+    
+    // フォールバック: 動的に構築
+    return `${window.location.origin}/api/upload`
+  })
   const cloudfrontUrl = computed(() => config.value?.cloudfrontUrl || '')
   const version = computed(() => config.value?.version || '2.4.0')
   const environment = computed(() => config.value?.environment || 'production')
@@ -125,8 +157,8 @@ export const useConfigStore = defineStore('config', () => {
   
   const getDefaultConfig = (): AppConfig => {
     return {
-      apiUrl: '/api',
-      uploadApiUrl: '/api/upload',
+      apiUrl: '', // 動的に設定される
+      uploadApiUrl: '', // 動的に設定される
       cloudfrontUrl: '',
       s3BucketNames: {
         resources: '',
@@ -134,7 +166,7 @@ export const useConfigStore = defineStore('config', () => {
         frontend: '',
         upload: '',
       },
-      version: '2.4.0',
+      version: '2.5.3',
       environment: 'production',
       buildTimestamp: new Date().toISOString(),
       region: 'us-east-1',

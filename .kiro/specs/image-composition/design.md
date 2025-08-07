@@ -728,11 +728,101 @@ const errorRecoveryStrategies = {
 2. **ストア互換性**: 既存のPiniaストアとの連携
 3. **コンポーネント互換性**: 可能な限り既存のコンポーネントインターフェースの保持
 
+## テスト期待値画像管理システム
+
+### テスト用画像データ構成
+
+```
+test/
+├── test-assets/
+│   ├── expected-*.png (期待値画像 - 正しいPNG形式で管理)
+│   └── [基本テスト画像] (lambda/python/images/内の正常なPNG画像)
+├── test-results/
+│   └── [テスト出力ファイル] (一時的、削除可能)
+└── scripts/
+    ├── fix-test-assets.py (期待値画像修正スクリプト)
+    └── regenerate-expected-images.py (期待値画像再生成スクリプト)
+```
+
+### テスト期待値画像管理コンポーネント
+
+#### 1. ファイル分析コンポーネント
+
+**責任:** ファイルの形式と用途を判定する
+
+```python
+@dataclass
+class FileInfo:
+    path: str
+    file_type: str  # 'png_image', 'base64_text', 'unknown'
+    purpose: str    # 'expected_value', 'test_output', 'basic_test_image'
+    size: int
+    is_valid: bool
+    needs_conversion: bool
+
+def analyze_file(file_path):
+    """ファイルの形式と用途を分析"""
+    # file コマンドによる形式判定
+    # ファイル名パターンによる用途判定
+    # 内容の検証
+```
+
+#### 2. Base64デコードコンポーネント
+
+**責任:** base64エンコードされたテキストファイルをPNG画像に変換する
+
+```python
+def decode_base64_to_png(text_file_path):
+    """base64テキストファイルをPNG画像に変換"""
+    # base64データの読み込み
+    # デコード処理
+    # PNG形式での保存
+    # 元ファイルのバックアップ
+```
+
+#### 3. 期待値画像生成コンポーネント
+
+**責任:** APIの実際の出力から正しい期待値画像を生成する
+
+```python
+@dataclass
+class ExpectedPattern:
+    name: str
+    api_params: dict
+    output_filename: str
+    description: str
+
+def generate_expected_images():
+    """APIから期待値画像を生成"""
+    patterns = [
+        {
+            'name': 'expected-2-images.png',
+            'description': '2画像合成（基本パターン）',
+            'params': {'baseImage': 'test', 'image1': 'test', 'image2': 'test', 'format': 'png'}
+        },
+        {
+            'name': 'expected-3-images.png',
+            'description': '3画像合成',
+            'params': {'baseImage': 'test', 'image1': 'test', 'image2': 'test', 'image3': 'test', 'format': 'png'}
+        },
+        # その他のパターン...
+    ]
+```
+
+### テスト用画像管理ワークフロー
+
+1. **期待値画像の形式確認**: `scripts/fix-test-assets.py`でファイル形式を検証
+2. **期待値画像の再生成**: `scripts/regenerate-expected-images.py`でAPIから最新の期待値を生成
+3. **テスト実行**: 正しいPNG形式の期待値画像でテストを実行
+4. **結果管理**: テスト出力ファイルをtest/test-resultsで管理
+
 ## デプロイ考慮事項
 
 1. **設定**: 適切なAPI URL設定の確保
 2. **アセット管理**: 画像アセットとバンドルサイズの最適化
 3. **ブラウザサポート**: ターゲットブラウザでのテスト
 4. **パフォーマンス監視**: パフォーマンス追跡の実装
+5. **テスト品質**: 期待値画像の正しい形式での管理
+6. **テストデータ管理**: test/test-resultsディレクトリでの一時ファイル管理
 
-この設計は、すべての要件に対応する包括的なソリューションを提供し、既存のコンポーネントアーキテクチャを維持しながら、v2.3.0の実証済みUIデザインを実装します。
+この設計は、すべての要件に対応する包括的なソリューションを提供し、既存のコンポーネントアーキテクチャを維持しながら、v2.3.0の実証済みUIデザインを実装し、テスト期待値画像の適切な管理を実現します。

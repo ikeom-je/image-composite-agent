@@ -2,6 +2,82 @@
 
 本システムは.amazonqディレクトリのmarkdownのルールにしたがったプロンプトで必ず動作させます。システムはAmazonQ, Readme, historyのmarkdownをもとに作っていきます。そこから生成されたrequirements, design,taskでコードを生成してデプロイとテストを行います。
 
+## 🌐 URL設定とセキュリティガイドライン (v2.5.4)
+
+### 環境変数による設定管理
+
+URLやクレデンシャル情報は必ず環境変数で管理し、コード内にハードコードしない：
+
+```bash
+# フロントエンド環境変数設定例
+VITE_API_URL=https://your-api-id.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite
+VITE_UPLOAD_API_URL=https://your-api-id.execute-api.ap-northeast-1.amazonaws.com/prod/upload
+VITE_CLOUDFRONT_URL=https://your-distribution-id.cloudfront.net
+VITE_ENVIRONMENT=production
+```
+
+### 動的URL構築
+
+設定ストアでは以下の優先順位でURL設定を取得：
+
+1. **環境変数**: `import.meta.env.VITE_API_URL`
+2. **設定ファイル**: CDKデプロイ時に生成される`config.json`
+3. **フォールバック**: `window.location.origin`を使用した動的構築
+
+### URL検証と正規化
+
+```typescript
+// 相対パス・絶対パス・プロトコル省略URLの適切な処理
+if (rawApiUrl.startsWith('/')) {
+  apiUrl = window.location.origin + rawApiUrl
+} else if (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://')) {
+  apiUrl = rawApiUrl
+} else {
+  apiUrl = `${window.location.protocol}//${rawApiUrl}`
+}
+```
+
+## 🧪 テスト用画像管理ガイドライン (v2.5.2)
+
+### 期待値画像の管理
+
+テスト用期待値画像は以下のルールで管理されています：
+
+- **場所**: `test/test-assets/expected-*.png`
+- **形式**: 正しいPNG画像形式（base64テキストファイルではない）
+- **用途**: APIレスポンスとの画像比較テスト
+- **検証**: 画像プレビューアで正常に開けることを確認
+
+### 基本テスト画像
+
+- **場所**: `lambda/python/images/`
+- **ファイル**: `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`, `aws-logo.png`
+- **状態**: 正常なPNG画像として維持
+
+### テスト出力ファイル管理
+
+- **場所**: `test/test-results/`
+- **用途**: テスト実行時の一時ファイル、バックアップファイル
+- **削除**: 定期的にクリーンアップ可能
+- **除外**: .gitignoreで除外済み
+
+### 期待値画像の修正・再生成
+
+```bash
+# 期待値画像の形式確認と修正
+python3 scripts/fix-test-assets.py
+
+# APIから期待値画像を再生成
+python3 scripts/regenerate-expected-images.py
+```
+
+### 注意事項
+
+- 期待値画像は必ず正しいPNG形式で保存する
+- base64エンコードされたテキストファイルは使用しない
+- テスト出力ファイルは`test/test-results/`に配置する
+- 新しい期待値画像を追加する際は、APIから実際の出力を取得して生成する
+
 このドキュメントでは、AWS CDKを使用して画像合成REST APIを実装する手順を説明します。Python + Pillowライブラリを使用してLambda関数で画像処理を行い、それをAPI Gatewayで公開します。フロントエンドはVue.js 3で実装し、S3にホスティングしてCloudFrontで配信します。
 
 ## 🆕 v2.4.1 新機能: S3画像アップロード機能
@@ -1008,3 +1084,117 @@ npm run preview
 ```
 
 これらの設定と実装により、高速な開発環境と最適化されたプロダクションビルドを実現し、モダンでレスポンシブなユーザーインターフェースを提供します。
+## 🔧 
+v2.5.1 テスト用画像管理ガイドライン
+
+### テスト用画像の分類
+
+システムでは以下の3種類の画像ファイルを明確に区別して管理します：
+
+1. **基本テスト画像**: `test/test-assets/` 内の基本画像
+   - `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`
+   - `aws-logo.png` 等
+   - これらは常に正常なPNG形式で維持
+
+2. **期待値画像**: `test/test-assets/expected-*.png`
+   - APIテストで使用する期待値データ
+   - 必ず正常なPNG形式である必要がある
+   - base64エンコードされたテキストファイルは不適切
+
+3. **テスト出力ファイル**: `test/test-results/` 内の一時ファイル
+   - テスト実行時に生成される一時的なファイル
+   - 後で削除可能であることを明示
+
+### 期待値画像の管理手順
+
+#### 1. 期待値画像の形式確認
+```bash
+# ファイル形式を確認
+file test/test-assets/expected-*.png
+
+# 正常な場合: "PNG image data" と表示
+# 問題がある場合: "ASCII text" と表示
+```
+
+#### 2. base64エンコードファイルの修正
+```bash
+# 自動修正スクリプトを実行
+python3 scripts/fix-test-assets.py
+
+# 結果確認
+file test/test-assets/expected-*.png
+```
+
+#### 3. 期待値画像の再生成
+```bash
+# APIから新しい期待値を生成
+python3 scripts/regenerate-expected-images.py
+
+# 全て再生成する場合
+python3 scripts/regenerate-expected-images.py --all
+```
+
+### テスト出力ファイルの管理
+
+#### ワークスペースルートの整理
+```bash
+# 一時ファイルをtest/test-resultsに移動
+mv test_*.png test/test-results/
+
+# 不要なファイルの削除
+find test/test-results -name "test_*.png" ! -name "test_decoded.png" -delete
+```
+
+#### test/test-resultsディレクトリの用途
+- テスト実行時の出力ファイル保存場所
+- 一時的なファイルの保管場所
+- README.mdで各ファイルの用途を明記
+- 定期的なクリーンアップが推奨
+
+### 新しいテスト用画像の追加手順
+
+1. **基本テスト画像の追加**:
+   - 正常なPNG形式でtest/test-assets/に配置
+   - 適切な命名規則に従う（例: `new_test_image.png`）
+
+2. **期待値画像の追加**:
+   - `expected-` プレフィックスを使用
+   - APIから実際の出力を取得して作成
+   - 必ず正常なPNG形式で保存
+
+3. **テストスクリプトの更新**:
+   - 新しい画像を使用するテストケースを追加
+   - 期待値との比較ロジックを実装
+
+### トラブルシューティング
+
+#### 期待値画像が開けない場合
+```bash
+# 1. ファイル形式を確認
+file test/test-assets/expected-*.png
+
+# 2. base64テキストファイルの場合は修正
+python3 scripts/fix-test-assets.py
+
+# 3. 修正後の確認
+file test/test-assets/expected-*.png
+```
+
+#### テストが失敗する場合
+```bash
+# 1. 期待値画像の再生成
+python3 scripts/regenerate-expected-images.py --all
+
+# 2. テスト実行
+npm run test:api-validation
+
+# 3. 結果確認
+ls -la test/test-assets/expected-*.png
+```
+
+### 品質保証
+
+- 全ての期待値画像は画像プレビューアで開けること
+- ファイルサイズが適切であること（通常20KB-300KB程度）
+- テスト実行時にエラーが発生しないこと
+- 期待値と実際の出力が一致すること

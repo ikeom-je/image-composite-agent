@@ -24,6 +24,9 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# バージョン情報
+VERSION = os.environ.get('VERSION', '2.5.4')
+
 # S3クライアント
 s3_client = boto3.client('s3')
 

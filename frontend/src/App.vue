@@ -2,15 +2,15 @@
   <div class="app-container">
     <!-- 通知システム -->
     <NotificationSystem />
-    
+
     <!-- ローディングオーバーレイ -->
     <LoadingOverlay v-if="appStore.isLoading" :message="appStore.loading.message" />
-    
+
     <!-- パフォーマンス監視 -->
     <PerformanceMonitor v-if="configStore.isDebugMode || configStore.isDevelopment" />
 
     <header>
-      <h1>🎨 画像合成REST API v2.4.2</h1>
+      <h1>🎨 画像合成REST API v2.5.4</h1>
       <p class="subtitle">S3画像アップロード機能付き | 3画像合成対応 | Vue.js 3 + AWS Lambda + S3</p>
       <div v-if="configStore.config" class="config-info">
         <small>Version: {{ configStore.version }} | Environment: {{ configStore.environment }}</small>
@@ -43,26 +43,18 @@
 
         <!-- 画像設定テーブル -->
         <ImageConfigTable 
-          :image-configs="imageConfigs"
-          @update-config="handleConfigUpdate"
+          :image-configs="imageConfigs" 
+          :image-mode="imageMode"
+          @update-config="handleConfigUpdate" 
+          @update-mode="handleModeUpdate"
         />
 
-        <!-- 出力形式選択 -->
-        <div class="form-group">
-          <label class="form-label">出力形式:</label>
-          <select v-model="params.format" class="form-select">
-            <option value="html">HTML表示</option>
-            <option value="png">PNG直接ダウンロード</option>
-          </select>
-        </div>
+
 
         <!-- 画像生成ボタン（目立つデザイン） -->
         <div class="generate-button-section">
-          <button 
-            @click="generateImage" 
-            :disabled="appStore.isLoading || !imageConfigs.image1.source"
-            class="generate-button"
-          >
+          <button @click="generateImage" :disabled="appStore.isLoading || !imageConfigs.image1.source"
+            class="generate-button">
             <span v-if="appStore.isLoading" class="loading-content">
               <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -81,16 +73,9 @@
 
       <!-- 結果表示コンポーネント -->
       <div class="result-container">
-        <ResultDisplay
-          :result-url="resultUrl"
-          :api-url="apiUrl"
-          :is-loading="appStore.isLoading"
-          :error="error"
-          @download-image="downloadImage"
-          @copy-api-url="copyApiUrl"
-          @retry-generation="handleRetryGeneration"
-          @clear-error="handleClearError"
-        />
+        <ResultDisplay :result-url="resultUrl" :api-url="apiUrl" :is-loading="appStore.isLoading" :error="error"
+          @download-image="downloadImage" @copy-api-url="copyApiUrl" @retry-generation="handleRetryGeneration"
+          @clear-error="handleClearError" />
       </div>
     </div>
 
@@ -132,9 +117,11 @@ const notificationStore = useNotificationStore()
 const params = ref({
   baseImage: 'test',
   canvas_width: 1920,
-  canvas_height: 1080,
-  format: 'html'
+  canvas_height: 1080
 })
+
+// 画像モード（1画像、2画像、3画像）
+const imageMode = ref(2) // デフォルトは2画像モード
 
 // 画像設定（ImageConfigTableで使用）
 const imageConfigs = ref({
@@ -179,8 +166,7 @@ const examples = ref([
       image1_width: 400,
       image1_height: 300,
       image2: '',
-      image3: '',
-      format: 'html'
+      image3: ''
     }
   },
   {
@@ -198,8 +184,7 @@ const examples = ref([
       image2_y: 100,
       image2_width: 400,
       image2_height: 300,
-      image3: '',
-      format: 'html'
+      image3: ''
     }
   },
   {
@@ -221,8 +206,7 @@ const examples = ref([
       image3_x: 350,
       image3_y: 400,
       image3_width: 400,
-      image3_height: 300,
-      format: 'html'
+      image3_height: 300
     }
   }
 ])
@@ -230,56 +214,79 @@ const examples = ref([
 // メソッド
 const buildApiUrl = () => {
   // API URLが設定されているかチェック
-  if (!configStore.apiUrl) {
+  const rawApiUrl = configStore.apiUrl
+  if (!rawApiUrl) {
     throw new Error('API URL is not configured. Please check your configuration.')
   }
 
-  const url = new URL(configStore.apiUrl)
+  // URLの検証と正規化
+  let apiUrl: string
+  try {
+    if (rawApiUrl.startsWith('/')) {
+      // 相対パスの場合は絶対URLに変換
+      apiUrl = window.location.origin + rawApiUrl
+    } else if (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://')) {
+      // 既に絶対URLの場合はそのまま使用
+      apiUrl = rawApiUrl
+    } else {
+      // プロトコルが省略されている場合は現在のプロトコルを使用
+      apiUrl = `${window.location.protocol}//${rawApiUrl}`
+    }
 
-  // ベース画像パラメータを追加
-  if (params.value.baseImage) {
-    url.searchParams.set('baseImage', params.value.baseImage)
+    // URLの妥当性を検証
+    const url = new URL(apiUrl)
+    console.log('[App] Using API URL:', url.toString())
+
+    // ベース画像パラメータを追加
+    if (params.value.baseImage) {
+      url.searchParams.set('baseImage', params.value.baseImage)
+    }
+
+    // 必須パラメータ（image1のみ）
+    if (!imageConfigs.value.image1.source) {
+      throw new Error('Image1 is required for image composition')
+    }
+    url.searchParams.set('image1', imageConfigs.value.image1.source)
+
+    // 画像1のパラメータ（境界チェック付き）
+    url.searchParams.set('image1X', Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)).toString())
+    url.searchParams.set('image1Y', Math.max(0, Math.min(imageConfigs.value.image1.y, 1080 - imageConfigs.value.image1.height)).toString())
+    url.searchParams.set('image1Width', Math.max(1, Math.min(imageConfigs.value.image1.width, 1920)).toString())
+    url.searchParams.set('image1Height', Math.max(1, Math.min(imageConfigs.value.image1.height, 1080)).toString())
+
+    // 画像2のパラメータ（モードが2以上で選択されている場合のみ）
+    if (imageMode.value >= 2 && imageConfigs.value.image2.source) {
+      url.searchParams.set('image2', imageConfigs.value.image2.source)
+      url.searchParams.set('image2X', Math.max(0, Math.min(imageConfigs.value.image2.x, 1920 - imageConfigs.value.image2.width)).toString())
+      url.searchParams.set('image2Y', Math.max(0, Math.min(imageConfigs.value.image2.y, 1080 - imageConfigs.value.image2.height)).toString())
+      url.searchParams.set('image2Width', Math.max(1, Math.min(imageConfigs.value.image2.width, 1920)).toString())
+      url.searchParams.set('image2Height', Math.max(1, Math.min(imageConfigs.value.image2.height, 1080)).toString())
+    }
+
+    // 第3画像のパラメータ（モードが3で選択されている場合のみ）
+    if (imageMode.value >= 3 && imageConfigs.value.image3.source) {
+      url.searchParams.set('image3', imageConfigs.value.image3.source)
+      url.searchParams.set('image3X', Math.max(0, Math.min(imageConfigs.value.image3.x, 1920 - imageConfigs.value.image3.width)).toString())
+      url.searchParams.set('image3Y', Math.max(0, Math.min(imageConfigs.value.image3.y, 1080 - imageConfigs.value.image3.height)).toString())
+      url.searchParams.set('image3Width', Math.max(1, Math.min(imageConfigs.value.image3.width, 1920)).toString())
+      url.searchParams.set('image3Height', Math.max(1, Math.min(imageConfigs.value.image3.height, 1080)).toString())
+    }
+
+    // 出力形式は常にPNG固定
+    url.searchParams.set('format', 'png')
+
+    console.log('[App] Built API URL:', url.toString())
+    console.log('[App] Image configurations:', {
+      image1: imageConfigs.value.image1,
+      image2: imageConfigs.value.image2,
+      image3: imageConfigs.value.image3
+    })
+    return url.toString()
+
+  } catch (urlError) {
+    console.error('[App] Invalid API URL:', rawApiUrl, urlError)
+    throw new Error(`Invalid API URL configuration: ${rawApiUrl}`)
   }
-
-  // 必須パラメータ（image1のみ）
-  if (!imageConfigs.value.image1.source) {
-    throw new Error('Image1 is required for image composition')
-  }
-  url.searchParams.set('image1', imageConfigs.value.image1.source)
-
-  // 画像1のパラメータ（1920x1080キャンバス対応）
-  url.searchParams.set('image1X', Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)).toString())
-  url.searchParams.set('image1Y', Math.max(0, Math.min(imageConfigs.value.image1.y, 1080 - imageConfigs.value.image1.height)).toString())
-  url.searchParams.set('image1Width', Math.max(1, Math.min(imageConfigs.value.image1.width, 1920)).toString())
-  url.searchParams.set('image1Height', Math.max(1, Math.min(imageConfigs.value.image1.height, 1080)).toString())
-
-  // 画像2のパラメータ（選択されている場合のみ、1920x1080キャンバス対応）
-  if (imageConfigs.value.image2.source) {
-    url.searchParams.set('image2', imageConfigs.value.image2.source)
-    url.searchParams.set('image2X', Math.max(0, Math.min(imageConfigs.value.image2.x, 1920 - imageConfigs.value.image2.width)).toString())
-    url.searchParams.set('image2Y', Math.max(0, Math.min(imageConfigs.value.image2.y, 1080 - imageConfigs.value.image2.height)).toString())
-    url.searchParams.set('image2Width', Math.max(1, Math.min(imageConfigs.value.image2.width, 1920)).toString())
-    url.searchParams.set('image2Height', Math.max(1, Math.min(imageConfigs.value.image2.height, 1080)).toString())
-  }
-
-  // 第3画像のパラメータ（指定されている場合のみ、1920x1080キャンバス対応）
-  if (imageConfigs.value.image3.source) {
-    url.searchParams.set('image3', imageConfigs.value.image3.source)
-    url.searchParams.set('image3X', Math.max(0, Math.min(imageConfigs.value.image3.x, 1920 - imageConfigs.value.image3.width)).toString())
-    url.searchParams.set('image3Y', Math.max(0, Math.min(imageConfigs.value.image3.y, 1080 - imageConfigs.value.image3.height)).toString())
-    url.searchParams.set('image3Width', Math.max(1, Math.min(imageConfigs.value.image3.width, 1920)).toString())
-    url.searchParams.set('image3Height', Math.max(1, Math.min(imageConfigs.value.image3.height, 1080)).toString())
-  }
-
-  // キャンバスサイズ（1920x1080固定）
-  url.searchParams.set('canvasWidth', params.value.canvas_width.toString())
-  url.searchParams.set('canvasHeight', params.value.canvas_height.toString())
-
-  // 出力形式
-  url.searchParams.set('format', params.value.format)
-
-  console.log('[App] Built API URL with 1920x1080 canvas:', url.toString())
-  return url.toString()
 }
 
 const generateImage = async () => {
@@ -293,80 +300,52 @@ const generateImage = async () => {
 
     // デバッグ情報をログ出力
     logApiCallDetails(url)
-    
-    console.log('[App] Image configurations:', {
-      image1: imageConfigs.value.image1,
-      image2: imageConfigs.value.image2,
-      image3: imageConfigs.value.image3
-    })
 
-    // 最初にHTML形式で試行（デバッグ情報付き）
-    const htmlResponse = await axios.get(url, {
-      responseType: 'text',
+    console.log('[App] Starting PNG image generation request...')
+
+    // PNG形式で直接blobとして受信
+    const response = await axios.get(url, {
+      responseType: 'blob',
       headers: {
-        'Accept': 'text/html, image/png, image/jpeg, image/*'
+        'Accept': 'image/png, image/*'
       },
-      timeout: 30000 // 30秒タイムアウト
+      timeout: 30000
     })
 
-    console.log('[App] HTML response received, content-type:', htmlResponse.headers['content-type'])
+    console.log('[App] PNG response received:', {
+      contentType: response.headers['content-type'],
+      size: response.data.size
+    })
 
-    // HTMLレスポンスから画像データを抽出
-    if (htmlResponse.data && typeof htmlResponse.data === 'string') {
-      // Base64画像データを抽出
-      const base64Match = htmlResponse.data.match(/data:image\/[^;]+;base64,([^"']+)/)
-      if (base64Match && base64Match[1]) {
-        // Base64データからBlobを作成
-        const base64Data = base64Match[1]
-        const byteCharacters = atob(base64Data)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        const blob = new Blob([byteArray], { type: 'image/png' })
-        
-        resultUrl.value = URL.createObjectURL(blob)
-        console.log('[App] Successfully extracted Base64 image from HTML response')
-        notificationStore.showSuccess('画像の生成が完了しました！')
-        return
-      }
-
-      // 通常のimg srcを抽出
-      const imgMatch = htmlResponse.data.match(/<img[^>]+src="([^">]+)"/)
-      if (imgMatch && imgMatch[1]) {
-        resultUrl.value = imgMatch[1]
-        console.log('[App] Extracted image URL from HTML:', imgMatch[1])
-        notificationStore.showSuccess('画像の生成が完了しました！')
-        return
-      }
+    // レスポンスがblobかどうか確認
+    if (response.data && response.data.size > 0) {
+      // 直接blobからURLを作成
+      resultUrl.value = URL.createObjectURL(response.data)
+      console.log('[App] Successfully processed PNG blob data')
+      notificationStore.showSuccess('画像の生成が完了しました！')
+    } else {
+      throw new Error('Empty response received from API')
     }
-
-    // HTMLから画像が抽出できない場合はPNG形式で再試行
-    console.log('[App] No image found in HTML response, retrying with PNG format')
-    await retryWithPngFormat(url)
-    notificationStore.showSuccess('PNG形式での画像生成が完了しました！')
 
   } catch (err: any) {
     console.error('[App] Error generating image:', err)
-    
-    // より詳細なエラーログ
+
+    // エラーの詳細をログ出力
     console.error('[App] Error details:', {
       message: err.message,
       status: err.response?.status,
       statusText: err.response?.statusText,
       url: err.config?.url,
-      code: err.code,
-      data: err.response?.data
+      code: err.code
     })
-    
-    // エラーメッセージの詳細化
+
+    // エラーメッセージの設定
     if (err.message?.includes('Image1 is required')) {
       error.value = '画像1は必須です。画像を選択してください。'
     } else if (err.message?.includes('API URL is not configured')) {
       error.value = 'API設定が読み込まれていません。ページを再読み込みしてください。'
     } else if (err.code === 'ERR_NAME_NOT_RESOLVED') {
-      error.value = 'API サーバーに接続できません。ネットワーク接続を確認してください。'
+      error.value = 'APIサーバーに接続できません。ネットワーク接続を確認してください。'
     } else if (err.response?.status === 500) {
       error.value = 'サーバーエラーが発生しました。パラメータを確認してから再試行してください。'
     } else if (err.response?.status === 400) {
@@ -380,66 +359,19 @@ const generateImage = async () => {
     }
 
     notificationStore.showError(error.value)
-    
-    // エラーが発生した場合、PNG形式で再試行（設定エラー以外）
-    if (apiUrl.value && !err.message?.includes('API URL is not configured') && !err.message?.includes('Image1 is required')) {
-      try {
-        console.log('[App] Attempting retry with PNG format after error')
-        await retryWithPngFormat(apiUrl.value)
-        error.value = '' // エラーをクリア
-        notificationStore.showSuccess('PNG形式での再試行が成功しました')
-      } catch (retryError: any) {
-        console.error('[App] Retry also failed:', retryError)
-        // 再試行も失敗した場合は詳細なエラーを表示
-        error.value += ` (再試行も失敗: ${retryError.message})`
-      }
-    }
   } finally {
     appStore.stopLoading()
   }
 }
 
-// PNG形式での再試行ヘルパー関数（改善版）
-const retryWithPngFormat = async (originalUrl: string) => {
-  const pngUrl = new URL(originalUrl)
-  pngUrl.searchParams.set('format', 'png')
-  console.log('[App] Retrying with PNG URL:', pngUrl.toString())
-  
-  try {
-    const pngResponse = await axios.get(pngUrl.toString(), { 
-      responseType: 'blob',
-      headers: {
-        'Accept': 'image/png, image/jpeg, image/*'
-      },
-      timeout: 30000
-    })
-    
-    // レスポンスの検証
-    if (pngResponse.data && pngResponse.data.size > 0) {
-      const contentType = pngResponse.headers['content-type']
-      console.log('[App] PNG response content-type:', contentType, 'size:', pngResponse.data.size)
-      
-      if (contentType && contentType.includes('image')) {
-        resultUrl.value = URL.createObjectURL(pngResponse.data)
-        console.log('[App] PNG retry successful with valid image data')
-      } else {
-        throw new Error(`Invalid content type for PNG response: ${contentType}`)
-      }
-    } else {
-      throw new Error('Empty PNG response received')
-    }
-  } catch (pngError: any) {
-    console.error('[App] PNG retry failed:', pngError)
-    throw new Error(`PNG retry failed: ${pngError.message}`)
-  }
-}
+
 
 // 1920x1080キャンバス境界チェック関数
 const validateImageBounds = (imageConfig: any, imageName: string) => {
   const warnings = []
   const canvasWidth = 1920
   const canvasHeight = 1080
-  
+
   // 位置チェック
   if (imageConfig.x < 0) {
     warnings.push(`${imageName}: X座標が負の値です (${imageConfig.x})`)
@@ -447,7 +379,7 @@ const validateImageBounds = (imageConfig: any, imageName: string) => {
   if (imageConfig.y < 0) {
     warnings.push(`${imageName}: Y座標が負の値です (${imageConfig.y})`)
   }
-  
+
   // サイズチェック
   if (imageConfig.width <= 0) {
     warnings.push(`${imageName}: 幅が無効です (${imageConfig.width})`)
@@ -455,7 +387,7 @@ const validateImageBounds = (imageConfig: any, imageName: string) => {
   if (imageConfig.height <= 0) {
     warnings.push(`${imageName}: 高さが無効です (${imageConfig.height})`)
   }
-  
+
   // キャンバス境界チェック
   if (imageConfig.x + imageConfig.width > canvasWidth) {
     warnings.push(`${imageName}: 画像が右端を超えています (${imageConfig.x + imageConfig.width} > ${canvasWidth})`)
@@ -463,7 +395,7 @@ const validateImageBounds = (imageConfig: any, imageName: string) => {
   if (imageConfig.y + imageConfig.height > canvasHeight) {
     warnings.push(`${imageName}: 画像が下端を超えています (${imageConfig.y + imageConfig.height} > ${canvasHeight})`)
   }
-  
+
   return warnings
 }
 
@@ -471,45 +403,34 @@ const validateImageBounds = (imageConfig: any, imageName: string) => {
 const logApiCallDetails = (url: string) => {
   const urlObj = new URL(url)
   const params = Object.fromEntries(urlObj.searchParams.entries())
-  
+
   console.group('[App] API Call Details')
   console.log('URL:', url)
-  console.log('Parameters:', params)
-  console.log('Canvas Size:', `${params.canvasWidth || 'default'}x${params.canvasHeight || 'default'}`)
   console.log('Images:', {
     image1: params.image1 || 'not set',
-    image2: params.image2 || 'not set', 
+    image2: params.image2 || 'not set',
     image3: params.image3 || 'not set'
   })
-  console.log('Positions:', {
-    image1: `(${params.image1X || 0}, ${params.image1Y || 0})`,
-    image2: `(${params.image2X || 0}, ${params.image2Y || 0})`,
-    image3: `(${params.image3X || 0}, ${params.image3Y || 0})`
-  })
-  console.log('Sizes:', {
-    image1: `${params.image1Width || 0}x${params.image1Height || 0}`,
-    image2: `${params.image2Width || 0}x${params.image2Height || 0}`,
-    image3: `${params.image3Width || 0}x${params.image3Height || 0}`
-  })
-  
+  console.log('Format:', params.format || 'html')
+
   // 境界チェック結果をログ出力
   const allWarnings = []
   if (imageConfigs.value.image1.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image1, 'Image1'))
   }
-  if (imageConfigs.value.image2.source) {
+  if (imageMode.value >= 2 && imageConfigs.value.image2.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image2, 'Image2'))
   }
-  if (imageConfigs.value.image3.source) {
+  if (imageMode.value >= 3 && imageConfigs.value.image3.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image3, 'Image3'))
   }
-  
+
   if (allWarnings.length > 0) {
     console.warn('Boundary Warnings:', allWarnings)
   } else {
     console.log('✅ All images are within canvas bounds')
   }
-  
+
   console.groupEnd()
 }
 
@@ -532,7 +453,7 @@ const downloadImage = () => {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-  
+
   notificationStore.showSuccess('ダウンロードを開始しました')
 }
 
@@ -552,7 +473,13 @@ const copyApiUrl = () => {
 const loadExample = (example: any) => {
   // ベース画像の設定
   params.value.baseImage = example.params.baseImage || 'test'
-  
+
+  // 画像モードを設定
+  let mode = 1
+  if (example.params.image3) mode = 3
+  else if (example.params.image2) mode = 2
+  imageMode.value = mode
+
   // 例のパラメータを画像設定に変換
   if (example.params.image1) {
     imageConfigs.value.image1.source = example.params.image1
@@ -561,15 +488,17 @@ const loadExample = (example: any) => {
     imageConfigs.value.image1.width = example.params.image1_width || 400
     imageConfigs.value.image1.height = example.params.image1_height || 300
   }
-  
+
   if (example.params.image2) {
     imageConfigs.value.image2.source = example.params.image2
     imageConfigs.value.image2.x = example.params.image2_x || 600
     imageConfigs.value.image2.y = example.params.image2_y || 100
     imageConfigs.value.image2.width = example.params.image2_width || 400
     imageConfigs.value.image2.height = example.params.image2_height || 300
+  } else {
+    imageConfigs.value.image2.source = ''
   }
-  
+
   if (example.params.image3) {
     imageConfigs.value.image3.source = example.params.image3
     imageConfigs.value.image3.x = example.params.image3_x || 350
@@ -579,21 +508,20 @@ const loadExample = (example: any) => {
   } else {
     imageConfigs.value.image3.source = ''
   }
-  
-  params.value.format = example.params.format || 'html'
+
   generateImage()
 }
 
 const handleUploadComplete = (uploadData: any) => {
   console.log('[App] Upload completed:', uploadData)
   notificationStore.showSuccess(`${uploadData.fileName} がアップロードされました。画像選択で使用できます。`)
-  
+
   // ImageConfigTableに画像一覧の更新を通知
   // 少し遅延を入れてS3の整合性を確保
   setTimeout(() => {
     // カスタムイベントを発行してImageSelectorに更新を通知
-    window.dispatchEvent(new CustomEvent('s3-images-updated', { 
-      detail: uploadData 
+    window.dispatchEvent(new CustomEvent('s3-images-updated', {
+      detail: uploadData
     }))
   }, 2000) // 2秒後に更新
 }
@@ -604,28 +532,48 @@ const handleConfigUpdate = (imageKey: string, field: string, value: any) => {
   }
 }
 
+const handleModeUpdate = (mode: number) => {
+  imageMode.value = mode
+  
+  // モードに応じて不要な画像設定をクリア
+  if (mode < 2) {
+    imageConfigs.value.image2.source = ''
+  }
+  if (mode < 3) {
+    imageConfigs.value.image3.source = ''
+  }
+  
+  // モードに応じてデフォルト画像を設定
+  if (mode >= 2 && !imageConfigs.value.image2.source) {
+    imageConfigs.value.image2.source = 'test'
+  }
+  if (mode >= 3 && !imageConfigs.value.image3.source) {
+    imageConfigs.value.image3.source = 'test'
+  }
+}
+
 // リトライ機能の改善
 const handleRetryGeneration = async () => {
   console.log('[App] Manual retry requested')
-  
+
   // 境界チェックを実行
   const allWarnings = []
   if (imageConfigs.value.image1.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image1, 'Image1'))
   }
-  if (imageConfigs.value.image2.source) {
+  if (imageMode.value >= 2 && imageConfigs.value.image2.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image2, 'Image2'))
   }
-  if (imageConfigs.value.image3.source) {
+  if (imageMode.value >= 3 && imageConfigs.value.image3.source) {
     allWarnings.push(...validateImageBounds(imageConfigs.value.image3, 'Image3'))
   }
-  
+
   // 警告がある場合は通知
   if (allWarnings.length > 0) {
     console.warn('[App] Boundary warnings detected:', allWarnings)
     notificationStore.showWarning(`パラメータに問題があります: ${allWarnings.slice(0, 2).join(', ')}${allWarnings.length > 2 ? '...' : ''}`)
   }
-  
+
   await generateImage()
 }
 
@@ -634,15 +582,12 @@ const handleClearError = () => {
 }
 
 const getImageCountText = () => {
-  let count = 0
-  if (imageConfigs.value.image1.source) count++
-  if (imageConfigs.value.image2.source) count++
-  if (imageConfigs.value.image3.source) count++
-  
-  if (count === 1) return '1画像を合成'
-  if (count === 2) return '2画像を合成'
-  if (count === 3) return '3画像を合成'
-  return '画像を合成'
+  const modeText = {
+    1: '1画像を合成',
+    2: '2画像を合成', 
+    3: '3画像を合成'
+  }
+  return modeText[imageMode.value as keyof typeof modeText] || '画像を合成'
 }
 
 // ライフサイクル
@@ -650,7 +595,7 @@ onMounted(async () => {
   try {
     // アプリストアを初期化
     appStore.initialize()
-    
+
     // 設定を読み込み
     await configStore.loadConfig()
 
