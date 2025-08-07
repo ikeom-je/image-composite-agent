@@ -1,5 +1,54 @@
 # 画像合成REST API 開発履歴
 
+## 2025-08-04: フロントエンドURL設定修正 (v2.5.3)
+
+### 問題の発見と修正
+- フロントエンドプレビューアプリで「Failed to construct 'URL': Invalid URL」エラーが発生
+- 設定ストアのデフォルトAPIURLが相対パス（'/api'）になっており、new URL()でエラー
+- .amazonqディレクトリのルールに従い、URLハードコードを環境変数・動的取得に変更
+
+### 修正内容
+- **設定ストアの修正**: 環境変数を優先し、フォールバックで動的URL構築
+- **buildApiUrl関数の修正**: URL検証と正規化ロジックを改善
+- **環境変数設定例の追加**: frontend/.env.exampleファイルを作成
+- **エラーハンドリング強化**: Invalid URLエラーの適切な処理
+
+### 技術的改善
+- 環境変数（VITE_API_URL等）を優先した設定読み込み
+- 相対パス・絶対パス・プロトコル省略URLの適切な処理
+- URLハードコードの完全排除（.amazonqルール準拠）
+
+## 2025-08-04: テスト期待値画像データ修正 (v2.5.2)
+
+### 問題の発見と分析
+- test/test-assets/expected-*.pngファイルがbase64エンコードされたテキストファイルになっていた問題を発見
+- 画像プレビューアで開けないため、APIテストの信頼性に影響
+- E2Eテストでの画像比較が正常に動作していない状況を確認
+
+### 修正内容
+- **テスト期待値画像の再生成**: APIの実際の出力から正しいPNG形式の期待値画像を再生成
+- **自動修正スクリプトの作成**: `scripts/fix-test-assets.py`でファイル形式判定とbase64デコード機能を実装
+- **期待値再生成スクリプトの作成**: `scripts/regenerate-expected-images.py`でAPI呼び出しによる期待値画像生成を自動化
+- **テスト出力ファイル管理**: test/test-resultsディレクトリでの一時ファイル管理体制を整備
+
+### 技術的改善
+- base64エンコードされたAPIレスポンスの適切な処理
+- Content-Type: image/pngでもbase64エンコードされている場合の自動検出・デコード
+- 期待値画像のバックアップ機能
+- PNG画像の検証機能（ヘッダーチェック）
+
+### テスト結果
+- 全てのAPIテスト（api-validation, upload-api）が正常に動作することを確認
+- 期待値画像との比較機能が正常に動作することを確認
+- 画像プレビューアで全ての期待値画像が正常に表示されることを確認
+
+### ドキュメント更新
+- test/test-resultsディレクトリの使用方法をREADME.mdで明記
+- テスト用画像管理のガイドラインを整備
+- バージョンを2.5.1から2.5.2に更新（エラー修正）
+
+# 画像合成REST API 開発履歴
+
 ## 初期開発: 画像合成REST APIの基本実装
 
 ### バックエンド開発
@@ -584,3 +633,53 @@ curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 - パフォーマンステストの実行
 - 追加の画像形状（星形、多角形など）の対応
 - 画像の回転・変形機能の追加
+##
+ 2025-08-04: テスト期待値画像データ修正 (v2.5.1)
+
+### 問題の発見と分析
+- test/test-assets/expected-*.pngファイルがbase64エンコードされたテキストファイルになっていることを発見
+- 画像プレビューアで開けない状態でAPIテストの信頼性に影響
+- 基本テスト画像（circle, triangle, rectangle, logo）は正常であることを確認
+- E2Eテストでの期待値画像比較が正常に動作していない問題を特定
+
+### 修正作業の実施
+- scripts/fix-test-assets.pyスクリプトを作成
+  - ファイル形式判定機能（PNG vs base64テキスト）
+  - base64データのデコード機能
+  - 元ファイルの自動バックアップ機能
+  - エラーハンドリングと詳細ログ出力
+- 6つの期待値画像ファイルを正常なPNG形式に変換
+  - expected-2-images.png (218,539 bytes)
+  - expected-3-images.png (219,288 bytes)
+  - expected-aws-logo-base.png (218,791 bytes)
+  - expected-three-images.png (216,414 bytes)
+  - expected-transparent-base.png (22,578 bytes)
+  - expected-two-images.png (216,322 bytes)
+
+### テスト出力ファイルの整理
+- ワークスペースルートの一時ファイルをtest/test-resultsディレクトリに移動
+  - test_decoded.png (正常なPNG画像として保持)
+  - test_output.png, test_output_fixed.png, test_transparent.png (後で削除可能)
+- test/test-results/README.mdを作成してファイル管理方法を文書化
+
+### 期待値画像再生成機能の実装
+- scripts/regenerate-expected-images.pyスクリプトを作成
+- APIの実際の出力から期待値画像を再生成する機能
+- 複数の画像合成パターンに対応（1画像、2画像、3画像合成）
+- curlを使用したAPI呼び出しでrequests依存を回避
+
+### テスト動作確認
+- E2Eテスト（test:api-validation）が全て成功することを確認
+- 画像比較機能が正常に動作することを検証
+- 期待値画像がプレビューアで正常に開けることを確認
+
+### ドキュメント更新
+- バージョンを2.5.0から2.5.1にアップ（エラー修正）
+- history.mdに修正内容を詳細記録
+- test/test-resultsディレクトリの使用方法を文書化
+
+### 技術的改善点
+- テスト用画像の適切な管理方法の確立
+- base64エンコードファイルの自動検出・変換機能
+- テスト出力ファイルと期待値ファイルの明確な分離
+- 期待値画像の再生成プロセスの自動化

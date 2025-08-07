@@ -2,25 +2,56 @@
   <div class="image-config-container">
     <h3 class="section-title">画像設定</h3>
 
+    <!-- 画像モード選択 -->
+    <div class="mode-selector mb-4">
+      <label class="mode-label">合成モード:</label>
+      <div class="mode-buttons">
+        <button
+          type="button"
+          class="mode-button"
+          :class="{ active: imageMode === 1 }"
+          @click="setImageMode(1)"
+        >
+          1画像
+        </button>
+        <button
+          type="button"
+          class="mode-button"
+          :class="{ active: imageMode === 2 }"
+          @click="setImageMode(2)"
+        >
+          2画像
+        </button>
+        <button
+          type="button"
+          class="mode-button"
+          :class="{ active: imageMode === 3 }"
+          @click="setImageMode(3)"
+        >
+          3画像
+        </button>
+      </div>
+    </div>
+
     <!-- 画像選択テーブル -->
     <div class="table-container mb-6">
       <table class="config-table">
         <thead>
           <tr>
             <th>画像</th>
-            <th>画像1 (必須)</th>
-            <th :class="{ 'disabled-header': !hasImage2 }">
-              画像2 {{ hasImage2 ? '(オプション)' : '(未選択)' }}
+            <th class="image1-header">画像1 (必須)</th>
+            <th v-if="imageMode >= 2" class="image2-header">
+              画像2 (必須)
             </th>
-            <th :class="{ 'disabled-header': !hasImage3 }">
-              画像3 {{ hasImage3 ? '(オプション)' : '(未選択)' }}
+            <th v-if="imageMode >= 3" class="image3-header">
+              画像3 (必須)
             </th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td class="row-header">画像選択</td>
-            <td>
+            <td class="image1-cell">
               <ImageSelector
                 v-model="imageConfigs.image1.source"
                 label=""
@@ -29,21 +60,21 @@
                 @update:modelValue="updateConfig('image1', 'source', $event)"
               />
             </td>
-            <td :class="{ 'disabled-cell': !hasImage2 }">
+            <td v-if="imageMode >= 2" class="image2-cell">
               <ImageSelector
                 v-model="imageConfigs.image2.source"
                 label=""
                 image-type="image2"
-                :required="false"
+                :required="imageMode >= 2"
                 @update:modelValue="updateConfig('image2', 'source', $event)"
               />
             </td>
-            <td :class="{ 'disabled-cell': !hasImage3 }">
+            <td v-if="imageMode >= 3" class="image3-cell">
               <ImageSelector
                 v-model="imageConfigs.image3.source"
                 label=""
                 image-type="image3"
-                :required="false"
+                :required="imageMode >= 3"
                 @update:modelValue="updateConfig('image3', 'source', $event)"
               />
             </td>
@@ -58,154 +89,214 @@
         <thead>
           <tr>
             <th>設定項目</th>
-            <th>画像1</th>
-            <th :class="{ 'disabled-header': !hasImage2 }">
-              画像2 {{ hasImage2 ? '' : '(無効)' }}
-            </th>
-            <th :class="{ 'disabled-header': !hasImage3 }">
-              画像3 {{ hasImage3 ? '' : '(無効)' }}
-            </th>
+            <th class="image1-header">画像1</th>
+            <th v-if="imageMode >= 2" class="image2-header">画像2</th>
+            <th v-if="imageMode >= 3" class="image3-header">画像3</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td class="row-header">X座標</td>
-            <td>
-              <input
-                type="number"
-                :value="imageConfigs.image1.x"
-                @input="updateConfig('image1', 'x', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1920"
-              />
+            <td class="image1-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image1.x"
+                  @input="updateConfigWithValidation('image1', 'x', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image1', 'x') }"
+                  min="0"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image1', 'x')" class="field-error">
+                  {{ getFieldError('image1', 'x') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage2 }">
-              <input
-                type="number"
-                :value="imageConfigs.image2.x"
-                @input="updateConfig('image2', 'x', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1920"
-                :disabled="!hasImage2"
-              />
+            <td v-if="imageMode >= 2" class="image2-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image2.x"
+                  @input="updateConfigWithValidation('image2', 'x', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image2', 'x') }"
+                  min="0"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image2', 'x')" class="field-error">
+                  {{ getFieldError('image2', 'x') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage3 }">
-              <input
-                type="number"
-                :value="imageConfigs.image3.x"
-                @input="updateConfig('image3', 'x', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1920"
-                :disabled="!hasImage3"
-              />
+            <td v-if="imageMode >= 3" class="image3-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image3.x"
+                  @input="updateConfigWithValidation('image3', 'x', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image3', 'x') }"
+                  min="0"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image3', 'x')" class="field-error">
+                  {{ getFieldError('image3', 'x') }}
+                </div>
+              </div>
             </td>
           </tr>
           <tr>
             <td class="row-header">Y座標</td>
-            <td>
-              <input
-                type="number"
-                :value="imageConfigs.image1.y"
-                @input="updateConfig('image1', 'y', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1080"
-              />
+            <td class="image1-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image1.y"
+                  @input="updateConfigWithValidation('image1', 'y', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image1', 'y') }"
+                  min="0"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image1', 'y')" class="field-error">
+                  {{ getFieldError('image1', 'y') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage2 }">
-              <input
-                type="number"
-                :value="imageConfigs.image2.y"
-                @input="updateConfig('image2', 'y', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1080"
-                :disabled="!hasImage2"
-              />
+            <td v-if="imageMode >= 2" class="image2-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image2.y"
+                  @input="updateConfigWithValidation('image2', 'y', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image2', 'y') }"
+                  min="0"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image2', 'y')" class="field-error">
+                  {{ getFieldError('image2', 'y') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage3 }">
-              <input
-                type="number"
-                :value="imageConfigs.image3.y"
-                @input="updateConfig('image3', 'y', parseInt($event.target.value))"
-                class="form-input"
-                min="0"
-                max="1080"
-                :disabled="!hasImage3"
-              />
+            <td v-if="imageMode >= 3" class="image3-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image3.y"
+                  @input="updateConfigWithValidation('image3', 'y', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image3', 'y') }"
+                  min="0"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image3', 'y')" class="field-error">
+                  {{ getFieldError('image3', 'y') }}
+                </div>
+              </div>
             </td>
           </tr>
           <tr>
             <td class="row-header">幅</td>
-            <td>
-              <input
-                type="number"
-                :value="imageConfigs.image1.width"
-                @input="updateConfig('image1', 'width', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1920"
-              />
+            <td class="image1-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image1.width"
+                  @input="updateConfigWithValidation('image1', 'width', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image1', 'width') }"
+                  min="10"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image1', 'width')" class="field-error">
+                  {{ getFieldError('image1', 'width') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage2 }">
-              <input
-                type="number"
-                :value="imageConfigs.image2.width"
-                @input="updateConfig('image2', 'width', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1920"
-                :disabled="!hasImage2"
-              />
+            <td v-if="imageMode >= 2" class="image2-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image2.width"
+                  @input="updateConfigWithValidation('image2', 'width', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image2', 'width') }"
+                  min="10"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image2', 'width')" class="field-error">
+                  {{ getFieldError('image2', 'width') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage3 }">
-              <input
-                type="number"
-                :value="imageConfigs.image3.width"
-                @input="updateConfig('image3', 'width', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1920"
-                :disabled="!hasImage3"
-              />
+            <td v-if="imageMode >= 3" class="image3-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image3.width"
+                  @input="updateConfigWithValidation('image3', 'width', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image3', 'width') }"
+                  min="10"
+                  max="1920"
+                />
+                <div v-if="hasFieldError('image3', 'width')" class="field-error">
+                  {{ getFieldError('image3', 'width') }}
+                </div>
+              </div>
             </td>
           </tr>
           <tr>
             <td class="row-header">高さ</td>
-            <td>
-              <input
-                type="number"
-                :value="imageConfigs.image1.height"
-                @input="updateConfig('image1', 'height', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1080"
-              />
+            <td class="image1-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image1.height"
+                  @input="updateConfigWithValidation('image1', 'height', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image1', 'height') }"
+                  min="10"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image1', 'height')" class="field-error">
+                  {{ getFieldError('image1', 'height') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage2 }">
-              <input
-                type="number"
-                :value="imageConfigs.image2.height"
-                @input="updateConfig('image2', 'height', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1080"
-                :disabled="!hasImage2"
-              />
+            <td v-if="imageMode >= 2" class="image2-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image2.height"
+                  @input="updateConfigWithValidation('image2', 'height', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image2', 'height') }"
+                  min="10"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image2', 'height')" class="field-error">
+                  {{ getFieldError('image2', 'height') }}
+                </div>
+              </div>
             </td>
-            <td :class="{ 'disabled-cell': !hasImage3 }">
-              <input
-                type="number"
-                :value="imageConfigs.image3.height"
-                @input="updateConfig('image3', 'height', parseInt($event.target.value))"
-                class="form-input"
-                min="10"
-                max="1080"
-                :disabled="!hasImage3"
-              />
+            <td v-if="imageMode >= 3" class="image3-cell">
+              <div class="input-with-validation">
+                <input
+                  type="number"
+                  :value="imageConfigs.image3.height"
+                  @input="updateConfigWithValidation('image3', 'height', parseInt($event.target.value))"
+                  class="form-input"
+                  :class="{ 'error': hasFieldError('image3', 'height') }"
+                  min="10"
+                  max="1080"
+                />
+                <div v-if="hasFieldError('image3', 'height')" class="field-error">
+                  {{ getFieldError('image3', 'height') }}
+                </div>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -243,7 +334,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, reactive } from 'vue'
 import ImageSelector from './ImageSelector.vue'
 
 // Props
@@ -271,22 +362,29 @@ interface Props {
       height: number
     }
   }
+  imageMode?: number
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  imageMode: 2
+})
 
 // Emits
 const emit = defineEmits<{
   'update-config': [imageKey: string, field: string, value: any]
+  'update-mode': [mode: number]
 }>()
+
+// Reactive state for field-level validation errors
+const fieldErrors = reactive<Record<string, Record<string, string>>>({})
 
 // Computed
 const hasImage2 = computed(() => {
-  return props.imageConfigs.image2.source && props.imageConfigs.image2.source.trim() !== ''
+  return props.imageMode >= 2 && props.imageConfigs.image2.source && props.imageConfigs.image2.source.trim() !== ''
 })
 
 const hasImage3 = computed(() => {
-  return props.imageConfigs.image3.source && props.imageConfigs.image3.source.trim() !== ''
+  return props.imageMode >= 3 && props.imageConfigs.image3.source && props.imageConfigs.image3.source.trim() !== ''
 })
 
 const visibleImageConfigs = computed(() => {
@@ -294,11 +392,11 @@ const visibleImageConfigs = computed(() => {
     image1: props.imageConfigs.image1,
   }
   
-  if (hasImage2.value) {
+  if (props.imageMode >= 2) {
     configs.image2 = props.imageConfigs.image2
   }
   
-  if (hasImage3.value) {
+  if (props.imageMode >= 3) {
     configs.image3 = props.imageConfigs.image3
   }
   
@@ -310,16 +408,20 @@ const validationErrors = computed(() => {
   const requiredImages = ['image1'] // image1のみ必須
   const optionalImages = []
   
+  // モードに応じて必須画像を追加
+  if (props.imageMode >= 2) requiredImages.push('image2')
+  if (props.imageMode >= 3) requiredImages.push('image3')
+  
   // 選択されている画像のみをチェック対象に追加
-  if (hasImage2.value) optionalImages.push('image2')
-  if (hasImage3.value) optionalImages.push('image3')
+  if (hasImage2.value && !requiredImages.includes('image2')) optionalImages.push('image2')
+  if (hasImage3.value && !requiredImages.includes('image3')) optionalImages.push('image3')
   
   const allImages = [...requiredImages, ...optionalImages]
   
   allImages.forEach(key => {
     const config = props.imageConfigs[key as keyof typeof props.imageConfigs]
     
-    // 必須画像のソースチェック（image1のみ）
+    // 必須画像のソースチェック
     if (requiredImages.includes(key) && (!config.source || !config.source.trim())) {
       errors.push(`${key}のソースが選択されていません`)
     }
@@ -357,8 +459,84 @@ const validationErrors = computed(() => {
 })
 
 // Methods
+const setImageMode = (mode: number) => {
+  emit('update-mode', mode)
+}
+
 const updateConfig = (imageKey: string, field: string, value: any) => {
   emit('update-config', imageKey, field, value)
+}
+
+const updateConfigWithValidation = (imageKey: string, field: string, value: any) => {
+  // Clear previous field error
+  if (fieldErrors[imageKey]) {
+    delete fieldErrors[imageKey][field]
+  }
+  
+  // Validate the field
+  const error = validateField(imageKey, field, value)
+  if (error) {
+    if (!fieldErrors[imageKey]) {
+      fieldErrors[imageKey] = {}
+    }
+    fieldErrors[imageKey][field] = error
+  }
+  
+  // Update the config
+  emit('update-config', imageKey, field, value)
+}
+
+const validateField = (imageKey: string, field: string, value: number): string | null => {
+  if (isNaN(value)) {
+    return '数値を入力してください'
+  }
+  
+  const config = props.imageConfigs[imageKey as keyof typeof props.imageConfigs]
+  
+  switch (field) {
+    case 'x':
+      if (value < 0 || value > 1920) {
+        return 'X座標は0-1920の範囲で入力してください'
+      }
+      if (value + config.width > 1920) {
+        return 'X座標 + 幅がキャンバス幅(1920)を超えています'
+      }
+      break
+    case 'y':
+      if (value < 0 || value > 1080) {
+        return 'Y座標は0-1080の範囲で入力してください'
+      }
+      if (value + config.height > 1080) {
+        return 'Y座標 + 高さがキャンバス高さ(1080)を超えています'
+      }
+      break
+    case 'width':
+      if (value < 10 || value > 1920) {
+        return '幅は10-1920の範囲で入力してください'
+      }
+      if (config.x + value > 1920) {
+        return 'X座標 + 幅がキャンバス幅(1920)を超えています'
+      }
+      break
+    case 'height':
+      if (value < 10 || value > 1080) {
+        return '高さは10-1080の範囲で入力してください'
+      }
+      if (config.y + value > 1080) {
+        return 'Y座標 + 高さがキャンバス高さ(1080)を超えています'
+      }
+      break
+  }
+  
+  return null
+}
+
+const hasFieldError = (imageKey: string, field: string): boolean => {
+  return !!(fieldErrors[imageKey] && fieldErrors[imageKey][field])
+}
+
+const getFieldError = (imageKey: string, field: string): string => {
+  return fieldErrors[imageKey] && fieldErrors[imageKey][field] || ''
 }
 
 const getCanvasPreviewStyle = (imageKey: string, config: any) => {
@@ -405,6 +583,52 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
   font-weight: 600;
   color: #333;
   margin-bottom: 20px;
+}
+
+.mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.mode-label {
+  font-weight: 500;
+  color: #333;
+  margin-right: 8px;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-button {
+  padding: 8px 16px;
+  border: 1px solid #e0e0e0;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.mode-button:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+}
+
+.mode-button.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.mb-4 {
+  margin-bottom: 16px;
 }
 
 .table-container {
@@ -462,18 +686,78 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
   background-color: #f8f9fa;
 }
 
+.config-table .image1-header {
+  background-color: #fef2f2;
+  border-left: 3px solid #ef4444;
+}
+
+.config-table .image2-header {
+  background-color: #eff6ff;
+  border-left: 3px solid #3b82f6;
+}
+
+.config-table .image3-header {
+  background-color: #f0fdf4;
+  border-left: 3px solid #10b981;
+}
+
+.config-table .image1-cell {
+  background-color: #fefefe;
+  border-left: 2px solid #ef4444;
+}
+
+.config-table .image2-cell {
+  background-color: #fefefe;
+  border-left: 2px solid #3b82f6;
+}
+
+.config-table .image3-cell {
+  background-color: #fefefe;
+  border-left: 2px solid #10b981;
+}
+
+.input-with-validation {
+  position: relative;
+}
+
 .form-input {
   width: 100%;
   padding: 8px;
   border: 1px solid #e0e0e0;
   border-radius: 4px;
   font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.form-input.error {
+  border-color: #dc3545;
+  background-color: #fff5f5;
 }
 
 .form-input:disabled {
   background-color: #f8f9fa;
   color: #6c757d;
   cursor: not-allowed;
+}
+
+.field-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #dc3545;
+  color: white;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 0 0 4px 4px;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .mb-6 {

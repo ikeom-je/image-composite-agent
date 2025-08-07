@@ -90,7 +90,7 @@ def handle_image_error(
             "request_id": request_id,
             "timestamp": error.timestamp,
             "details": error.details,
-            "version": "2.4.2"
+            "version": "2.5.4"
         }
         
         # ログ出力
@@ -307,7 +307,7 @@ def log_request_info(
         "query_parameters": event.get("queryStringParameters", {}),
         "headers": event.get("headers", {}),
         "context": context_info,
-        "version": "2.4.2"
+        "version": "2.5.4"
     }
     
     logger.info(f"REQUEST START: {json.dumps(log_data, ensure_ascii=False)}")
@@ -333,7 +333,7 @@ def log_response_info(
         "status_code": response.get("statusCode"),
         "processing_time": processing_time,
         "response_size": len(str(response.get("body", ""))),
-        "version": "2.4.2"
+        "version": "2.5.4"
     }
     
     logger.info(f"REQUEST END: {json.dumps(log_data, ensure_ascii=False)}")
