@@ -138,6 +138,9 @@ export class ImageProcessorApiStack extends cdk.Stack {
     this.testImagesBucket.grantRead(imageProcessorFunction);
     this.uploadBucket.grantRead(imageProcessorFunction);  // 新規追加
 
+    // リソースバケットへの書き込み権限を付与（動画ファイル保存用）
+    this.resourcesBucket.grantWrite(imageProcessorFunction);
+
     // デッドレターキューの作成（Upload Manager用）
     const uploadManagerDLQ = new sqs.Queue(this, 'UploadManagerDLQ', {
       queueName: 'upload-manager-dlq',
@@ -245,11 +248,11 @@ export class ImageProcessorApiStack extends cdk.Stack {
       description: 'High-performance image composition API with binary response support - v2.5.4',
       // バイナリメディアタイプを明示的に設定（PNG形式の直接レスポンス対応）
       binaryMediaTypes: [
-        'image/png', 
-        'image/jpeg', 
+        'image/png',
+        'image/jpeg',
         'image/jpg',
-        'image/gif', 
-        'image/webp', 
+        'image/gif',
+        'image/webp',
         'image/tiff',
         'image/bmp',
         'image/*',
