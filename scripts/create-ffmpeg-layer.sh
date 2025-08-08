@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ffmpeg Lambda Layer作成スクリプト - v2.5.5
+# ffmpeg Lambda Layer作成スクリプト - v2.6.0
 # 動画生成機能のためのffmpegバイナリを含むLambda Layerを作成
 
 set -e
