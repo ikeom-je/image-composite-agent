@@ -303,6 +303,118 @@
       </table>
     </div>
 
+    <!-- 動画生成設定 -->
+    <div class="video-generation-container">
+      <h3 class="section-title">🎬 動画生成設定</h3>
+      
+      <!-- 動画生成ON/OFF切り替え -->
+      <div class="video-toggle-section">
+        <div class="toggle-container">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              :checked="videoConfig.enabled"
+              @change="updateVideoConfig('enabled', $event.target.checked)"
+              class="toggle-checkbox"
+            />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">動画生成を有効にする</span>
+          </label>
+        </div>
+        <div class="toggle-description">
+          <small>合成画像から動画を生成します。動画生成には追加の処理時間がかかります。</small>
+        </div>
+      </div>
+
+      <!-- 動画生成パラメータ設定 -->
+      <div v-if="videoConfig.enabled" class="video-params-section">
+        <div class="params-grid">
+          <!-- 動画の長さ設定 -->
+          <div class="param-group">
+            <label class="param-label">動画の長さ（秒）</label>
+            <div class="input-with-validation">
+              <input
+                type="number"
+                :value="videoConfig.duration"
+                @input="updateVideoConfigWithValidation('duration', parseInt($event.target.value))"
+                class="form-input"
+                :class="{ 'error': hasVideoFieldError('duration') }"
+                min="1"
+                max="30"
+                step="1"
+              />
+              <div v-if="hasVideoFieldError('duration')" class="field-error">
+                {{ getVideoFieldError('duration') }}
+              </div>
+            </div>
+            <small class="param-hint">1〜30秒の範囲で設定してください（デフォルト: 3秒）</small>
+          </div>
+
+          <!-- 動画フォーマット設定 -->
+          <div class="param-group">
+            <label class="param-label">動画フォーマット</label>
+            <div class="input-with-validation">
+              <select
+                :value="videoConfig.format"
+                @change="updateVideoConfig('format', $event.target.value)"
+                class="form-select"
+              >
+                <option value="XMF">XMF (MP4互換・推奨)</option>
+                <option value="MP4">MP4 (標準)</option>
+                <option value="WEBM">WEBM (Web最適化)</option>
+                <option value="AVI">AVI (汎用)</option>
+              </select>
+            </div>
+            <small class="param-hint">XMFフォーマットが推奨です（高品質・高互換性）</small>
+          </div>
+        </div>
+
+        <!-- 動画生成プレビュー情報 -->
+        <div class="video-preview-info">
+          <div class="preview-info-grid">
+            <div class="info-item">
+              <span class="info-label">予想ファイルサイズ:</span>
+              <span class="info-value">{{ estimatedFileSize }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">予想処理時間:</span>
+              <span class="info-value">{{ estimatedProcessingTime }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">出力形式:</span>
+              <span class="info-value">{{ videoConfig.format }} ({{ getVideoExtension(videoConfig.format) }})</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 動画生成中の進行状況表示 -->
+        <div v-if="isGeneratingVideo" class="video-progress-section">
+          <div class="progress-container">
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: `${videoGenerationProgress}%` }"></div>
+            </div>
+            <div class="progress-text">
+              動画生成中... {{ videoGenerationProgress }}%
+            </div>
+          </div>
+          <div class="progress-steps">
+            <div class="step" :class="{ active: videoGenerationStep >= 1, completed: videoGenerationStep > 1 }">
+              <span class="step-number">1</span>
+              <span class="step-text">画像合成</span>
+            </div>
+            <div class="step" :class="{ active: videoGenerationStep >= 2, completed: videoGenerationStep > 2 }">
+              <span class="step-number">2</span>
+              <span class="step-text">動画変換</span>
+            </div>
+            <div class="step" :class="{ active: videoGenerationStep >= 3, completed: videoGenerationStep > 3 }">
+              <span class="step-number">3</span>
+              <span class="step-text">完了</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- キャンバスプレビュー -->
     <div class="canvas-preview-container">
       <h3>レイアウトプレビュー</h3>
@@ -362,21 +474,34 @@ interface Props {
       height: number
     }
   }
+  videoConfig: {
+    enabled: boolean
+    duration: number
+    format: string
+  }
   imageMode?: number
+  isGeneratingVideo?: boolean
+  videoGenerationProgress?: number
+  videoGenerationStep?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  imageMode: 2
+  imageMode: 2,
+  isGeneratingVideo: false,
+  videoGenerationProgress: 0,
+  videoGenerationStep: 1
 })
 
 // Emits
 const emit = defineEmits<{
   'update-config': [imageKey: string, field: string, value: any]
   'update-mode': [mode: number]
+  'update-video-config': [field: string, value: any]
 }>()
 
 // Reactive state for field-level validation errors
 const fieldErrors = reactive<Record<string, Record<string, string>>>({})
+const videoFieldErrors = reactive<Record<string, string>>({})
 
 // Computed
 const hasImage2 = computed(() => {
@@ -455,7 +580,59 @@ const validationErrors = computed(() => {
     }
   })
   
+  // 動画設定の検証エラーも追加
+  if (props.videoConfig.enabled) {
+    if (props.videoConfig.duration < 1 || props.videoConfig.duration > 30) {
+      errors.push('動画の長さは1〜30秒の範囲で設定してください')
+    }
+    
+    const supportedFormats = ['XMF', 'MP4', 'WEBM', 'AVI']
+    if (!supportedFormats.includes(props.videoConfig.format)) {
+      errors.push('サポートされていない動画フォーマットです')
+    }
+  }
+  
   return errors
+})
+
+const estimatedFileSize = computed(() => {
+  if (!props.videoConfig.enabled) return 'N/A'
+  
+  // 簡易的なファイルサイズ推定（実際の値は画像内容により変動）
+  const baseSizeKB = 500 // 基本サイズ（KB）
+  const durationMultiplier = props.videoConfig.duration * 100 // 秒あたり100KB
+  const formatMultiplier = {
+    'XMF': 1.2,
+    'MP4': 1.0,
+    'WEBM': 0.8,
+    'AVI': 1.5
+  }[props.videoConfig.format] || 1.0
+  
+  const estimatedKB = (baseSizeKB + durationMultiplier) * formatMultiplier
+  
+  if (estimatedKB < 1024) {
+    return `約 ${Math.round(estimatedKB)} KB`
+  } else {
+    return `約 ${(estimatedKB / 1024).toFixed(1)} MB`
+  }
+})
+
+const estimatedProcessingTime = computed(() => {
+  if (!props.videoConfig.enabled) return 'N/A'
+  
+  // 簡易的な処理時間推定
+  const baseTime = 5 // 基本処理時間（秒）
+  const durationMultiplier = props.videoConfig.duration * 0.5 // 動画1秒あたり0.5秒
+  const formatMultiplier = {
+    'XMF': 1.0,
+    'MP4': 0.8,
+    'WEBM': 1.2,
+    'AVI': 0.9
+  }[props.videoConfig.format] || 1.0
+  
+  const estimatedSeconds = (baseTime + durationMultiplier) * formatMultiplier
+  
+  return `約 ${Math.round(estimatedSeconds)} 秒`
 })
 
 // Methods
@@ -566,6 +743,64 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
     borderRadius: '2px',
     opacity: 0.8,
   }
+}
+
+// 動画設定関連のメソッド
+const updateVideoConfig = (field: string, value: any) => {
+  emit('update-video-config', field, value)
+}
+
+const updateVideoConfigWithValidation = (field: string, value: any) => {
+  // Clear previous field error
+  delete videoFieldErrors[field]
+  
+  // Validate the field
+  const error = validateVideoField(field, value)
+  if (error) {
+    videoFieldErrors[field] = error
+  }
+  
+  // Update the config
+  emit('update-video-config', field, value)
+}
+
+const validateVideoField = (field: string, value: any): string | null => {
+  switch (field) {
+    case 'duration':
+      if (isNaN(value)) {
+        return '数値を入力してください'
+      }
+      if (value < 1 || value > 30) {
+        return '動画の長さは1〜30秒の範囲で設定してください'
+      }
+      break
+    case 'format':
+      const supportedFormats = ['XMF', 'MP4', 'WEBM', 'AVI']
+      if (!supportedFormats.includes(value)) {
+        return 'サポートされていない動画フォーマットです'
+      }
+      break
+  }
+  
+  return null
+}
+
+const hasVideoFieldError = (field: string): boolean => {
+  return !!videoFieldErrors[field]
+}
+
+const getVideoFieldError = (field: string): string => {
+  return videoFieldErrors[field] || ''
+}
+
+const getVideoExtension = (format: string): string => {
+  const extensions = {
+    'XMF': 'mp4',
+    'MP4': 'mp4',
+    'WEBM': 'webm',
+    'AVI': 'avi'
+  }
+  return extensions[format as keyof typeof extensions] || 'mp4'
 }
 </script>
 
@@ -826,6 +1061,263 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
   margin-bottom: 4px;
 }
 
+/* 動画生成設定のスタイル */
+.video-generation-container {
+  background-color: #f0f8ff;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #b3d9ff;
+  margin: 20px 0;
+}
+
+.video-toggle-section {
+  margin-bottom: 20px;
+}
+
+.toggle-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 500;
+  color: #333;
+}
+
+.toggle-checkbox {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 50px;
+  height: 24px;
+  background-color: #ccc;
+  border-radius: 24px;
+  margin-right: 12px;
+  transition: background-color 0.3s ease;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: white;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-checkbox:checked + .toggle-slider {
+  background-color: #007bff;
+}
+
+.toggle-checkbox:checked + .toggle-slider::before {
+  transform: translateX(26px);
+}
+
+.toggle-text {
+  font-size: 16px;
+}
+
+.toggle-description {
+  color: #666;
+  font-size: 14px;
+  margin-left: 62px;
+}
+
+.video-params-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  margin-top: 16px;
+}
+
+.params-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.param-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.param-label {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.form-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: white;
+  transition: border-color 0.2s ease;
+}
+
+.form-select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.param-hint {
+  color: #666;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.video-preview-info {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.preview-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-label {
+  font-weight: 500;
+  color: #555;
+  font-size: 14px;
+}
+
+.info-value {
+  font-weight: 600;
+  color: #007bff;
+  font-size: 14px;
+}
+
+.video-progress-section {
+  background: #fff3cd;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #ffeaa7;
+  margin-top: 16px;
+}
+
+.progress-container {
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007bff, #0056b3);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  text-align: center;
+  font-weight: 500;
+  color: #856404;
+  font-size: 14px;
+}
+
+.progress-steps {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 15px;
+  right: -50%;
+  width: 100%;
+  height: 2px;
+  background-color: #e9ecef;
+  z-index: 1;
+}
+
+.step.completed:not(:last-child)::after {
+  background-color: #28a745;
+}
+
+.step-number {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #e9ecef;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 2;
+}
+
+.step.active .step-number {
+  background-color: #007bff;
+  color: white;
+}
+
+.step.completed .step-number {
+  background-color: #28a745;
+  color: white;
+}
+
+.step-text {
+  font-size: 12px;
+  color: #6c757d;
+  text-align: center;
+}
+
+.step.active .step-text {
+  color: #007bff;
+  font-weight: 500;
+}
+
+.step.completed .step-text {
+  color: #28a745;
+  font-weight: 500;
+}
+
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
   .config-table {
@@ -850,6 +1342,25 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
   .canvas-preview-container {
     padding: 16px;
   }
+  
+  .params-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .preview-info-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .progress-steps {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .step:not(:last-child)::after {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
@@ -862,6 +1373,14 @@ const getCanvasPreviewStyle = (imageKey: string, config: any) => {
   .canvas-preview {
     width: 240px;
     height: 135px;
+  }
+  
+  .video-generation-container {
+    padding: 16px;
+  }
+  
+  .video-params-section {
+    padding: 16px;
   }
 }
 </style>

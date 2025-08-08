@@ -80,7 +80,16 @@ export class ImageProcessorApiStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Python Lambda関数の作成（最適化設定） - v2.5.4
+    // ffmpeg Lambda Layer（動画生成機能用） - v2.5.5
+    const ffmpegLayer = new lambda.LayerVersion(this, 'FfmpegLayer', {
+      layerVersionName: 'ffmpeg-layer-v2-5-5',
+      description: 'ffmpeg binaries for video generation - v2.5.5',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda-layers/ffmpeg-layer.zip')),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      compatibleArchitectures: [lambda.Architecture.X86_64],
+    });
+
+    // Python Lambda関数の作成（最適化設定） - v2.5.5
     const imageProcessorFunction = new lambda.Function(this, 'ImageProcessorFunction', {
       runtime: lambda.Runtime.PYTHON_3_12,
       architecture: lambda.Architecture.X86_64,  // ライブラリ互換性重視
@@ -105,9 +114,10 @@ export class ImageProcessorApiStack extends cdk.Stack {
           user: 'root'
         },
       }),
-      memorySize: 1536,  // 画像処理に最適化されたメモリサイズ（パフォーマンス向上）
-      timeout: cdk.Duration.seconds(60),  // 複雑な画像処理に対応
-      reservedConcurrentExecutions: 15,  // 同時実行数を増加（パフォーマンス最適化）
+      layers: [ffmpegLayer],  // ffmpeg Layerを追加
+      memorySize: 2048,  // 動画生成のためメモリサイズを増加
+      timeout: cdk.Duration.seconds(90),  // 動画生成のためタイムアウトを延長
+      reservedConcurrentExecutions: 10,  // 動画生成の負荷を考慮して同時実行数を調整
       deadLetterQueue: imageProcessorDLQ,
       retryAttempts: 2,
       logGroup: imageProcessorLogGroup,
@@ -115,11 +125,12 @@ export class ImageProcessorApiStack extends cdk.Stack {
         S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
         TEST_BUCKET: this.testImagesBucket.bucketName,
         UPLOAD_BUCKET: this.uploadBucket.bucketName,
-        VERSION: '2.5.4',
+        VERSION: '2.5.5',
         LOG_LEVEL: 'INFO',
-        PYTHONPATH: '/var/runtime'
+        PYTHONPATH: '/var/runtime',
+        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin'  // ffmpegバイナリのパスを追加
       },
-      description: 'Image composition processor with 2/3 image support - v2.5.4'
+      description: 'Image composition processor with video generation support - v2.5.5'
     });
 
     // S3バケットへの読み取り権限を付与
@@ -242,6 +253,10 @@ export class ImageProcessorApiStack extends cdk.Stack {
         'image/tiff',
         'image/bmp',
         'image/*',
+        'video/mp4',
+        'video/webm',
+        'video/x-msvideo',
+        'video/*',
         'application/octet-stream'
       ],
       defaultCorsPreflightOptions: {
@@ -527,6 +542,11 @@ export class ImageProcessorApiStack extends cdk.Stack {
       })
     );
 
+    // リソースバケット用のOrigin Access Identity
+    const resourcesOAI = new cloudfront.OriginAccessIdentity(this, 'ResourcesOAI', {
+      comment: 'OAI for resources bucket (videos)',
+    });
+
     // CloudFrontディストリビューション（キャッシュ機能強化） - v2.5.4
     this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
@@ -633,17 +653,26 @@ export class ImageProcessorApiStack extends cdk.Stack {
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           }),
         },
-        // API呼び出し用（キャッシュ無効） - 後で設定可能
-        // '/api/*': {
-        //   origin: new origins.HttpOrigin(`${api.restApiId}.execute-api.${this.region}.amazonaws.com`, {
-        //     originPath: '/prod',
-        //   }),
-        //   allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-        //   viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        //   cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-        //   originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-        //   responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
-        // },
+        // 動画ファイル用のキャッシュ（リソースバケットから配信）
+        'generated-videos/*': {
+          origin: new origins.S3Origin(this.resourcesBucket, {
+            originAccessIdentity: resourcesOAI,
+          }),
+          compress: false, // 動画は既に圧縮済み
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: new cloudfront.CachePolicy(this, 'VideoCachePolicy', {
+            cachePolicyName: 'image-processor-video-cache',
+            comment: 'Cache policy for video files',
+            defaultTtl: cdk.Duration.hours(24),
+            maxTtl: cdk.Duration.days(365),
+            minTtl: cdk.Duration.hours(1),
+            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Range'),
+            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+          }),
+          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
+        },
       },
       // SPAのルーティングをサポートするためのエラーレスポンス設定
       errorResponses: [
@@ -671,6 +700,18 @@ export class ImageProcessorApiStack extends cdk.Stack {
       // 地理的制限なし
       // geoRestriction: cloudfront.GeoRestriction.allowlist() // 全世界許可
     });
+
+    // リソースバケットにCloudFrontからのアクセス権限を付与
+    this.resourcesBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [this.resourcesBucket.arnForObjects('*')],
+        principals: [new iam.CanonicalUserPrincipal(resourcesOAI.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
+      })
+    );
+
+    // Lambda関数の環境変数にCloudFrontドメインを追加
+    imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
 
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {

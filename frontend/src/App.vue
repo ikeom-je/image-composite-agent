@@ -44,9 +44,14 @@
         <!-- 画像設定テーブル -->
         <ImageConfigTable 
           :image-configs="imageConfigs" 
+          :video-config="videoConfig"
           :image-mode="imageMode"
+          :is-generating-video="isGeneratingVideo"
+          :video-generation-progress="videoGenerationProgress"
+          :video-generation-step="videoGenerationStep"
           @update-config="handleConfigUpdate" 
           @update-mode="handleModeUpdate"
+          @update-video-config="handleVideoConfigUpdate"
         />
 
 
@@ -65,7 +70,7 @@
               生成中...
             </span>
             <span v-else class="button-content">
-              🎨 {{ getImageCountText() }}
+              {{ videoConfig.enabled ? '🎬' : '🎨' }} {{ getGenerationButtonText() }}
             </span>
           </button>
         </div>
@@ -73,9 +78,19 @@
 
       <!-- 結果表示コンポーネント -->
       <div class="result-container">
-        <ResultDisplay :result-url="resultUrl" :api-url="apiUrl" :is-loading="appStore.isLoading" :error="error"
-          @download-image="downloadImage" @copy-api-url="copyApiUrl" @retry-generation="handleRetryGeneration"
-          @clear-error="handleClearError" />
+        <ResultDisplay 
+          :result-url="resultUrl" 
+          :static-image-url="staticImageUrl"
+          :api-url="apiUrl" 
+          :is-loading="appStore.isLoading" 
+          :error="error"
+          :is-video-generation="videoConfig.enabled"
+          :video-config="videoConfig"
+          @download-image="downloadImage" 
+          @copy-api-url="copyApiUrl" 
+          @retry-generation="handleRetryGeneration"
+          @clear-error="handleClearError" 
+        />
       </div>
     </div>
 
@@ -130,26 +145,39 @@ const imageConfigs = ref({
     x: 100,
     y: 100,
     width: 400,
-    height: 300
+    height: 400
   },
   image2: {
     source: '', // デフォルトで未選択
     x: 600,
     y: 100,
     width: 400,
-    height: 300
+    height: 400
   },
   image3: {
     source: '', // デフォルトで未選択
     x: 350,
     y: 400,
     width: 400,
-    height: 300
+    height: 400
   }
 })
 
+// 動画生成設定
+const videoConfig = ref({
+  enabled: false,
+  duration: 3, // デフォルト3秒
+  format: 'XMF' // デフォルトXMF
+})
+
+// 動画生成状態
+const isGeneratingVideo = ref(false)
+const videoGenerationProgress = ref(0)
+const videoGenerationStep = ref(1)
+
 // 結果表示用
 const resultUrl = ref('')
+const staticImageUrl = ref('')  // 動画生成時の静止画像URL
 const apiUrl = ref('')
 const error = ref('')
 
@@ -212,7 +240,7 @@ const examples = ref([
 ])
 
 // メソッド
-const buildApiUrl = () => {
+const buildApiUrl = (enableVideoGeneration: boolean = videoConfig.value.enabled) => {
   // API URLが設定されているかチェック
   const rawApiUrl = configStore.apiUrl
   if (!rawApiUrl) {
@@ -272,8 +300,17 @@ const buildApiUrl = () => {
       url.searchParams.set('image3Height', Math.max(1, Math.min(imageConfigs.value.image3.height, 1080)).toString())
     }
 
-    // 出力形式は常にPNG固定
-    url.searchParams.set('format', 'png')
+    // 動画生成パラメータ（enableVideoGenerationパラメータに基づく）
+    if (enableVideoGeneration) {
+      url.searchParams.set('generate_video', 'true')
+      url.searchParams.set('video_duration', videoConfig.value.duration.toString())
+      url.searchParams.set('video_format', videoConfig.value.format)
+      // 動画生成時は出力形式をpngに設定（Lambda側で動画生成を判定）
+      url.searchParams.set('format', 'png')
+    } else {
+      // 静止画像の場合はPNG固定
+      url.searchParams.set('format', 'png')
+    }
 
     console.log('[App] Built API URL:', url.toString())
     console.log('[App] Image configurations:', {
@@ -281,6 +318,7 @@ const buildApiUrl = () => {
       image2: imageConfigs.value.image2,
       image3: imageConfigs.value.image3
     })
+    console.log('[App] Video configuration:', videoConfig.value)
     return url.toString()
 
   } catch (urlError) {
@@ -290,6 +328,12 @@ const buildApiUrl = () => {
 }
 
 const generateImage = async () => {
+  // 動画生成が有効な場合は専用の処理を実行
+  if (videoConfig.value.enabled) {
+    await generateVideo()
+    return
+  }
+
   appStore.startLoading('画像を生成中...')
   error.value = ''
   resultUrl.value = ''
@@ -329,36 +373,7 @@ const generateImage = async () => {
 
   } catch (err: any) {
     console.error('[App] Error generating image:', err)
-
-    // エラーの詳細をログ出力
-    console.error('[App] Error details:', {
-      message: err.message,
-      status: err.response?.status,
-      statusText: err.response?.statusText,
-      url: err.config?.url,
-      code: err.code
-    })
-
-    // エラーメッセージの設定
-    if (err.message?.includes('Image1 is required')) {
-      error.value = '画像1は必須です。画像を選択してください。'
-    } else if (err.message?.includes('API URL is not configured')) {
-      error.value = 'API設定が読み込まれていません。ページを再読み込みしてください。'
-    } else if (err.code === 'ERR_NAME_NOT_RESOLVED') {
-      error.value = 'APIサーバーに接続できません。ネットワーク接続を確認してください。'
-    } else if (err.response?.status === 500) {
-      error.value = 'サーバーエラーが発生しました。パラメータを確認してから再試行してください。'
-    } else if (err.response?.status === 400) {
-      error.value = 'リクエストパラメータに問題があります。画像選択と位置設定を確認してください。'
-    } else if (err.response?.status === 404) {
-      error.value = 'APIエンドポイントが見つかりません。設定を確認してください。'
-    } else if (err.code === 'ECONNABORTED') {
-      error.value = 'リクエストがタイムアウトしました（30秒）。再試行してください。'
-    } else {
-      error.value = `画像生成エラー: ${err.message || 'Unknown error'}`
-    }
-
-    notificationStore.showError(error.value)
+    handleImageGenerationError(err)
   } finally {
     appStore.stopLoading()
   }
@@ -449,12 +464,32 @@ const downloadImage = () => {
 
   const link = document.createElement('a')
   link.href = resultUrl.value
-  link.download = 'composite-image.png'
+  
+  // 動画生成が有効な場合は動画ファイル名を使用
+  if (videoConfig.value.enabled) {
+    const extension = getVideoFileExtension(videoConfig.value.format)
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
+    link.download = `composite-video-${timestamp}.${extension}`
+    notificationStore.showSuccess(`動画ファイルのダウンロードを開始しました（${videoConfig.value.format}形式）`)
+  } else {
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
+    link.download = `composite-image-${timestamp}.png`
+    notificationStore.showSuccess('画像ファイルのダウンロードを開始しました')
+  }
+  
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+}
 
-  notificationStore.showSuccess('ダウンロードを開始しました')
+const getVideoFileExtension = (format: string): string => {
+  const extensions = {
+    'XMF': 'mp4',
+    'MP4': 'mp4',
+    'WEBM': 'webm',
+    'AVI': 'avi'
+  }
+  return extensions[format as keyof typeof extensions] || 'mp4'
 }
 
 const copyApiUrl = () => {
@@ -552,6 +587,159 @@ const handleModeUpdate = (mode: number) => {
   }
 }
 
+const handleVideoConfigUpdate = (field: string, value: any) => {
+  if (videoConfig.value.hasOwnProperty(field)) {
+    (videoConfig.value as any)[field] = value
+    console.log('[App] Video config updated:', { field, value, config: videoConfig.value })
+  }
+}
+
+const generateVideo = async () => {
+  isGeneratingVideo.value = true
+  videoGenerationProgress.value = 0
+  videoGenerationStep.value = 1
+  appStore.startLoading('動画を生成中...')
+  error.value = ''
+  resultUrl.value = ''
+  staticImageUrl.value = ''
+
+  try {
+    // ステップ1: 静止画像を生成
+    videoGenerationStep.value = 1
+    videoGenerationProgress.value = 10
+    appStore.updateLoadingMessage('合成画像を生成中...')
+
+    const staticImageApiUrl = buildApiUrl(false) // 動画生成なしのURL
+    console.log('[App] Generating static image first:', staticImageApiUrl)
+
+    const staticImageResponse = await axios.get(staticImageApiUrl, {
+      responseType: 'blob',
+      headers: {
+        'Accept': 'image/png, image/*'
+      },
+      timeout: 30000
+    })
+
+    if (staticImageResponse.data && staticImageResponse.data.size > 0) {
+      staticImageUrl.value = URL.createObjectURL(staticImageResponse.data)
+      console.log('[App] Static image generated successfully')
+    }
+
+    // ステップ2: 動画生成
+    videoGenerationStep.value = 2
+    videoGenerationProgress.value = 30
+    appStore.updateLoadingMessage('動画に変換中...')
+
+    const videoApiUrl = buildApiUrl(true) // 動画生成ありのURL
+    apiUrl.value = videoApiUrl
+
+    // デバッグ情報をログ出力
+    logApiCallDetails(videoApiUrl)
+
+    console.log('[App] Starting video generation request...')
+
+    // 動画生成のタイムアウトを延長（90秒）
+    const response = await axios.get(videoApiUrl, {
+      responseType: 'json', // JSONレスポンスを期待
+      headers: {
+        'Accept': 'application/json, video/mp4, video/webm, video/*, application/octet-stream'
+      },
+      timeout: 90000, // 90秒
+      onDownloadProgress: (progressEvent) => {
+        if (progressEvent.total) {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          videoGenerationProgress.value = Math.max(30, Math.min(90, 30 + (progress * 0.6)))
+        }
+      }
+    })
+
+    // ステップ3: 完了
+    videoGenerationStep.value = 3
+    videoGenerationProgress.value = 100
+    appStore.updateLoadingMessage('動画生成完了')
+
+    console.log('[App] Video response received:', {
+      contentType: response.headers['content-type'],
+      data: response.data
+    })
+
+    // JSONレスポンスの場合（S3 URL）
+    if (response.data && response.data.type === 'video' && response.data.url) {
+      resultUrl.value = response.data.url
+      console.log('[App] Successfully received video URL from S3:', response.data.url)
+    }
+    // Blobレスポンスの場合（フォールバック）
+    else if (response.data && response.data.size > 0) {
+      // 直接blobからURLを作成
+      resultUrl.value = URL.createObjectURL(response.data)
+      console.log('[App] Successfully processed video blob data')
+      notificationStore.showSuccess(`動画の生成が完了しました！（${videoConfig.value.duration}秒、${videoConfig.value.format}形式）`)
+    } else {
+      throw new Error('Empty video response received from API')
+    }
+
+  } catch (err: any) {
+    console.error('[App] Error generating video:', err)
+
+    // 動画生成エラーの場合は静止画像にフォールバック
+    console.log('[App] Falling back to static image generation...')
+    notificationStore.showWarning('動画生成に失敗しました。静止画像を生成します。')
+    
+    // 動画設定を一時的に無効にして静止画像を生成
+    const originalVideoEnabled = videoConfig.value.enabled
+    videoConfig.value.enabled = false
+    
+    try {
+      await generateImage()
+    } catch (fallbackErr) {
+      console.error('[App] Fallback image generation also failed:', fallbackErr)
+      // 通常の画像生成エラー処理
+      handleImageGenerationError(fallbackErr)
+    } finally {
+      // 動画設定を元に戻す
+      videoConfig.value.enabled = originalVideoEnabled
+    }
+
+  } finally {
+    isGeneratingVideo.value = false
+    videoGenerationProgress.value = 0
+    videoGenerationStep.value = 1
+    appStore.stopLoading()
+  }
+}
+
+const handleImageGenerationError = (err: any) => {
+  // エラーの詳細をログ出力
+  console.error('[App] Error details:', {
+    message: err.message,
+    status: err.response?.status,
+    statusText: err.response?.statusText,
+    url: err.config?.url,
+    code: err.code
+  })
+
+  // エラーメッセージの設定
+  if (err.message?.includes('Image1 is required')) {
+    error.value = '画像1は必須です。画像を選択してください。'
+  } else if (err.message?.includes('API URL is not configured')) {
+    error.value = 'API設定が読み込まれていません。ページを再読み込みしてください。'
+  } else if (err.code === 'ERR_NAME_NOT_RESOLVED') {
+    error.value = 'APIサーバーに接続できません。ネットワーク接続を確認してください。'
+  } else if (err.response?.status === 500) {
+    error.value = 'サーバーエラーが発生しました。パラメータを確認してから再試行してください。'
+  } else if (err.response?.status === 400) {
+    error.value = 'リクエストパラメータに問題があります。画像選択と位置設定を確認してください。'
+  } else if (err.response?.status === 404) {
+    error.value = 'APIエンドポイントが見つかりません。設定を確認してください。'
+  } else if (err.code === 'ECONNABORTED') {
+    error.value = 'リクエストがタイムアウトしました。再試行してください。'
+  } else {
+    error.value = `生成エラー: ${err.message || 'Unknown error'}`
+  }
+
+  notificationStore.showError(error.value)
+}
+
 // リトライ機能の改善
 const handleRetryGeneration = async () => {
   console.log('[App] Manual retry requested')
@@ -588,6 +776,19 @@ const getImageCountText = () => {
     3: '3画像を合成'
   }
   return modeText[imageMode.value as keyof typeof modeText] || '画像を合成'
+}
+
+const getGenerationButtonText = () => {
+  if (videoConfig.value.enabled) {
+    const modeText = {
+      1: '1画像で動画生成',
+      2: '2画像で動画生成', 
+      3: '3画像で動画生成'
+    }
+    return modeText[imageMode.value as keyof typeof modeText] || '動画を生成'
+  } else {
+    return getImageCountText()
+  }
 }
 
 // ライフサイクル
