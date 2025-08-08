@@ -1,4 +1,4 @@
-# 画像合成REST API Lambda関数の依存関係 - v2.5.5
+# 画像合成REST API Lambda関数の依存関係 - v2.6.0
 
 # 画像処理ライブラリ
 Pillow==10.0.0
