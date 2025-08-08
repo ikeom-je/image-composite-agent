@@ -12,6 +12,7 @@ import os
 import logging
 import time
 import uuid
+import boto3
 from datetime import datetime
 from typing import Dict, Any, Optional
 
@@ -19,6 +20,7 @@ from PIL import Image
 from image_fetcher import fetch_images_parallel
 from image_compositor import create_composite_image, parse_image_parameters
 from test_image_generator import generate_circle_image, generate_rectangle_image, generate_triangle_image
+from video_generator import generate_video_from_image, get_video_mime_type, get_video_extension, VideoGenerationError
 from error_handler import (
     handle_image_error, create_error_response, log_request_info, log_response_info,
     ParameterError, ImageFetchError, ImageProcessingError, ValidationError
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # バージョン情報
-VERSION = os.environ.get('VERSION', '2.5.4')
+VERSION = os.environ.get('VERSION', '2.5.5')
 
 
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
@@ -77,10 +79,28 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     if not query_params.get('image1'):
         errors.append('image1パラメータは必須です')
     
-    # フォーマットパラメータの検証（PNG形式のみサポート）
+    # フォーマットパラメータの検証
     format_param = query_params.get('format', 'png')
-    if format_param != 'png':
-        errors.append('formatパラメータはpngである必要があります（HTML形式は廃止されました）')
+    if format_param not in ['png', 'html']:
+        errors.append('formatパラメータはpngまたはhtmlである必要があります')
+    
+    # 動画生成パラメータの検証（オプション）
+    generate_video = query_params.get('generate_video', 'false').lower()
+    if generate_video == 'true':
+        # 動画生成が有効な場合の追加検証
+        video_duration = query_params.get('video_duration', '3')
+        video_format = query_params.get('video_format', 'XMF')
+        
+        try:
+            duration_int = int(video_duration)
+            if duration_int < 1 or duration_int > 30:
+                errors.append('video_durationは1から30の間の整数である必要があります')
+        except ValueError:
+            errors.append('video_durationは整数である必要があります')
+        
+        supported_formats = ['XMF', 'MP4', 'WEBM', 'AVI']
+        if video_format not in supported_formats:
+            errors.append(f'video_formatは{", ".join(supported_formats)}のいずれかである必要があります')
     
     return errors
 
@@ -418,7 +438,13 @@ def handler(event, context):
         base_image_param = query_params.get('baseImage')
         format_param = query_params.get('format', 'png')
         
+        # 動画生成パラメータ
+        generate_video = query_params.get('generate_video', 'false').lower() == 'true'
+        video_duration = int(query_params.get('video_duration', '3'))
+        video_format = query_params.get('video_format', 'XMF')
+        
         logger.info(f"🎯 Images to process: image1={image1_param}, image2={image2_param}, image3={image3_param} [Request ID: {request_id}]")
+        logger.info(f"🎬 Video generation: enabled={generate_video}, duration={video_duration}s, format={video_format} [Request ID: {request_id}]")
         
         # 画像パラメータの解析
         try:
@@ -482,44 +508,162 @@ def handler(event, context):
         processing_time = time.time() - start_time
         logger.info(f"⏱️ Processing completed in {processing_time:.2f} seconds [Request ID: {request_id}]")
         
-        # レスポンス生成（PNG形式のみ）
+        # レスポンス生成
         try:
-            logger.info(f"📤 Generating PNG binary response [Request ID: {request_id}]")
-            # PNG形式でバイナリデータを返す
-            img_buffer = io.BytesIO()
-            composite_img.save(
-                img_buffer, 
-                format='PNG', 
-                optimize=True, 
-                compress_level=6,
-                pnginfo=None  # メタデータを削除してファイルサイズを最適化
-            )
-            img_bytes = img_buffer.getvalue()
-            
-            # ファイル名を生成
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"composite-image-v{VERSION}-{timestamp}.png"
-            
-            # バイナリPNGデータを返す（API Gateway経由でBase64エンコード）
-            response = {
-                'statusCode': 200,
-                'headers': {
-                    'Content-Type': 'image/png',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
-                    'Cache-Control': 'public, max-age=3600',
-                    'Content-Length': str(len(img_bytes)),
-                    'Content-Disposition': f'inline; filename="{filename}"',
-                    'X-Content-Type-Options': 'nosniff',
-                    'X-Request-ID': request_id,
-                    'Accept-Ranges': 'bytes'
-                },
-                'body': base64.b64encode(img_bytes).decode('utf-8'),
-                'isBase64Encoded': True
-            }
-            
-            logger.info(f"📊 PNG binary response generated: {len(img_bytes)} bytes [Request ID: {request_id}]")
+            # 動画生成が有効な場合
+            if generate_video:
+                logger.info(f"🎬 Generating video response: duration={video_duration}s, format={video_format} [Request ID: {request_id}]")
+                try:
+                    # 動画生成
+                    video_data = generate_video_from_image(
+                        composite_img,
+                        duration=video_duration,
+                        format_name=video_format
+                    )
+                    
+                    # ファイル名を生成
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    video_extension = get_video_extension(video_format)
+                    filename = f"composite-video-v{VERSION}-{timestamp}.{video_extension}"
+                    
+                    # 動画をS3にアップロードしてURLを返す（バイナリレスポンスの問題を回避）
+                    try:
+                        # S3に動画をアップロード
+                        s3_key = f"generated-videos/{filename}"
+                        s3_client = boto3.client('s3')
+                        s3_client.put_object(
+                            Bucket=os.environ.get('S3_RESOURCES_BUCKET', 'default-bucket'),
+                            Key=s3_key,
+                            Body=video_data,
+                            ContentType=get_video_mime_type(video_format),
+                            ContentDisposition=f'attachment; filename="{filename}"',
+                            CacheControl='public, max-age=3600'
+                        )
+                        
+                        # CloudFrontのURLを生成（パブリックアクセス）
+                        cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
+                        if cloudfront_domain:
+                            video_url = f"https://{cloudfront_domain}/{s3_key}"
+                        else:
+                            # フォールバック: 署名付きURLを生成（1時間有効）
+                            video_url = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': os.environ.get('S3_RESOURCES_BUCKET', 'default-bucket'), 'Key': s3_key},
+                                ExpiresIn=3600
+                            )
+                        
+                        # JSONレスポンスで動画URLを返す
+                        response = {
+                            'statusCode': 200,
+                            'headers': {
+                                'Content-Type': 'application/json',
+                                'Access-Control-Allow-Origin': '*',
+                                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                                'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
+                                'Cache-Control': 'public, max-age=300',  # 5分キャッシュ
+                                'X-Request-ID': request_id
+                            },
+                            'body': json.dumps({
+                                'type': 'video',
+                                'url': video_url,
+                                'filename': filename,
+                                'format': video_format,
+                                'duration': video_duration,
+                                'size': len(video_data),
+                                'mime_type': get_video_mime_type(video_format),
+                                'generated_at': timestamp
+                            }),
+                            'isBase64Encoded': False
+                        }
+                        
+                        logger.info(f"📊 Video uploaded to S3 and URL generated: {len(video_data)} bytes [Request ID: {request_id}]")
+                        
+                    except Exception as s3_error:
+                        logger.error(f"❌ Failed to upload video to S3: {s3_error} [Request ID: {request_id}]")
+                        # S3アップロードに失敗した場合は、Base64エンコードで直接返す
+                        response = {
+                            'statusCode': 200,
+                            'headers': {
+                                'Content-Type': get_video_mime_type(video_format),
+                                'Access-Control-Allow-Origin': '*',
+                                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                                'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
+                                'Cache-Control': 'public, max-age=3600',
+                                'Content-Length': str(len(video_data)),
+                                'Content-Disposition': f'attachment; filename="{filename}"',
+                                'X-Content-Type-Options': 'nosniff',
+                                'X-Request-ID': request_id,
+                                'Accept-Ranges': 'bytes'
+                            },
+                            'body': base64.b64encode(video_data).decode('utf-8'),
+                            'isBase64Encoded': True
+                        }
+                    
+                    logger.info(f"📊 Video response generated: {len(video_data)} bytes [Request ID: {request_id}]")
+                    
+                except VideoGenerationError as ve:
+                    # 動画生成に失敗した場合は静止画像にフォールバック
+                    logger.warning(f"⚠️ Video generation failed, falling back to static image: {ve.message} [Request ID: {request_id}]")
+                    generate_video = False  # フォールバック処理のため
+                
+            # 静止画像レスポンス（PNG形式またはHTML形式）
+            if not generate_video:
+                if format_param == 'html':
+                    logger.info(f"📤 Generating HTML response [Request ID: {request_id}]")
+                    html_content = generate_html_response(composite_img, query_params)
+                    
+                    response = {
+                        'statusCode': 200,
+                        'headers': {
+                            'Content-Type': 'text/html; charset=utf-8',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                            'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
+                            'Cache-Control': 'public, max-age=3600',
+                            'X-Request-ID': request_id
+                        },
+                        'body': html_content
+                    }
+                    
+                    logger.info(f"📊 HTML response generated: {len(html_content)} characters [Request ID: {request_id}]")
+                    
+                else:  # PNG形式
+                    logger.info(f"📤 Generating PNG binary response [Request ID: {request_id}]")
+                    # PNG形式でバイナリデータを返す
+                    img_buffer = io.BytesIO()
+                    composite_img.save(
+                        img_buffer, 
+                        format='PNG', 
+                        optimize=True, 
+                        compress_level=6,
+                        pnginfo=None  # メタデータを削除してファイルサイズを最適化
+                    )
+                    img_bytes = img_buffer.getvalue()
+                    
+                    # ファイル名を生成
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"composite-image-v{VERSION}-{timestamp}.png"
+                    
+                    # バイナリPNGデータを返す（API Gateway経由でBase64エンコード）
+                    response = {
+                        'statusCode': 200,
+                        'headers': {
+                            'Content-Type': 'image/png',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                            'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key',
+                            'Cache-Control': 'public, max-age=3600',
+                            'Content-Length': str(len(img_bytes)),
+                            'Content-Disposition': f'inline; filename="{filename}"',
+                            'X-Content-Type-Options': 'nosniff',
+                            'X-Request-ID': request_id,
+                            'Accept-Ranges': 'bytes'
+                        },
+                        'body': base64.b64encode(img_bytes).decode('utf-8'),
+                        'isBase64Encoded': True
+                    }
+                    
+                    logger.info(f"📊 PNG binary response generated: {len(img_bytes)} bytes [Request ID: {request_id}]")
             
             # レスポンス完了ログ
             log_response_info(request_id, response, processing_time)
@@ -531,11 +675,12 @@ def handler(event, context):
                 "レスポンスの生成に失敗しました",
                 details={
                     "format": format_param,
+                    "generate_video": generate_video,
                     "original_error": str(e)
                 }
             )
         
-    except (ParameterError, ImageFetchError, ImageProcessingError, ValidationError) as e:
+    except (ParameterError, ImageFetchError, ImageProcessingError, ValidationError, VideoGenerationError) as e:
         # 既知のエラータイプの場合
         logger.warning(f"❌ Known error occurred: {e.message} [Request ID: {request_id}]")
         response = create_error_response(e, context={"query_params": query_params}, request_id=request_id)
