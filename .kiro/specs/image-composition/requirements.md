@@ -210,6 +210,33 @@
 7. WHEN S3に画像が存在しない THEN 「アップロードされた画像がありません」メッセージを表示する
 8. WHEN サムネイルが存在しない THEN 元画像をサムネイルとして表示する
 
+### Requirement 16: テスト期待値画像データ管理
+
+**User Story:** テスト開発者として、APIテストで使用する期待値画像が正しいPNG形式であることを確認したい。そうすることで、テスト結果の信頼性を保証できる。
+
+#### Acceptance Criteria
+
+1. WHEN test/test-assets/expected-*.pngファイルを確認する THEN それらが実際のPNG画像形式である SHALL
+2. WHEN base64エンコードされたテキストファイルを発見する THEN それらを適切なPNG画像ファイルに変換する SHALL
+3. WHEN 変換処理を実行する THEN 元のbase64データの内容を保持したまま変換する SHALL
+4. WHEN 変換後のファイルを確認する THEN 画像プレビューアで正常に開けることを確認する SHALL
+5. WHEN 基本テスト画像を確認する THEN circle, triangle, rectangle, logoの画像は既に正常であることを確認する SHALL
+6. WHEN APIから返される画像データを受信する THEN それを正しいPNG形式で期待値として保存する機能がある SHALL
+7. WHEN 複数の画像合成パターン（2画像、3画像、異なるベース画像）をテストする THEN 各パターンに対応する期待値画像を生成できる SHALL
+8. WHEN 期待値画像を生成する THEN ファイル名（expected-2-images.png等）が内容を適切に表現している SHALL
+
+### Requirement 17: テスト出力ファイル管理
+
+**User Story:** 開発者として、テスト実行時に生成される一時的な出力ファイルと期待値ファイルを明確に区別したい。そうすることで、プロジェクトの整理された状態を維持できる。
+
+#### Acceptance Criteria
+
+1. WHEN ワークスペースルートにtest_decoded.png、test_output*.pngファイルを発見する THEN それらがテスト出力ファイルかAPIレスポンステストファイルかを判定する SHALL
+2. WHEN テスト出力ファイルと判定される THEN test/test-resultsディレクトリに移動し、用途を明確にする SHALL
+3. WHEN APIレスポンステストファイルと判定される THEN 削除するか適切な場所に移動する SHALL
+4. WHEN test/test-resultsに移動する THEN 後で削除可能であることを明示する SHALL
+5. WHEN 期待値として使用されるファイルを発見する THEN 削除して正しい期待値を再生成する SHALL
+
 ## 技術的制約
 
 - AWS CDK + Lambda + API Gateway + S3 + CloudFront構成
@@ -222,6 +249,8 @@
 - 対応画像形式：JPEG、PNG、GIF、WebP、TIFF、TGA
 - 1920x1080解像度での画像合成
 - v2.3.0スタイルの画像設定テーブルUI
+- テスト期待値画像の正しいPNG形式での管理
+- test/test-resultsディレクトリでのテスト出力ファイル管理
 
 ## 成功基準
 
@@ -235,3 +264,6 @@
 8. 動的設定管理による環境非依存性
 9. 1920x1080解像度での高品質出力
 10. フロントエンド画像合成機能の完全復旧
+11. テスト期待値画像の正しいPNG形式での管理
+12. テスト出力ファイルの適切な整理と管理
+13. 期待値画像修正・再生成スクリプトの提供
