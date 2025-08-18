@@ -45,6 +45,12 @@ export const useAppStore = defineStore('app', () => {
     loading.value.progress = Math.max(0, Math.min(100, progress))
   }
   
+  const updateLoadingMessage = (message: string) => {
+    if (loading.value.isLoading) {
+      loading.value.message = message
+    }
+  }
+  
   const stopLoading = () => {
     setLoading({
       isLoading: false,
@@ -188,6 +194,7 @@ export const useAppStore = defineStore('app', () => {
     // Actions
     setLoading,
     startLoading,
+    updateLoadingMessage,
     updateProgress,
     stopLoading,
     setError,

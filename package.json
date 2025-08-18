@@ -1,6 +1,6 @@
 {
   "name": "image-processor-api",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "description": "Advanced Image Composition REST API with Alpha Channel Support",
   "author": "AWS CDK Team",
   "license": "MIT",
