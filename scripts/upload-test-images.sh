@@ -1,7 +1,13 @@
 #!/bin/bash
 
-# 画像合成API - テスト画像アップロードスクリプト（defaultプロファイル対応）
+# 画像合成API - テスト画像アップロードスクリプト（3画像対応・defaultプロファイル対応）
 # Usage: ./upload-test-images.sh [bucket-name]
+# 
+# アップロード対象画像:
+# - aws-logo.png (ベース画像)
+# - circle_red.png (合成画像1)
+# - rectangle_blue.png (合成画像2) 
+# - triangle_green.png (合成画像3) ← 新規追加
 
 set -e
 
@@ -47,8 +53,8 @@ if [ ! -d "$IMAGE_DIR" ]; then
 fi
 
 # 各画像ファイルの確認とアップロード
-declare -a images=("aws-logo.png" "circle_red.png" "rectangle_blue.png")
-declare -a descriptions=("AWS Logo (ベース画像)" "赤い円 (合成画像1)" "青い四角形 (合成画像2)")
+declare -a images=("aws-logo.png" "circle_red.png" "rectangle_blue.png" "triangle_green.png")
+declare -a descriptions=("AWS Logo (ベース画像)" "赤い円 (合成画像1)" "青い四角形 (合成画像2)" "緑の三角形 (合成画像3)")
 
 echo ""
 echo "📤 画像アップロード開始..."
@@ -91,7 +97,8 @@ API_URL=$(aws cloudformation describe-stacks \
 
 if [ -n "$API_URL" ] && [ "$API_URL" != "None" ]; then
     echo "   API URL: $API_URL"
-    echo "   テスト: $API_URL?baseImage=test&image1=test&image2=test"
+    echo "   2画像テスト: $API_URL?baseImage=test&image1=test&image2=test"
+    echo "   3画像テスト: $API_URL?baseImage=test&image1=test&image2=test&image3=test"
 else
     echo "   ⚠️ API URLを取得できませんでした"
 fi

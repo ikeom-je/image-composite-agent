@@ -1,16 +1,18 @@
-# 🎨 画像合成REST API v2.0.3
+# 🎨 画像合成REST API v2.3.0
 
-高性能・アルファチャンネル対応の画像合成REST APIです。AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3、Vite、Tailwind CSSで構築されたフロントエンドアプリケーションも含まれており、S3にホスティングしてCloudFrontで配信します。
+高性能・アルファチャンネル対応の画像合成REST APIです。**3画像同時合成**に対応し、AWS CDK、Lambda、API Gatewayを使用して構築され、uvによる高速パッケージ管理を採用しています。Vue.js 3、Vite、Tailwind CSSで構築されたフロントエンドアプリケーションも含まれており、S3にホスティングしてCloudFrontで配信します。
 
 ## ✨ 主な特徴
 
+- **🎨 3画像同時合成**: 最大3つの画像を同時に合成（後方互換性完全保持）
+- **🔺 新しいテスト画像**: 緑色の三角形画像を追加（円・四角・三角の3形状）
 - **🚀 高性能**: ARM64アーキテクチャ + uvによる高速パッケージ管理
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
-- **⚡ 並列処理**: 複数画像の同時取得による高速化
+- **⚡ 並列処理**: 最大3画像の同時取得による高速化
 - **🌐 ブラウザフレンドリー**: 美しいHTML表示 + JavaScriptダウンロード
 - **🔧 柔軟な画像指定**: HTTP URL、S3パス、テスト画像に対応
 - **📱 レスポンシブ対応**: モバイルデバイスでも快適に利用可能
-- **🖥️ Vue.js フロントエンド**: 直感的なユーザーインターフェースでAPI機能を体験
+- **🖥️ テーブル形式UI**: 3画像の設定を横並びで直感的に操作
 
 ## 🏗️ アーキテクチャ
 
@@ -66,12 +68,12 @@ aws configure set region ap-northeast-1
 
 このプロジェクトは既存の `ImageProcessorApiStack` と整合性を保ちます：
 
-**既存スタック情報:**
+**現在のスタック情報:**
 - スタック名: `ImageProcessorApiStack`
 - API URL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
 - テストバケット: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
 - リソースバケット: `imageprocessorapistack-imageresourcesbucket76f0cd7-lyeuy5nd8rzd`
-- フロントエンドURL: `https://d2jokx0x4ou6mb.cloudfront.net`
+- フロントエンドURL: `https://d66gmb5py5515.cloudfront.net`
 
 ### 1. デプロイ
 
@@ -112,14 +114,18 @@ npm run deploy          # CDKスタックのデプロイ
 
 ### 4. 動作確認
 
-フロントエンドインターフェースで画像合成機能を試す：
+フロントエンドインターフェースで3画像合成機能を試す：
 ```
-https://d2jokx0x4ou6mb.cloudfront.net/
+https://d66gmb5py5515.cloudfront.net/
 ```
 
 または、APIエンドポイントで直接テスト：
-```
+```bash
+# 2画像合成（従来機能）
 https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test
+
+# 3画像合成（新機能）
+https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test
 ```
 
 ## 🧪 テスト
@@ -169,7 +175,13 @@ GET /images/composite
 | `image1` | 合成する1つ目の画像 | `test`, `s3://bucket/key`, `https://example.com/image.png` |
 | `image2` | 合成する2つ目の画像 | `test`, `s3://bucket/key`, `https://example.com/image.png` |
 
-### オプションパラメータ
+### オプションパラメータ（画像指定）
+
+| パラメータ | 説明 | 例 |
+|-----------|------|-----|
+| `image3` | 合成する3つ目の画像（オプション） | `test`, `s3://bucket/key`, `https://example.com/image.png` |
+
+### オプションパラメータ（配置・形式）
 
 | パラメータ | 説明 | デフォルト |
 |-----------|------|-----------|
@@ -183,31 +195,38 @@ GET /images/composite
 | `image2Height` | 2つ目の画像の高さ | 200 |
 | `image2X` | 2つ目の画像のX座標 | 右端から20px |
 | `image2Y` | 2つ目の画像のY座標 | 1つ目の画像の下 |
+| `image3Width` | 3つ目の画像の幅 | 300 |
+| `image3Height` | 3つ目の画像の高さ | 200 |
+| `image3X` | 3つ目の画像のX座標 | 20 |
+| `image3Y` | 3つ目の画像のY座標 | 20 |
 
 ## 🎯 使用例
 
 ### 基本的な使用例
 
 ```bash
-# HTML表示でテスト画像を合成
+# 2画像合成（従来機能）
 curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
 
+# 3画像合成（新機能）
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test"
+
 # PNG形式で直接ダウンロード
-curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&format=png" -o composite.png
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test&format=png" -o composite.png
 ```
 
 ### カスタム配置
 
 ```bash
-# 画像の位置とサイズを指定
-curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image1X=100&image1Y=100&image1Width=400&image1Height=300"
+# 3画像の位置とサイズを指定
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test&image1X=100&image1Y=100&image1Width=400&image1Height=300&image3X=800&image3Y=400"
 ```
 
 ### S3画像の使用
 
 ```bash
-# S3に保存された画像を使用
-curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=s3://my-bucket/base.png&image1=s3://my-bucket/overlay1.png&image2=s3://my-bucket/overlay2.png"
+# S3に保存された3画像を使用
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=s3://my-bucket/base.png&image1=s3://my-bucket/circle.png&image2=s3://my-bucket/rectangle.png&image3=s3://my-bucket/triangle.png"
 ```
 
 ## 🛠️ 技術仕様
@@ -215,10 +234,11 @@ curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 ### Lambda関数
 
 - **ランタイム**: Python 3.12
-- **アーキテクチャ**: ARM64（高性能・低コスト）
+- **アーキテクチャ**: X86_64（ライブラリ互換性重視）
 - **メモリ**: 1024MB
 - **タイムアウト**: 30秒
 - **パッケージ管理**: uv（高速Pythonパッケージマネージャー）
+- **並列処理**: 最大3画像の同時取得
 
 ### 主要ライブラリ
 
@@ -230,8 +250,9 @@ curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 
 - **画像形式**: PNG (RGBA)
 - **出力サイズ**: 1920x1080ピクセル
-- **透過サポート**: ✅ あり
+- **透過サポート**: ✅ あり（3画像すべて対応）
 - **エンコード**: Base64（API Gateway制限による）
+- **合成順序**: base → image1 → image2 → image3
 
 ## 📁 プロジェクト構造
 
@@ -243,12 +264,13 @@ image-processor-api/
 │   └── image-processor-api-stack.ts       # CDKスタック定義
 ├── lambda/
 │   └── python/
-│       ├── image_processor.py             # メインLambda関数
+│       ├── image_processor.py             # メインLambda関数（3画像対応）
 │       ├── requirements.txt               # Python依存関係
 │       └── images/                        # テスト画像
 │           ├── aws-logo.png              # ベース画像用
-│           ├── circle_red.png            # 合成画像1用
-│           └── rectangle_blue.png        # 合成画像2用
+│           ├── circle_red.png            # 合成画像1用（円）
+│           ├── rectangle_blue.png        # 合成画像2用（四角）
+│           └── triangle_green.png        # 合成画像3用（三角）← 新規追加
 ├── frontend/                             # Vue.js フロントエンド
 │   ├── src/                              # ソースコード
 │   │   ├── App.vue                       # メインコンポーネント
@@ -258,7 +280,8 @@ image-processor-api/
 │   ├── deploy-to-s3.sh                   # S3デプロイスクリプト
 │   └── package.json                      # 依存関係
 ├── scripts/
-│   ├── upload-test-images.sh             # テスト画像アップロード
+│   ├── generate_triangle_image.py        # 三角形画像生成スクリプト ← 新規追加
+│   ├── upload-test-images.sh             # テスト画像アップロード（3画像対応）
 │   └── update-cdk-stack.js               # CDKスタック更新スクリプト
 ├── cdk.json                              # CDK設定
 ├── package.json                          # Node.js依存関係

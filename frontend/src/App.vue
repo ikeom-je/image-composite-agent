@@ -18,84 +18,188 @@
       <div class="form-container">
         <h2>画像合成パラメータ</h2>
 
+        <!-- ベース画像選択 -->
         <div class="form-group">
-          <label>ベース画像:</label>
-          <select v-model="params.baseImage">
-            <option value="test">テスト画像 (aws-logo.png)</option>
+          <label class="form-label">ベース画像:</label>
+          <select v-model="params.baseImage" class="form-select">
+            <option value="test">テスト画像 (AWS Logo)</option>
             <option value="transparent">透明背景</option>
           </select>
         </div>
 
-        <div class="form-group">
-          <label>画像1:</label>
-          <select v-model="params.image1">
-            <option value="test">テスト画像 (circle_red.png)</option>
-            <option v-if="config?.s3BucketNames?.testImages"
-              :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">S3パス (circle_red.png)</option>
-          </select>
+        <!-- 3画像の選択と設定を横並びテーブル形式で表示 -->
+        <div class="images-config-section">
+          <h3 class="text-lg font-semibold mb-4">画像設定</h3>
+
+          <!-- 画像選択テーブル -->
+          <div class="table-container mb-6">
+            <table class="config-table">
+              <thead>
+                <tr>
+                  <th>画像</th>
+                  <th>画像1 (必須)</th>
+                  <th>画像2 (必須)</th>
+                  <th>画像3 (オプション)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="row-header">画像選択</td>
+                  <td>
+                    <select v-model="params.image1" class="form-select">
+                      <option value="test">テスト画像 (円)</option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
+                        S3: circle_red.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
+                        S3: rectangle_blue.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
+                        S3: triangle_green.png
+                      </option>
+                    </select>
+                  </td>
+                  <td>
+                    <select v-model="params.image2" class="form-select">
+                      <option value="test">テスト画像 (四角)</option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
+                        S3: circle_red.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
+                        S3: rectangle_blue.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
+                        S3: triangle_green.png
+                      </option>
+                    </select>
+                  </td>
+                  <td>
+                    <select v-model="params.image3" class="form-select" :class="{ 'disabled': !params.image3 }">
+                      <option value="">選択しない</option>
+                      <option value="test">テスト画像 (三角)</option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/circle_red.png`">
+                        S3: circle_red.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">
+                        S3: rectangle_blue.png
+                      </option>
+                      <option v-if="config?.s3BucketNames?.testImages"
+                        :value="`s3://${config.s3BucketNames.testImages}/images/triangle_green.png`">
+                        S3: triangle_green.png
+                      </option>
+                    </select>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 位置・サイズ設定テーブル -->
+          <div class="table-container mb-6">
+            <table class="config-table">
+              <thead>
+                <tr>
+                  <th>設定項目</th>
+                  <th>画像1</th>
+                  <th>画像2</th>
+                  <th :class="{ 'disabled-header': !params.image3 }">
+                    画像3 {{ params.image3 ? '' : '(無効)' }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="row-header">X座標</td>
+                  <td>
+                    <input v-model.number="params.image1X" type="number" class="form-input" />
+                  </td>
+                  <td>
+                    <input v-model.number="params.image2X" type="number" class="form-input" />
+                  </td>
+                  <td :class="{ 'disabled-cell': !params.image3 }">
+                    <input v-model.number="params.image3X" type="number" class="form-input"
+                      :disabled="!params.image3" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="row-header">Y座標</td>
+                  <td>
+                    <input v-model.number="params.image1Y" type="number" class="form-input" />
+                  </td>
+                  <td>
+                    <input v-model.number="params.image2Y" type="number" class="form-input" />
+                  </td>
+                  <td :class="{ 'disabled-cell': !params.image3 }">
+                    <input v-model.number="params.image3Y" type="number" class="form-input"
+                      :disabled="!params.image3" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="row-header">幅</td>
+                  <td>
+                    <input v-model.number="params.image1Width" type="number" class="form-input" />
+                  </td>
+                  <td>
+                    <input v-model.number="params.image2Width" type="number" class="form-input" />
+                  </td>
+                  <td :class="{ 'disabled-cell': !params.image3 }">
+                    <input v-model.number="params.image3Width" type="number" class="form-input"
+                      :disabled="!params.image3" />
+                  </td>
+                </tr>
+                <tr>
+                  <td class="row-header">高さ</td>
+                  <td>
+                    <input v-model.number="params.image1Height" type="number" class="form-input" />
+                  </td>
+                  <td>
+                    <input v-model.number="params.image2Height" type="number" class="form-input" />
+                  </td>
+                  <td :class="{ 'disabled-cell': !params.image3 }">
+                    <input v-model.number="params.image3Height" type="number" class="form-input"
+                      :disabled="!params.image3" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
+        <!-- 出力形式選択 -->
         <div class="form-group">
-          <label>画像1の位置 X:</label>
-          <input type="number" v-model.number="params.image1X" />
-        </div>
-
-        <div class="form-group">
-          <label>画像1の位置 Y:</label>
-          <input type="number" v-model.number="params.image1Y" />
-        </div>
-
-        <div class="form-group">
-          <label>画像1の幅:</label>
-          <input type="number" v-model.number="params.image1Width" />
-        </div>
-
-        <div class="form-group">
-          <label>画像1の高さ:</label>
-          <input type="number" v-model.number="params.image1Height" />
-        </div>
-
-        <div class="form-group">
-          <label>画像2:</label>
-          <select v-model="params.image2">
-            <option value="test">テスト画像 (rectangle_blue.png)</option>
-            <option v-if="config?.s3BucketNames?.testImages"
-              :value="`s3://${config.s3BucketNames.testImages}/images/rectangle_blue.png`">S3パス (rectangle_blue.png)
-            </option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>画像2の位置 X:</label>
-          <input type="number" v-model.number="params.image2X" />
-        </div>
-
-        <div class="form-group">
-          <label>画像2の位置 Y:</label>
-          <input type="number" v-model.number="params.image2Y" />
-        </div>
-
-        <div class="form-group">
-          <label>画像2の幅:</label>
-          <input type="number" v-model.number="params.image2Width" />
-        </div>
-
-        <div class="form-group">
-          <label>画像2の高さ:</label>
-          <input type="number" v-model.number="params.image2Height" />
-        </div>
-
-        <div class="form-group">
-          <label>出力形式:</label>
-          <select v-model="params.format">
+          <label class="form-label">出力形式:</label>
+          <select v-model="params.format" class="form-select">
             <option value="html">HTML表示</option>
             <option value="png">PNG直接ダウンロード</option>
           </select>
         </div>
 
-        <button @click="generateImage" :disabled="isLoading">
-          {{ isLoading ? '処理中...' : '画像を生成' }}
-        </button>
+        <!-- 画像生成ボタン（目立つデザイン） -->
+        <div class="generate-button-section">
+          <button @click="generateImage" :disabled="isLoading || !params.image1 || !params.image2"
+            class="generate-button">
+            <span v-if="isLoading" class="loading-content">
+              <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
+              </svg>
+              生成中...
+            </span>
+            <span v-else class="button-content">
+              🎨 {{ params.image3 ? '3画像を合成' : '2画像を合成' }}
+            </span>
+          </button>
+        </div>
       </div>
 
       <div class="result-container">
@@ -161,15 +265,21 @@ export default {
       params: {
         baseImage: 'test',
         image1: 'test',
-        image1X: 20,
+        image1X: 1600,
         image1Y: 20,
         image1Width: 300,
         image1Height: 200,
         image2: 'test',
-        image2X: 20,
+        image2X: 1600,
         image2Y: 240,
         image2Width: 300,
         image2Height: 200,
+        // 新規追加: 第3画像パラメータ
+        image3: '',
+        image3X: 20,
+        image3Y: 20,
+        image3Width: 300,
+        image3Height: 200,
         format: 'html'
       },
       resultUrl: '',
@@ -178,56 +288,90 @@ export default {
       error: null,
       examples: [
         {
-          title: '基本的な合成',
-          description: 'テスト画像を使用した基本的な合成例',
+          title: '🎨 基本的な3画像合成',
+          description: '円・四角・三角の3つの図形を合成',
           params: {
             baseImage: 'test',
             image1: 'test',
-            image1X: 20,
+            image1X: 1600,
             image1Y: 20,
             image1Width: 300,
             image1Height: 200,
             image2: 'test',
-            image2X: 20,
+            image2X: 1600,
             image2Y: 240,
             image2Width: 300,
             image2Height: 200,
+            image3: 'test',
+            image3X: 20,
+            image3Y: 20,
+            image3Width: 300,
+            image3Height: 200,
             format: 'html'
           }
         },
         {
-          title: 'カスタム配置',
-          description: '画像の位置とサイズを調整した例',
+          title: '🔺 三角形を中央配置',
+          description: '三角形を画面中央に大きく配置',
           params: {
-            baseImage: 'test',
+            baseImage: 'transparent',
             image1: 'test',
             image1X: 100,
             image1Y: 100,
-            image1Width: 400,
-            image1Height: 300,
+            image1Width: 300,
+            image1Height: 200,
             image2: 'test',
-            image2X: 500,
+            image2X: 1500,
             image2Y: 100,
-            image2Width: 200,
+            image2Width: 300,
             image2Height: 200,
+            image3: 'test',
+            image3X: 800,
+            image3Y: 400,
+            image3Width: 400,
+            image3Height: 300,
             format: 'html'
           }
         },
         {
-          title: 'S3画像の使用',
-          description: 'S3に保存された画像を使用した例',
+          title: '📐 基本的な2画像合成',
+          description: '従来の2画像合成（後方互換性）',
+          params: {
+            baseImage: 'test',
+            image1: 'test',
+            image1X: 1600,
+            image1Y: 20,
+            image1Width: 300,
+            image1Height: 200,
+            image2: 'test',
+            image2X: 1600,
+            image2Y: 240,
+            image2Width: 300,
+            image2Height: 200,
+            image3: '',
+            format: 'html'
+          }
+        },
+        {
+          title: '☁️ S3画像を使用した3画像合成',
+          description: 'S3に保存された画像を使用',
           params: {
             baseImage: 'test',
             image1: 's3://placeholder/images/circle_red.png',
-            image1X: 20,
+            image1X: 1600,
             image1Y: 20,
             image1Width: 300,
             image1Height: 200,
             image2: 's3://placeholder/images/rectangle_blue.png',
-            image2X: 20,
+            image2X: 1600,
             image2Y: 240,
             image2Width: 300,
             image2Height: 200,
+            image3: 's3://placeholder/images/triangle_green.png',
+            image3X: 20,
+            image3Y: 20,
+            image3Width: 300,
+            image3Height: 200,
             format: 'html'
           }
         }
@@ -269,7 +413,7 @@ export default {
     },
 
     /**
-     * 使用例のS3パスを動的に更新
+     * 使用例のS3パスを動的に更新（3画像対応）
      */
     updateExamplesWithS3Paths() {
       if (this.config?.s3BucketNames?.testImages) {
@@ -282,6 +426,9 @@ export default {
           }
           if (example.params.image2?.startsWith('s3://placeholder')) {
             example.params.image2 = `s3://${bucketName}/images/rectangle_blue.png`;
+          }
+          if (example.params.image3?.startsWith('s3://placeholder')) {
+            example.params.image3 = `s3://${bucketName}/images/triangle_green.png`;
           }
         });
       }
@@ -297,12 +444,34 @@ export default {
     buildApiUrl() {
       const url = new URL(this.apiBaseUrl);
 
-      // パラメータを追加
-      Object.keys(this.params).forEach(key => {
-        if (this.params[key] !== null && this.params[key] !== undefined) {
-          url.searchParams.append(key, this.params[key]);
-        }
-      });
+      // 必須パラメータを追加
+      if (this.params.baseImage) url.searchParams.set('baseImage', this.params.baseImage);
+      url.searchParams.set('image1', this.params.image1);
+      url.searchParams.set('image2', this.params.image2);
+
+      // 画像1のパラメータ
+      url.searchParams.set('image1X', this.params.image1X);
+      url.searchParams.set('image1Y', this.params.image1Y);
+      url.searchParams.set('image1Width', this.params.image1Width);
+      url.searchParams.set('image1Height', this.params.image1Height);
+
+      // 画像2のパラメータ
+      url.searchParams.set('image2X', this.params.image2X);
+      url.searchParams.set('image2Y', this.params.image2Y);
+      url.searchParams.set('image2Width', this.params.image2Width);
+      url.searchParams.set('image2Height', this.params.image2Height);
+
+      // 第3画像のパラメータ（指定されている場合のみ）
+      if (this.params.image3) {
+        url.searchParams.set('image3', this.params.image3);
+        url.searchParams.set('image3X', this.params.image3X);
+        url.searchParams.set('image3Y', this.params.image3Y);
+        url.searchParams.set('image3Width', this.params.image3Width);
+        url.searchParams.set('image3Height', this.params.image3Height);
+      }
+
+      // 出力形式
+      url.searchParams.set('format', this.params.format);
 
       return url.toString();
     },
@@ -675,6 +844,154 @@ footer {
   border-radius: 8px;
 }
 
+/* 新しいテーブル形式UIのスタイル */
+.images-config-section {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  margin: 20px 0;
+}
+
+.table-container {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f7fafc;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background-color: #cbd5e0;
+  border-radius: 4px;
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border-color);
+  background-color: white;
+}
+
+.config-table th,
+.config-table td {
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.config-table th {
+  background-color: #f1f3f4;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.config-table .row-header {
+  background-color: #f8f9fa;
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.config-table .disabled-header {
+  background-color: #e9ecef;
+  color: #6c757d;
+}
+
+.config-table .disabled-cell {
+  background-color: #f8f9fa;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+
+.form-select,
+.form-input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-input:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.form-select.disabled {
+  background-color: #f8f9fa;
+}
+
+/* 目立つ画像生成ボタンのスタイル */
+.generate-button-section {
+  text-align: center;
+  margin: 30px 0;
+}
+
+.generate-button {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  font-weight: bold;
+  padding: 16px 32px;
+  border-radius: 8px;
+  font-size: 18px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(0);
+  transition: all 0.2s ease;
+  min-width: 200px;
+  min-height: 56px;
+  border: none;
+  cursor: pointer;
+}
+
+.generate-button:not(:disabled):hover {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.generate-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.loading-content,
+.button-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.spinner-icon {
+  width: 20px;
+  height: 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 768px) {
   .main-content {
     flex-direction: column;
@@ -687,6 +1004,27 @@ footer {
 
   .example-card {
     min-width: 100%;
+  }
+
+  .config-table {
+    font-size: 12px;
+  }
+
+  .config-table th,
+  .config-table td {
+    padding: 8px;
+  }
+
+  .form-select,
+  .form-input {
+    font-size: 12px;
+    padding: 6px;
+  }
+
+  .generate-button {
+    font-size: 16px;
+    padding: 14px 28px;
+    min-width: 180px;
   }
 }
 </style>
