@@ -102,6 +102,13 @@ const params = ref({
     height: 300
   },
   
+  // 動画生成設定
+  videoGeneration: {
+    enabled: false,
+    duration: 3,
+    format: 'XMF'
+  },
+  
   // 出力形式
   format: 'html'
 })
@@ -236,6 +243,13 @@ const buildApiUrl = (params) => {
     // ... その他のimage3パラメータ
   }
   
+  // 動画生成パラメータ（オプション）
+  if (params.videoGeneration.enabled) {
+    url.searchParams.set('generate_video', 'true')
+    url.searchParams.set('video_duration', params.videoGeneration.duration.toString())
+    url.searchParams.set('video_format', params.videoGeneration.format)
+  }
+  
   // 出力形式
   url.searchParams.set('format', params.format)
   
@@ -279,6 +293,12 @@ interface ImageConfig {
   height: number // 高さ（10-1080）
 }
 
+interface VideoGenerationConfig {
+  enabled: boolean
+  duration: number    // 秒数（デフォルト3秒）
+  format: string      // フォーマット（デフォルトXMF）
+}
+
 interface CompositionParams {
   canvas_width: 1920
   canvas_height: 1080
@@ -286,6 +306,7 @@ interface CompositionParams {
   image1: ImageConfig
   image2: ImageConfig
   image3: ImageConfig
+  videoGeneration: VideoGenerationConfig
   format: 'html' | 'png'
 }
 ```
