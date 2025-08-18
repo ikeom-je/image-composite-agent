@@ -21,7 +21,8 @@ test.describe('画像合成REST API', () => {
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('image/png');
     
-    const buffer = await response.body();
+    const imageData = await response.text();
+    const buffer = Buffer.from(imageData, 'base64');
     expect(buffer.length).toBeGreaterThan(1000); // PNGデータは少なくともある程度のサイズがあるはず
   });
 

@@ -234,11 +234,29 @@ npm run test:all-e2e        # 全E2Eテスト実行
   - `test_image_processor.py`: 画像処理機能のテスト
   - `test_upload_manager.py`: アップロード管理機能のテスト
 - `test/e2e/`: PlaywrightによるE2Eテスト
+  - `api-validation.api.spec.ts`: API機能の検証テスト
   - `image-processor.api.spec.ts`: API機能のテスト
   - `upload-functionality.spec.ts`: アップロード機能のテスト
   - `image-selection.spec.ts`: 画像選択機能のテスト
   - `integration-workflow.spec.ts`: 統合ワークフローのテスト
-- `test/run-comprehensive-tests.sh`: 包括的テスト実行スクリプト
+- `test/test-assets/`: テスト用画像データ
+  - `expected-*.png`: 期待値画像（正しいPNG形式で管理）
+  - 基本テスト画像（lambda/python/images/内の正常なPNG画像）
+- `test/test-results/`: テスト実行時の出力ファイル（一時的、削除可能）
+- `scripts/fix-test-assets.py`: 期待値画像修正スクリプト
+- `scripts/regenerate-expected-images.py`: 期待値画像再生成スクリプト
+
+### テスト用画像管理
+
+期待値画像は正しいPNG形式で管理されており、以下のスクリプトで維持できます：
+
+```bash
+# 期待値画像の形式確認と修正
+npm run fix-test-assets
+
+# APIから期待値画像を再生成（統合された機能）
+npm run regenerate-expected-images
+```
 
 ### テストカバレッジ
 

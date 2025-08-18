@@ -2,7 +2,7 @@
   <div class="image-selector-compact">
     <!-- シンプルな選択ドロップダウン -->
     <select 
-      v-model="selectedValue" 
+      v-model="displayValue" 
       @change="handleSelectionChange" 
       class="form-select-compact"
       :class="{ 'required': required && !modelValue }"
@@ -14,21 +14,16 @@
         <option value="rectangle">🔷 青い四角</option>
         <option value="triangle">🔺 緑の三角</option>
       </optgroup>
-      <optgroup v-if="s3Images.length > 0" label="S3アップロード画像">
+      <optgroup label="S3アップロード画像">
+        <option value="s3-gallery">📷 S3画像から選択...</option>
+        <!-- 選択されたS3画像がある場合の表示用オプション -->
         <option 
-          v-for="image in s3Images" 
-          :key="image.key"
-          :value="image.s3Path"
-          :title="`${image.fileName} (${formatFileSize(image.size)})`"
+          v-if="selectedS3ImageDisplay" 
+          :value="selectedS3ImageDisplay.value"
+          selected
         >
-          📷 {{ truncateFileName(image.fileName) }}
+          {{ selectedS3ImageDisplay.label }}
         </option>
-      </optgroup>
-      <optgroup v-else-if="!loadingImages" label="S3アップロード画像">
-        <option disabled>アップロードされた画像がありません</option>
-      </optgroup>
-      <optgroup v-else label="S3アップロード画像">
-        <option disabled>読み込み中...</option>
       </optgroup>
     </select>
     
@@ -43,6 +38,75 @@
       <span v-if="loadingImages">🔄</span>
       <span v-else>🔄</span>
     </button>
+
+    <!-- S3画像選択モーダル -->
+    <div v-if="showS3Modal" class="modal-overlay" @click="closeS3Modal">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>S3画像を選択</h3>
+          <button @click="closeS3Modal" class="close-button">✕</button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- 読み込み中 -->
+          <div v-if="loadingImages" class="loading-state">
+            <div class="spinner"></div>
+            <p>画像を読み込み中...</p>
+          </div>
+          
+          <!-- 画像がない場合 -->
+          <div v-else-if="s3Images.length === 0" class="empty-state">
+            <div class="empty-icon">📷</div>
+            <p>アップロードされた画像がありません</p>
+            <small>画像をアップロードしてから選択してください</small>
+          </div>
+          
+          <!-- 画像一覧 -->
+          <div v-else class="image-gallery">
+            <div 
+              v-for="image in s3Images" 
+              :key="image.key"
+              class="image-item"
+              :class="{ 'selected': selectedS3Image?.key === image.key }"
+              @click="selectS3Image(image)"
+            >
+              <div class="image-thumbnail">
+                <img 
+                  :src="image.thumbnailUrl" 
+                  :alt="image.fileName"
+                  @error="handleImageError"
+                  loading="lazy"
+                />
+                <div v-if="selectedS3Image?.key === image.key" class="selection-indicator">
+                  ✓
+                </div>
+              </div>
+              <div class="image-info">
+                <div class="image-name" :title="image.fileName">
+                  {{ truncateFileName(image.fileName) }}
+                </div>
+                <div class="image-meta">
+                  {{ formatFileSize(image.size) }} • {{ formatDate(image.lastModified) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeS3Modal" class="cancel-button">
+            キャンセル
+          </button>
+          <button 
+            @click="confirmS3Selection" 
+            :disabled="!selectedS3Image"
+            class="confirm-button"
+          >
+            選択
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -76,6 +140,7 @@ const notificationStore = useNotificationStore()
 
 // Reactive data
 const selectedValue = ref('')
+const displayValue = ref('')
 const s3Images = ref<Array<{
   key: string
   s3Path: string
@@ -86,10 +151,38 @@ const s3Images = ref<Array<{
   thumbnailUrl: string
 }>>([])
 const loadingImages = ref(false)
+const showS3Modal = ref(false)
+const selectedS3Image = ref<{
+  key: string
+  s3Path: string
+  fileName: string
+  size: number
+  lastModified: string
+  contentType: string
+  thumbnailUrl: string
+} | null>(null)
 
 // Computed
 const showRefreshButton = computed(() => {
-  return s3Images.value.length > 0 || selectedValue.value.startsWith('s3://')
+  return s3Images.value.length > 0 || props.modelValue.startsWith('s3://')
+})
+
+const selectedS3ImageDisplay = computed(() => {
+  if (props.modelValue.startsWith('s3://')) {
+    const foundImage = s3Images.value.find(img => img.s3Path === props.modelValue)
+    if (foundImage) {
+      return {
+        value: foundImage.s3Path,
+        label: `📷 ${truncateFileName(foundImage.fileName)}`
+      }
+    } else {
+      return {
+        value: props.modelValue,
+        label: '📷 S3画像 (選択済み)'
+      }
+    }
+  }
+  return null
 })
 
 const getAutoSelectDescription = () => {
@@ -103,7 +196,7 @@ const getAutoSelectDescription = () => {
 
 // Methods
 const handleSelectionChange = () => {
-  const value = selectedValue.value
+  const value = displayValue.value
   
   if (!value) {
     emit('update:modelValue', '')
@@ -122,10 +215,60 @@ const handleSelectionChange = () => {
       'triangle': `s3://${testBucket}/images/triangle_green.png`
     }
     emit('update:modelValue', testImageMap[value as keyof typeof testImageMap])
+  } else if (value === 's3-gallery') {
+    // S3画像ギャラリーを開く
+    openS3Modal()
   } else if (value.startsWith('s3://')) {
-    // S3画像を直接選択
-    emit('update:modelValue', value)
+    // 既に選択されているS3画像 - 何もしない
+    return
   }
+}
+
+const openS3Modal = async () => {
+  showS3Modal.value = true
+  selectedS3Image.value = null
+  
+  // S3画像を読み込み（まだ読み込まれていない場合）
+  if (s3Images.value.length === 0) {
+    await loadS3Images()
+  }
+}
+
+const closeS3Modal = () => {
+  showS3Modal.value = false
+  selectedS3Image.value = null
+  // ドロップダウンを元に戻す
+  updateDisplayValue()
+}
+
+const selectS3Image = (image: any) => {
+  selectedS3Image.value = image
+}
+
+const confirmS3Selection = () => {
+  if (selectedS3Image.value) {
+    emit('update:modelValue', selectedS3Image.value.s3Path)
+    showS3Modal.value = false
+    
+    if (notificationStore) {
+      notificationStore.showSuccess(`${selectedS3Image.value.fileName} を選択しました`)
+    }
+  }
+}
+
+const handleImageError = (event: Event) => {
+  const img = event.target as HTMLImageElement
+  img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwIiB5PSI1MCIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOTk5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+'
+}
+
+const formatDate = (dateString: string): string => {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('ja-JP', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 const loadS3Images = async () => {
@@ -177,13 +320,14 @@ const refreshImages = async () => {
   }
 }
 
-const updateSelectionFromValue = (value: string) => {
-  console.log(`[ImageSelector] Updating selection from value: ${value}`)
+const updateDisplayValue = () => {
+  const value = props.modelValue
+  console.log(`[ImageSelector] Updating display from value: ${value}`)
   
   if (!value) {
-    selectedValue.value = ''
+    displayValue.value = ''
   } else if (value === 'test') {
-    selectedValue.value = 'test'
+    displayValue.value = 'test'
   } else if (value.startsWith('s3://')) {
     const config = configStore.config
     const testBucket = config?.s3BucketNames?.testImages
@@ -195,28 +339,20 @@ const updateSelectionFromValue = (value: string) => {
       value.includes(`${testBucket}/images/triangle_green.png`)
     )) {
       if (value.includes('circle_red.png')) {
-        selectedValue.value = 'circle'
+        displayValue.value = 'circle'
       } else if (value.includes('rectangle_blue.png')) {
-        selectedValue.value = 'rectangle'
+        displayValue.value = 'rectangle'
       } else if (value.includes('triangle_green.png')) {
-        selectedValue.value = 'triangle'
+        displayValue.value = 'triangle'
       }
     } else {
-      // S3アップロード画像
-      console.log(`[ImageSelector] Setting S3 upload image: ${value}`)
-      selectedValue.value = value
+      // S3アップロード画像の場合は、selectedS3ImageDisplayで処理される
+      displayValue.value = value
       
       // S3画像一覧が空の場合は読み込む
       if (s3Images.value.length === 0) {
         console.log('[ImageSelector] Loading S3 images because list is empty')
         loadS3Images()
-      } else {
-        // 既存の画像一覧に含まれているかチェック
-        const foundImage = s3Images.value.find(img => img.s3Path === value)
-        if (!foundImage) {
-          console.log('[ImageSelector] Image not found in current list, refreshing')
-          loadS3Images()
-        }
       }
     }
   }
@@ -238,11 +374,11 @@ const formatFileSize = (bytes: number): string => {
 }
 
 // Watchers
-watch(() => props.modelValue, updateSelectionFromValue, { immediate: true })
+watch(() => props.modelValue, updateDisplayValue, { immediate: true })
 
 // Lifecycle
 onMounted(() => {
-  updateSelectionFromValue(props.modelValue)
+  updateDisplayValue()
   // 初期S3画像読み込み
   loadS3Images()
   
@@ -317,6 +453,238 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+/* モーダルスタイル */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  max-width: 800px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.close-button:hover {
+  background: #f0f0f0;
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+}
+
+.spinner {
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top: 3px solid #0078d7;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  text-align: center;
+  color: #666;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 15px;
+  opacity: 0.5;
+}
+
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+  padding: 10px 0;
+}
+
+.image-item {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.image-item:hover {
+  border-color: #0078d7;
+  box-shadow: 0 4px 12px rgba(0, 120, 215, 0.2);
+  transform: translateY(-2px);
+}
+
+.image-item.selected {
+  border-color: #0078d7;
+  box-shadow: 0 0 0 2px rgba(0, 120, 215, 0.3);
+}
+
+.image-thumbnail {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  overflow: hidden;
+  background: #f8f9fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-thumbnail img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.image-item:hover .image-thumbnail img {
+  transform: scale(1.05);
+}
+
+.selection-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #0078d7;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.image-info {
+  padding: 12px;
+}
+
+.image-name {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-meta {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.cancel-button,
+.confirm-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.3s;
+}
+
+.cancel-button {
+  background: #f8f9fa;
+  color: #666;
+  border: 1px solid #dee2e6;
+}
+
+.cancel-button:hover {
+  background: #e9ecef;
+}
+
+.confirm-button {
+  background: #0078d7;
+  color: white;
+}
+
+.confirm-button:hover:not(:disabled) {
+  background: #106ebe;
+}
+
+.confirm-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
 /* レスポンシブデザイン */
 @media (max-width: 768px) {
   .form-select-compact {
@@ -328,6 +696,29 @@ onMounted(() => {
     width: 28px;
     height: 28px;
     padding: 6px;
+  }
+
+  .modal-overlay {
+    padding: 10px;
+  }
+
+  .modal-content {
+    max-height: 90vh;
+  }
+
+  .image-gallery {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .image-thumbnail {
+    height: 120px;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 15px;
   }
 }
 </style>
