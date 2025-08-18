@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const FRONTEND_URL = 'https://d66gmb5py5515.cloudfront.net';
-const API_URL = 'https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://frontend.example.com';
+const API_URL = process.env.API_URL || 'https://api.example.com/prod/images/composite';
 
 test.describe('フロントエンドAPI接続テスト', () => {
   test.beforeEach(async ({ page }) => {

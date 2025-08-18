@@ -1,24 +1,36 @@
-const { defineConfig } = require('vite')
-const vue = require('@vitejs/plugin-vue')
-const { fileURLToPath } = require('node:url')
-const path = require('node:path')
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'node:url'
 
-// https://vitejs.dev/config/
-module.exports = defineConfig({
+export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
-    }
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
   },
-  base: './',
   build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
     sourcemap: false,
+    minify: 'terser',
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['vue', 'axios']
+          vendor: ['vue', 'vue-router', 'pinia'],
+          utils: ['axios']
         }
+      }
+    }
+  },
+  server: {
+    port: 3000,
+    host: true,
+    proxy: {
+      '/api': {
+        target: process.env.API_URL || 'https://api.example.com/prod',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }
