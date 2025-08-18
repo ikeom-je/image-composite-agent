@@ -372,3 +372,114 @@ curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 - 「net::ERR_NAME_NOT_RESOLVED」エラーが完全に解消
 - 全てのPlaywrightテストがパス
 - ブラウザコンソールでのネットワークエラーが解消
+#
+# 2025-07-30: 第3画像合成機能の追加 v2.3.0
+
+### 新機能の追加
+- **第3画像合成機能**: 既存の2画像合成システムを拡張し、3つの画像を同時に合成できる機能を追加
+- **三角形テスト画像**: 緑色の三角形画像（triangle_green.png）を生成・追加
+- **後方互換性**: 既存の2画像合成機能を完全に保持
+
+### Lambda関数の拡張
+1. **画像取得エンジンの拡張**:
+   - `fetch_image`関数でimage3タイプの処理を追加
+   - image_type="image3"の場合にtriangle_green.pngを自動選択
+
+2. **画像合成エンジンの拡張**:
+   - `create_composite_image`関数を3画像対応に拡張
+   - 合成順序: base_img → image1 → image2 → image3
+   - アルファチャンネル対応の3画像合成処理
+
+3. **ハンドラー関数の拡張**:
+   - image3パラメータ（image3X, image3Y, image3Width, image3Height）の処理を追加
+   - 3画像の並列取得処理（ThreadPoolExecutorのmax_workersを3に拡張）
+   - 後方互換性を保持（image3未指定時は2画像合成）
+
+4. **HTMLレスポンスの拡張**:
+   - 3画像対応の技術情報表示
+   - 動的な合成パラメータテーブル生成
+   - API使用例の3画像対応
+
+### フロントエンドの大幅改善
+1. **テーブル形式UIの実装**:
+   - 画像選択を横並びテーブル形式で表示
+   - 位置・サイズ設定を横並びテーブル形式で表示
+   - 画像1（必須）、画像2（必須）、画像3（オプション）の明確な区分
+
+2. **目立つ画像生成ボタン**:
+   - グラデーション背景とホバーエフェクト
+   - ローディング状態の表示（スピナーアニメーション）
+   - 2画像/3画像合成に応じたボタンテキストの動的変更
+
+3. **使用例の拡張**:
+   - 「🎨 基本的な3画像合成」（円・四角・三角）
+   - 「🔺 三角形を中央配置」
+   - 「📐 基本的な2画像合成」（後方互換性）
+   - 「☁️ S3画像を使用した3画像合成」
+
+4. **API通信機能の拡張**:
+   - image3パラメータの条件付き送信
+   - buildApiUrl関数の3画像対応
+
+### 三角形画像の生成と配置
+1. **画像生成スクリプト**:
+   - `scripts/generate_triangle_image.py`を作成
+   - サイズ: 400x400ピクセル、色: 緑色（#22c55e）
+   - 透過背景（アルファチャンネル）対応のPNG形式
+
+2. **S3アップロード**:
+   - `scripts/upload-test-images.sh`を3画像対応に拡張
+   - triangle_green.pngをテストバケットにアップロード
+   - アップロード確認とテスト例の更新
+
+### バージョン管理
+- **バージョン**: v2.2.0 → v2.3.0（新機能追加のためマイナーバージョンアップ）
+- **更新対象**:
+  - Lambda関数のHTMLレスポンス
+  - ダウンロードファイル名
+  - エラーページ
+  - ログメッセージ
+
+### 技術的改善点
+1. **パフォーマンス最適化**:
+   - 3画像の並列取得による処理時間の最小化
+   - ThreadPoolExecutorのmax_workersを動的に調整
+
+2. **エラーハンドリング強化**:
+   - 3画像合成特有のエラー処理
+   - 後方互換性を保持したパラメータ検証
+
+3. **UI/UXの向上**:
+   - テーブル形式による設定の視認性向上
+   - レスポンシブデザインの改善
+   - 無効状態の適切な表示
+
+### デプロイ情報
+- **API URL**: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+- **フロントエンドURL**: `https://d66gmb5py5515.cloudfront.net`
+- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+
+### 動作確認結果
+- ✅ 2画像合成の後方互換性: 正常動作
+- ✅ 3画像合成の新機能: 正常動作
+- ✅ 三角形画像の使用: 正常動作
+- ✅ フロントエンドUI: 正常動作
+- ✅ API直接呼び出し: 正常動作
+
+### API使用例
+```bash
+# 2画像合成（後方互換性）
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
+
+# 3画像合成（新機能）
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test"
+
+# PNG直接ダウンロード
+curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test&format=png" -o composite.png
+```
+
+### 今後の拡張予定
+- 包括的なテストスイートの実装
+- パフォーマンステストの実行
+- 追加の画像形状（星形、多角形など）の対応
+- 画像の回転・変形機能の追加
