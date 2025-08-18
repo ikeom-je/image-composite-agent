@@ -1,433 +1,255 @@
+"""
+画像合成REST API メインハンドラー - v2.4.2
+
+2つまたは3つの画像を合成してPNG形式で出力するLambda関数。
+HTML表示とPNG直接ダウンロードの両方に対応。
+"""
+
 import json
 import base64
-import logging
 import io
 import os
-import sys
-import re
-from urllib.parse import urlparse
-from typing import Dict, Any, Optional, Tuple, Union
-import concurrent.futures
+import logging
+import time
+import uuid
+from datetime import datetime
+from typing import Dict, Any, Optional
 
-# パッケージのインポート
-try:
-    import requests
-    import boto3
-    from botocore.exceptions import ClientError
-    from PIL import Image
-except ImportError as e:
-    logger = logging.getLogger()
-    logger.error(f"Failed to import required packages: {e}")
-    raise
+from PIL import Image
+from image_fetcher import fetch_images_parallel
+from image_compositor import create_composite_image, parse_image_parameters
+from test_image_generator import generate_circle_image, generate_rectangle_image, generate_triangle_image
+from error_handler import (
+    handle_image_error, create_error_response, log_request_info, log_response_info,
+    ParameterError, ImageFetchError, ImageProcessingError, ValidationError
+)
 
-# ロガーの設定
-logger = logging.getLogger()
+# ログ設定
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# バージョン情報
+VERSION = "2.4.2"
 
-def fetch_image_from_s3(bucket_name: str, object_key: str) -> Image.Image:
+
+def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
     """
-    S3バケットから画像を取得し、Pillowイメージとして返す
+    統一されたレスポンス形式
     
     Args:
-        bucket_name: S3バケット名
-        object_key: S3オブジェクトのキー
+        status_code: HTTPステータスコード
+        body: レスポンスボディ
+        headers: 追加ヘッダー
         
     Returns:
-        PIL.Image.Image: ロードされた画像
+        Dict: API Gateway用のレスポンス
     """
-    logger.info(f"Fetching image from S3: {bucket_name}/{object_key}")
-
-    try:
-        # S3クライアントの作成
-        s3_client = boto3.client('s3')
-        
-        # S3からオブジェクトを取得
-        response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
-        
-        # レスポンスのボディをPillow Imageに変換
-        img = Image.open(io.BytesIO(response['Body'].read()))
-        
-        # 画像モードの確認とアルファチャネルの処理
-        logger.info(f"S3 image mode: {img.mode}, size: {img.size}")
-        
-        # RGBAモードに変換（透過を扱うため）
-        if img.mode != 'RGBA':
-            img = img.convert('RGBA')
-            logger.info(f"Converted S3 image to RGBA mode")
-        
-        # 透明ピクセルがあるか確認（デバッグ用）
-        has_transparency = any(p[3] < 255 for p in img.getdata())
-        logger.info(f"S3 image has transparent pixels: {has_transparency}")
-        
-        return img
-        
-    except ClientError as e:
-        logger.error(f"Failed to retrieve image from S3: {e}")
-        raise ValueError(f"S3 error: {str(e)}")
-
-
-def fetch_image(url_or_s3_path: str, image_type: str = "unknown") -> Image.Image:
-    """
-    URLまたはS3パスから画像を取得し、Pillowイメージとして返す
+    default_headers = {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, X-Amz-Date, Authorization, X-Api-Key'
+    }
     
-    Args:
-        url_or_s3_path: URL、S3パス、またはテスト指定子
-        image_type: 画像の種類（ログ用）
-        
-    形式:
-    - http(s)://... - 通常のURL
-    - file://... - ローカルファイル（テスト用）
-    - s3://bucket/key - S3パス
-    - bucket_name/object_key - S3パス（s3://プレフィックスなし）
-    - "test" - テスト画像
+    if headers:
+        default_headers.update(headers)
     
-    Returns:
-        PIL.Image.Image: ロードされた画像
-    """
-    logger.info(f"Fetching {image_type} image from: {url_or_s3_path}")
-    
-    # テスト画像指定の場合
-    if url_or_s3_path == "test":
-        test_bucket = os.environ.get('TEST_BUCKET', 'test-images')
-        
-        # 画像タイプに応じてテスト画像を選択
-        if image_type == "baseImage":
-            return fetch_image_from_s3(test_bucket, "images/aws-logo.png")
-        elif image_type == "image1":
-            return fetch_image_from_s3(test_bucket, "images/circle_red.png")
-        elif image_type == "image2":
-            return fetch_image_from_s3(test_bucket, "images/rectangle_blue.png")
-        elif image_type == "image3":  # 新規追加: 第3画像対応
-            return fetch_image_from_s3(test_bucket, "images/triangle_green.png")
-        else:
-            # デフォルトはaws-logo
-            return fetch_image_from_s3(test_bucket, "images/aws-logo.png")
-    
-    # S3 URLパターンの検出
-    s3_pattern = r'^(?:s3://)?([^/]+)/(.+)$'
-    s3_match = re.match(s3_pattern, url_or_s3_path)
-    
-    if s3_match:
-        # S3パスの場合
-        bucket_name = s3_match.group(1)
-        object_key = s3_match.group(2)
-        return fetch_image_from_s3(bucket_name, object_key)
-    
-    # URLの検証とfile:// URLの特別処理（ローカルテスト用）
-    parsed_url = urlparse(url_or_s3_path)
-    
-    if parsed_url.scheme == 'file':
-        # ローカルファイルの場合
-        file_path = parsed_url.path
-        if os.name == 'nt' and file_path.startswith('/'):  # Windows対応
-            file_path = file_path[1:]
-        
-        logger.info(f"Loading local file: {file_path}")
-        with open(file_path, 'rb') as f:
-            img = Image.open(io.BytesIO(f.read()))
-    elif not parsed_url.scheme or not parsed_url.netloc:
-        raise ValueError(f"Invalid URL or S3 path: {url_or_s3_path}")
-    else:
-        # 通常のHTTP/HTTPS URLの場合
-        response = requests.get(url_or_s3_path, timeout=5.0)
-        response.raise_for_status()
-        img = Image.open(io.BytesIO(response.content))
-    
-    # 画像モードの確認とアルファチャネルの処理
-    logger.info(f"Original {image_type} image mode: {img.mode}")
-    
-    # RGBAモードに変換（透過を扱うため）
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
-        logger.info(f"Converted {image_type} image to RGBA mode")
-    
-    # 透明ピクセルがあるか確認（デバッグ用）
-    has_transparency = any(p[3] < 255 for p in img.getdata())
-    logger.info(f"{image_type} image has transparent pixels: {has_transparency}")
-    
-    return img
-
-
-def create_composite_image(base_img: Image.Image, 
-                          image1: Image.Image, 
-                          image2: Image.Image,
-                          image3: Optional[Image.Image],  # 新規追加: 第3画像（オプション）
-                          img1_params: Dict[str, Any], 
-                          img2_params: Dict[str, Any],
-                          img3_params: Optional[Dict[str, Any]]) -> Image.Image:  # 新規追加: 第3画像パラメータ
-    """
-    ベース画像に2つまたは3つの画像を合成する（後方互換性対応）
-    
-    Args:
-        base_img: ベース画像
-        image1: 合成する1つ目の画像
-        image2: 合成する2つ目の画像
-        image3: 合成する3つ目の画像（オプション）
-        img1_params: 1つ目の画像の配置パラメータ
-        img2_params: 2つ目の画像の配置パラメータ
-        img3_params: 3つ目の画像の配置パラメータ（オプション）
-        
-    Returns:
-        PIL.Image.Image: 合成された画像
-    """
-    image_count = 3 if image3 else 2
-    logger.info(f"Creating composite image with {image_count} images")
-    logger.info(f"Base image mode: {base_img.mode}, size: {base_img.size}")
-    
-    # ベース画像のコピーを作成
-    composite = base_img.copy()
-    
-    # 透明背景の場合、アルファチャンネルが正しく設定されているか確認
-    if base_img.mode == 'RGBA':
-        # 透明ピクセルの数を確認（デバッグ用）
-        transparent_pixels = sum(1 for p in base_img.getdata() if p[3] == 0)
-        total_pixels = base_img.width * base_img.height
-        logger.info(f"Base image transparency: {transparent_pixels}/{total_pixels} pixels are fully transparent")
-    
-    # 1つ目の画像のリサイズと配置
-    img1_resized = image1.resize((img1_params['width'], img1_params['height']), Image.LANCZOS)
-    
-    # 2つ目の画像のリサイズと配置
-    img2_resized = image2.resize((img2_params['width'], img2_params['height']), Image.LANCZOS)
-    
-    logger.info(f"Image1 position: ({img1_params['x']}, {img1_params['y']}), size: ({img1_params['width']}, {img1_params['height']})")
-    logger.info(f"Image2 position: ({img2_params['x']}, {img2_params['y']}), size: ({img2_params['width']}, {img2_params['height']})")
-    
-    # 3つ目の画像のリサイズと配置（指定されている場合のみ）
-    img3_resized = None
-    if image3 and img3_params:
-        img3_resized = image3.resize((img3_params['width'], img3_params['height']), Image.LANCZOS)
-        logger.info(f"Image3 position: ({img3_params['x']}, {img3_params['y']}), size: ({img3_params['width']}, {img3_params['height']})")
-    
-    # 画像を順序通りに合成（アルファチャネルを考慮）
-    # 合成順序: base_img → image1 → image2 → image3
-    
-    # 1つ目の画像を合成
-    if img1_resized.mode == 'RGBA':
-        composite.paste(img1_resized, (img1_params['x'], img1_params['y']), img1_resized)
-    else:
-        composite.paste(img1_resized, (img1_params['x'], img1_params['y']))
-    
-    # 2つ目の画像を合成
-    if img2_resized.mode == 'RGBA':
-        composite.paste(img2_resized, (img2_params['x'], img2_params['y']), img2_resized)
-    else:
-        composite.paste(img2_resized, (img2_params['x'], img2_params['y']))
-    
-    # 3つ目の画像を合成（指定されている場合のみ）
-    if img3_resized and img3_params:
-        logger.info("Adding third image to composite")
-        if img3_resized.mode == 'RGBA':
-            composite.paste(img3_resized, (img3_params['x'], img3_params['y']), img3_resized)
-        else:
-            composite.paste(img3_resized, (img3_params['x'], img3_params['y']))
-    
-    logger.info(f"Composite image created successfully with {image_count} images")
-    return composite
-
-
-def format_response(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    API Gatewayレスポンスをフォーマット
-    """
     return {
         'statusCode': status_code,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
-        },
-        'body': json.dumps(body)
+        'headers': default_headers,
+        'body': json.dumps(body) if isinstance(body, (dict, list)) else body
     }
 
 
-def generate_html_response(base64_image: str, composite_img: Image.Image, img_byte_arr: bytes,
-                          img1_params: Dict[str, Any], img2_params: Dict[str, Any],
-                          img3_params: Optional[Dict[str, Any]],  # 新規追加: 第3画像パラメータ
-                          base_image_param: str, image1_param: str, image2_param: str,
-                          image3_param: Optional[str],  # 新規追加: 第3画像パラメータ
-                          test_bucket: str) -> str:
+def validate_required_parameters(query_params: Dict[str, str]) -> list:
     """
-    3画像対応のHTML レスポンスを生成する
+    必須パラメータの検証
+    
+    Args:
+        query_params: クエリパラメータ
+        
+    Returns:
+        list: エラーメッセージのリスト（空の場合は検証成功）
     """
-    # 画像数の判定
-    image_count = 3 if image3_param else 2
+    errors = []
     
-    # パラメータテーブルの生成
-    params_table_rows = f"""
-        <tr><td>Image1</td><td>({img1_params['x']}, {img1_params['y']})</td><td>{img1_params['width']} x {img1_params['height']}</td></tr>
-        <tr><td>Image2</td><td>({img2_params['x']}, {img2_params['y']})</td><td>{img2_params['width']} x {img2_params['height']}</td></tr>
+    # image1のみ必須（image2とimage3はオプション）
+    if not query_params.get('image1'):
+        errors.append('image1パラメータは必須です')
+    
+    # フォーマットパラメータの検証
+    format_param = query_params.get('format', 'html')
+    if format_param not in ['html', 'png']:
+        errors.append('formatパラメータはhtmlまたはpngである必要があります')
+    
+    return errors
+
+
+def generate_html_response(composite_img: Image.Image, query_params: Dict[str, str]) -> str:
     """
+    HTML形式のレスポンスを生成
     
-    if img3_params:
-        params_table_rows += f"""
-        <tr><td>Image3</td><td>({img3_params['x']}, {img3_params['y']})</td><td>{img3_params['width']} x {img3_params['height']}</td></tr>
-        """
-    
-    # リソース情報の生成
-    resource_info = f"""
-        <li><strong>テストバケット:</strong> {test_bucket}</li>
-        <li><strong>ベース画像:</strong> {base_image_param or "透明背景"}</li>
-        <li><strong>合成画像1:</strong> {image1_param}</li>
-        <li><strong>合成画像2:</strong> {image2_param}</li>
+    Args:
+        composite_img: 合成画像
+        query_params: クエリパラメータ
+        
+    Returns:
+        str: HTMLコンテンツ
     """
+    # 画像をBase64エンコード
+    img_buffer = io.BytesIO()
+    composite_img.save(img_buffer, format='PNG', optimize=True)
+    img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
     
-    if image3_param:
-        resource_info += f"""
-        <li><strong>合成画像3:</strong> {image3_param}</li>
-        """
+    # 使用された画像の情報
+    image_info = []
+    for i in range(1, 4):
+        image_param = query_params.get(f'image{i}')
+        if image_param:
+            image_info.append({
+                'name': f'image{i}',
+                'source': image_param,
+                'x': query_params.get(f'image{i}X', 'デフォルト'),
+                'y': query_params.get(f'image{i}Y', 'デフォルト'),
+                'width': query_params.get(f'image{i}Width', 'デフォルト'),
+                'height': query_params.get(f'image{i}Height', 'デフォルト')
+            })
     
-    # API使用例の生成
-    api_examples = f"""
-        <p><strong>基本的な{image_count}画像合成:</strong> <code>?baseImage=test&image1=test&image2=test{"&image3=test" if image3_param else ""}</code></p>
-        <p><strong>PNG直接:</strong> <code>?baseImage=test&image1=test&image2=test{"&image3=test" if image3_param else ""}&format=png</code></p>
-        <p><strong>S3パス使用:</strong> <code>?image1=s3://bucket/circle&image2=s3://bucket/rectangle{"&image3=s3://bucket/triangle" if image3_param else ""}</code></p>
-    """
-    
-    return f"""
+    # HTMLテンプレート
+    html_content = f"""
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎨 画像合成API v2.3.0 - {image_count}画像合成対応</title>
+    <title>画像合成結果 - v{VERSION}</title>
     <style>
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
             padding: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            color: #333;
         }}
         .container {{
-            background-color: white;
-            padding: 30px;
-            border-radius: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
         }}
         .header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
             text-align: center;
-            margin-bottom: 30px;
         }}
         .header h1 {{
-            color: #2d3748;
-            margin-bottom: 10px;
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
         }}
-        .header p {{
-            color: #718096;
-            font-size: 18px;
+        .version {{
+            opacity: 0.8;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }}
+        .content {{
+            padding: 30px;
         }}
         .image-container {{
             text-align: center;
             margin: 30px 0;
             padding: 20px;
-            background: #f7fafc;
-            border-radius: 12px;
+            background: #f8f9fa;
+            border-radius: 10px;
         }}
         .composite-image {{
             max-width: 100%;
             height: auto;
-            border: 2px solid #e2e8f0;
             border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }}
-        .status-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }}
-        .status-item {{
-            background: #f0fff4;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #38a169;
-        }}
-        .status-item .icon {{
-            color: #38a169;
-            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }}
         .info-grid {{
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin: 30px 0;
         }}
         .info-card {{
-            background: #f8fafc;
+            background: #f8f9fa;
             padding: 20px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
         }}
         .info-card h3 {{
-            color: #2d3748;
-            margin-top: 0;
-            margin-bottom: 15px;
+            margin: 0 0 15px 0;
+            color: #667eea;
+            font-size: 1.2em;
         }}
-        .params-table {{
+        .param-table {{
             width: 100%;
             border-collapse: collapse;
-            margin: 10px 0;
+            margin-top: 10px;
         }}
-        .params-table th, .params-table td {{
-            border: 1px solid #e2e8f0;
-            padding: 12px;
+        .param-table th, .param-table td {{
+            padding: 8px 12px;
             text-align: left;
+            border-bottom: 1px solid #dee2e6;
         }}
-        .params-table th {{
-            background-color: #edf2f7;
+        .param-table th {{
+            background: #e9ecef;
             font-weight: 600;
-            color: #2d3748;
         }}
         .download-section {{
             text-align: center;
             margin: 30px 0;
             padding: 20px;
-            background: #ebf8ff;
-            border-radius: 12px;
+            background: #e8f4fd;
+            border-radius: 10px;
         }}
         .download-btn {{
-            display: inline-block;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 15px 30px;
-            text-decoration: none;
-            border-radius: 8px;
-            margin: 10px;
-            cursor: pointer;
             border: none;
-            font-size: 16px;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 10px;
         }}
         .download-btn:hover {{
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
         }}
-        .api-examples {{
-            background: #1a202c;
-            color: #e2e8f0;
+        .tech-info {{
+            background: #f8f9fa;
             padding: 20px;
-            border-radius: 12px;
-            margin: 20px 0;
+            border-radius: 10px;
+            margin-top: 20px;
         }}
-        .api-examples h3 {{
-            color: #63b3ed;
-            margin-top: 0;
-        }}
-        .api-examples code {{
-            background: #2d3748;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Consolas', monospace;
+        .footer {{
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #666;
+            font-size: 0.9em;
         }}
         @media (max-width: 768px) {{
-            .info-grid {{
-                grid-template-columns: 1fr;
+            .container {{
+                margin: 10px;
+                border-radius: 10px;
             }}
-            .status-grid {{
-                grid-template-columns: 1fr;
+            .header {{
+                padding: 20px;
+            }}
+            .header h1 {{
+                font-size: 2em;
+            }}
+            .content {{
+                padding: 20px;
             }}
         }}
     </style>
@@ -435,414 +257,339 @@ def generate_html_response(base64_image: str, composite_img: Image.Image, img_by
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎨 画像合成API v2.3.0 - {image_count}画像合成成功！</h1>
-            <p>高性能・アルファチャンネル対応の{image_count}画像合成システム</p>
+            <h1>🎨 画像合成完了</h1>
+            <div class="version">Version {VERSION} - 高性能・アルファチャンネル対応</div>
         </div>
         
-        <div class="status-grid">
-            <div class="status-item">
-                <span class="icon">✅</span> {image_count}画像合成: 成功
-            </div>
-            <div class="status-item">
-                <span class="icon">✅</span> 三角形画像: 対応
-            </div>
-            <div class="status-item">
-                <span class="icon">✅</span> 後方互換性: 保持
-            </div>
-            <div class="status-item">
-                <span class="icon">✅</span> アルファ合成: 成功
-            </div>
-        </div>
-        
-        <div class="image-container">
-            <h2>🖼️ 合成された画像</h2>
-            <img src="data:image/png;base64,{base64_image}" alt="Composite Image" class="composite-image" id="compositeImage" />
-        </div>
-        
-        <div class="info-grid">
-            <div class="info-card">
-                <h3>📊 技術情報</h3>
-                <table class="params-table">
-                    <tr><th>項目</th><th>値</th></tr>
-                    <tr><td>画像サイズ</td><td>{len(img_byte_arr):,} バイト</td></tr>
-                    <tr><td>画像形式</td><td>PNG (RGBA)</td></tr>
-                    <tr><td>解像度</td><td>{composite_img.size[0]} x {composite_img.size[1]} px</td></tr>
-                    <tr><td>カラーモード</td><td>{composite_img.mode}</td></tr>
-                    <tr><td>透過サポート</td><td>✅ あり</td></tr>
-                </table>
+        <div class="content">
+            <div class="image-container">
+                <img src="data:image/png;base64,{img_base64}" alt="合成画像" class="composite-image" id="compositeImage">
             </div>
             
-            <div class="info-card">
-                <h3>🎯 合成パラメータ ({image_count}画像)</h3>
-                <table class="params-table">
-                    <tr><th>画像</th><th>位置 (X, Y)</th><th>サイズ (W x H)</th></tr>
-                    {params_table_rows}
-                </table>
+            <div class="download-section">
+                <h3>📥 画像ダウンロード</h3>
+                <button class="download-btn" onclick="downloadImage()">
+                    🖼️ PNG画像をダウンロード
+                </button>
+                <button class="download-btn" onclick="copyImageData()">
+                    📋 画像データをコピー
+                </button>
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>📊 合成情報</h3>
+                    <table class="param-table">
+                        <tr><th>項目</th><th>値</th></tr>
+                        <tr><td>画像サイズ</td><td>{composite_img.size[0]} × {composite_img.size[1]} px</td></tr>
+                        <tr><td>カラーモード</td><td>{composite_img.mode}</td></tr>
+                        <tr><td>合成画像数</td><td>{len(image_info)}枚</td></tr>
+                        <tr><td>処理時刻</td><td>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
+                    </table>
+                </div>
+                
+                <div class="info-card">
+                    <h3>🎯 使用画像</h3>
+                    <table class="param-table">
+                        <tr><th>画像</th><th>ソース</th><th>位置</th><th>サイズ</th></tr>
+                        {''.join([f'<tr><td>{img["name"]}</td><td>{img["source"]}</td><td>({img["x"]}, {img["y"]})</td><td>{img["width"]}×{img["height"]}</td></tr>' for img in image_info])}
+                    </table>
+                </div>
+            </div>
+            
+            <div class="tech-info">
+                <h3>🔧 技術情報</h3>
+                <p><strong>API バージョン:</strong> {VERSION}</p>
+                <p><strong>処理エンジン:</strong> Python + Pillow (LANCZOS補間)</p>
+                <p><strong>アルファチャンネル:</strong> 完全対応</p>
+                <p><strong>並列処理:</strong> ThreadPoolExecutor使用</p>
+                <p><strong>出力形式:</strong> PNG (最適化済み)</p>
             </div>
         </div>
         
-        <div class="info-card">
-            <h3>☁️ S3リソース情報</h3>
-            <ul>
-                {resource_info}
-            </ul>
-        </div>
-        
-        <div class="download-section">
-            <h3>📥 ダウンロード</h3>
-            <button onclick="downloadImage()" class="download-btn">
-                🖼️ PNG画像をダウンロード
-            </button>
-            <a href="?baseImage=test&image1=test&image2=test" class="download-btn">
-                🧪 テスト画像で再実行
-            </a>
-        </div>
-        
-        <div class="api-examples">
-            <h3>🔗 API使用例 ({image_count}画像対応)</h3>
-            {api_examples}
+        <div class="footer">
+            <p>🎨 画像合成REST API v{VERSION} - 高性能・アルファチャンネル対応</p>
+            <p>Powered by AWS Lambda + Python + Pillow</p>
         </div>
     </div>
 
     <script>
         function downloadImage() {{
-            try {{
-                // Base64データからBlobを作成
-                const base64Data = '{base64_image}';
-                const byteCharacters = atob(base64Data);
-                const byteNumbers = new Array(byteCharacters.length);
-                for (let i = 0; i < byteCharacters.length; i++) {{
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }}
-                const byteArray = new Uint8Array(byteNumbers);
-                const blob = new Blob([byteArray], {{type: 'image/png'}});
-                
-                // ダウンロードリンクを作成
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = 'composite-image-v2.3.0.png';
-                
-                // ダウンロードを実行
-                document.body.appendChild(a);
-                a.click();
-                
-                // クリーンアップ
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                console.log('✅ 画像ダウンロードが開始されました');
-            }} catch (error) {{
-                console.error('❌ ダウンロードエラー:', error);
-                alert('ダウンロードに失敗しました。ブラウザのコンソールを確認してください。');
+            const base64Data = '{img_base64}';
+            const byteCharacters = atob(base64Data);
+            const byteNumbers = new Array(byteCharacters.length);
+            
+            for (let i = 0; i < byteCharacters.length; i++) {{
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
             }}
+            
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], {{type: 'image/png'}});
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'composite-image-v{VERSION}-{datetime.now().strftime("%Y%m%d_%H%M%S")}.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            console.log('✅ 画像ダウンロード完了');
         }}
         
-        // 画像の読み込み完了を確認
-        document.getElementById('compositeImage').onload = function() {{
-            console.log('✅ 合成画像の表示が完了しました');
+        function copyImageData() {{
+            const imageData = 'data:image/png;base64,{img_base64}';
+            navigator.clipboard.writeText(imageData).then(() => {{
+                alert('📋 画像データをクリップボードにコピーしました');
+            }}).catch(err => {{
+                console.error('コピーに失敗しました:', err);
+                alert('❌ コピーに失敗しました');
+            }});
+        }}
+        
+        // 画像読み込みエラー時の処理
+        document.getElementById('compositeImage').onerror = function() {{
+            this.alt = '画像の読み込みに失敗しました';
+            this.style.background = '#f8f9fa';
+            this.style.border = '2px dashed #dee2e6';
+            this.style.padding = '50px';
         }};
         
-        // エラーハンドリング
-        document.getElementById('compositeImage').onerror = function() {{
-            console.error('❌ 画像の読み込みに失敗しました');
-        }};
+        console.log('🎨 画像合成REST API v{VERSION}');
+        console.log('📊 合成画像サイズ: {composite_img.size[0]} × {composite_img.size[1]} px');
+        console.log('🎯 使用画像数: {len(image_info)}枚');
     </script>
 </body>
 </html>
     """
+    
+    return html_content.strip()
+
+
+def generate_png_response(composite_img: Image.Image) -> Dict:
+    """
+    PNG形式のレスポンスを生成
+    
+    Args:
+        composite_img: 合成画像
+        
+    Returns:
+        Dict: API Gateway用のレスポンス
+    """
+    # PNG形式でバイト配列に変換
+    img_buffer = io.BytesIO()
+    composite_img.save(img_buffer, format='PNG', optimize=True)
+    img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+    
+    return {
+        'statusCode': 200,
+        'headers': {
+            'Content-Type': 'image/png',
+            'Access-Control-Allow-Origin': '*',
+            'Content-Disposition': f'attachment; filename="composite-image-v{VERSION}-{datetime.now().strftime("%Y%m%d_%H%M%S")}.png"'
+        },
+        'body': img_base64,
+        'isBase64Encoded': True
+    }
 
 
 def handler(event, context):
     """
-    Lambda ハンドラー関数 - 画像合成API v2.3.0 (3画像合成対応)
+    Lambda ハンドラー関数 - v2.4.0 (エラーハンドリング強化版)
+    2つまたは3つの画像を合成してPNG形式で出力
     
     Args:
-        event: Lambda イベントオブジェクト
-        context: Lambda コンテキストオブジェクト
-    
+        event: API Gatewayイベント
+        context: Lambda実行コンテキスト
+        
     Returns:
-        HTTP レスポンス
+        Dict: API Gateway用のレスポンス
     """
-    logger.info("🚀 Processing image composition request - API v2.3.0 (3画像合成対応)")
-    logger.info(f"Event: {json.dumps(event)}")
+    # リクエストIDを生成
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
     
     try:
-        # クエリパラメータの取得
+        # リクエスト開始ログ
+        log_request_info(request_id, event, {
+            "lambda_request_id": context.aws_request_id if context else "unknown",
+            "function_name": context.function_name if context else "unknown",
+            "memory_limit": context.memory_limit_in_mb if context else "unknown"
+        })
+        
+        logger.info(f"🚀 Image composition started - v{VERSION} [Request ID: {request_id}]")
+        
+        # パラメータ解析
         query_params = event.get('queryStringParameters', {}) or {}
+        logger.info(f"📋 Query parameters: {query_params} [Request ID: {request_id}]")
         
-        if not query_params:
-            return format_response(400, {'error': 'No query parameters provided'})
+        # 必須パラメータの検証
+        validation_errors = validate_required_parameters(query_params)
+        if validation_errors:
+            raise ParameterError(
+                "必須パラメータが不足しています",
+                details={
+                    "validation_errors": validation_errors,
+                    "provided_params": list(query_params.keys())
+                }
+            )
         
-        # 画像URLまたはS3パスの取得
-        base_image_param = query_params.get('baseImage')
+        # パラメータ取得
         image1_param = query_params.get('image1')
         image2_param = query_params.get('image2')
-        image3_param = query_params.get('image3')  # 新規追加: 第3画像（オプション）
-        format_param = query_params.get('format', 'html')  # html or png
+        image3_param = query_params.get('image3')  # オプション
+        base_image_param = query_params.get('baseImage')
+        format_param = query_params.get('format', 'html')
         
-        # 必須パラメータの確認（image1, image2は必須、image3はオプション）
-        if not image1_param or not image2_param:
-            return format_response(400, {'error': 'image1 and image2 parameters are required'})
+        logger.info(f"🎯 Images to process: image1={image1_param}, image2={image2_param}, image3={image3_param} [Request ID: {request_id}]")
         
-        # サイズと位置のパラメータの取得 (デフォルト値あり)
+        # 画像パラメータの解析
         try:
-            img1_width = int(query_params.get('image1Width', 300))
-            img1_height = int(query_params.get('image1Height', 200))
-            img1_x = int(query_params.get('image1X', -1))  # -1の場合は自動計算
-            img1_y = int(query_params.get('image1Y', 20))
-            
-            img2_width = int(query_params.get('image2Width', 300))
-            img2_height = int(query_params.get('image2Height', 200))
-            img2_x = int(query_params.get('image2X', -1))  # -1の場合は自動計算
-            img2_y = int(query_params.get('image2Y', -1))  # -1の場合は自動計算
-            
-            # 第3画像のパラメータ（image3が指定されている場合のみ）
-            if image3_param:
-                img3_width = int(query_params.get('image3Width', 300))
-                img3_height = int(query_params.get('image3Height', 200))
-                img3_x = int(query_params.get('image3X', 20))  # 左上デフォルト
-                img3_y = int(query_params.get('image3Y', 20))  # 左上デフォルト
-            else:
-                img3_width = img3_height = img3_x = img3_y = None
-        except ValueError:
-            logger.warning("Invalid numeric parameters, using defaults")
-            img1_width = 300
-            img1_height = 200
-            img1_x = -1
-            img1_y = 20
-            img2_width = 300
-            img2_height = 200
-            img2_x = -1
-            img2_y = -1
-            # 第3画像のデフォルト値
-            if image3_param:
-                img3_width = 300
-                img3_height = 200
-                img3_x = 20
-                img3_y = 20
-            else:
-                img3_width = img3_height = img3_x = img3_y = None
-        
-        # 環境変数からバケット名を取得
-        s3_resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', 'image-resources')
-        test_bucket = os.environ.get('TEST_BUCKET', 'test-images')
-        
-        # パラメータの正規化
-        def normalize_path(path_param):
-            if path_param == "test":
-                return "test"  # テスト画像はそのまま
-            elif path_param == "transparent":
-                return "transparent"  # 透明背景はそのまま
-            elif path_param and not (path_param.startswith('http://') or 
-                                    path_param.startswith('https://') or 
-                                    path_param.startswith('file://') or 
-                                    path_param.startswith('s3://') or
-                                    '/' in path_param):
-                return f"{s3_resources_bucket}/{path_param}"
-            return path_param
-        
-        base_image_path = normalize_path(base_image_param) if base_image_param else None
-        image1_path = normalize_path(image1_param)
-        image2_path = normalize_path(image2_param)
-        image3_path = normalize_path(image3_param) if image3_param else None  # 新規追加
-        
-        logger.info(f"📁 Normalized paths - base: {base_image_path}, image1: {image1_path}, image2: {image2_path}, image3: {image3_path}")
-        
-        # ベース画像の読み込み
-        if base_image_path and base_image_path != "transparent":
-            base_img = fetch_image(base_image_path, "baseImage")
-            if base_img.size != (1920, 1080):
-                logger.info(f"🔄 Resizing base image from {base_img.size} to (1920, 1080)")
-                base_img = base_img.resize((1920, 1080), Image.LANCZOS)
-        else:
-            # ベース画像が指定されていない場合、または"transparent"が指定された場合は透明の画像を作成
-            # アルファチャンネルを0に設定して完全透明にする
-            base_img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
-            if base_image_path == "transparent":
-                logger.info("🆕 Created transparent base image (1920x1080) with alpha=0 - transparent option selected")
-            else:
-                logger.info("🆕 Created transparent base image (1920x1080) with alpha=0 - no base image specified")
-            
-        # 合成する画像を並列で取得（2つまたは3つ）
-        image_count = 3 if image3_path else 2
-        logger.info(f"⚡ Starting parallel image fetching for {image_count} images...")
-        
-        max_workers = 3 if image3_path else 2
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_path = {
-                executor.submit(fetch_image, image1_path, "image1"): 'image1',
-                executor.submit(fetch_image, image2_path, "image2"): 'image2'
-            }
-            
-            # 第3画像が指定されている場合のみ追加
-            if image3_path:
-                future_to_path[executor.submit(fetch_image, image3_path, "image3")] = 'image3'
-            
-            images = {}
-            for future in concurrent.futures.as_completed(future_to_path):
-                name = future_to_path[future]
-                try:
-                    images[name] = future.result()
-                    logger.info(f"✅ Successfully loaded {name}")
-                except Exception as e:
-                    logger.error(f"❌ Error loading image {name}: {e}")
-                    return format_response(500, {'error': f"Failed to load {name}: {str(e)}"})
-        
-        # 画像位置の計算
-        if img1_x < 0:
-            img1_x = base_img.width - img1_width - 20  # 右端から20pxマージン
-        
-        if img2_x < 0:
-            img2_x = base_img.width - img2_width - 20  # 右端から20pxマージン
-            
-        if img2_y < 0:
-            img2_y = img1_y + img1_height + 20  # 20pxマージン
-        
-        # 画像合成パラメータ
-        img1_params = {
-            'width': img1_width,
-            'height': img1_height,
-            'x': img1_x,
-            'y': img1_y
-        }
-        
-        img2_params = {
-            'width': img2_width,
-            'height': img2_height,
-            'x': img2_x,
-            'y': img2_y
-        }
-        
-        # 第3画像のパラメータ（指定されている場合のみ）
-        img3_params = None
-        if image3_path and 'image3' in images:
-            img3_params = {
-                'width': img3_width,
-                'height': img3_height,
-                'x': img3_x,
-                'y': img3_y
-            }
-        
-        # 画像を合成（2つまたは3つ）
-        logger.info(f"🎨 Creating composite image with {image_count} images...")
-        composite_img = create_composite_image(
-            base_img, 
-            images['image1'], 
-            images['image2'],
-            images.get('image3'),  # 第3画像（オプション）
-            img1_params, 
-            img2_params,
-            img3_params  # 第3画像パラメータ（オプション）
-        )
-        
-        # RGBAモードに変換（アルファチャンネルを保持）
-        if composite_img.mode != 'RGBA':
-            logger.info(f"🔄 Converting composite image from {composite_img.mode} to RGBA")
-            composite_img = composite_img.convert('RGBA')
-        
-        # 合成画像をバイトに変換
-        img_byte_arr = io.BytesIO()
-        # 透明度を保持するためのPNG保存オプション
-        composite_img.save(img_byte_arr, format='PNG', optimize=False, compress_level=6)
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        # 透明背景の場合、透明ピクセルの確認
-        if composite_img.mode == 'RGBA':
-            transparent_pixels = sum(1 for p in composite_img.getdata() if p[3] == 0)
-            total_pixels = composite_img.width * composite_img.height
-            logger.info(f"Final composite transparency: {transparent_pixels}/{total_pixels} pixels are fully transparent")
-        
-        logger.info(f"📊 Output composite image: {composite_img.mode}, {len(img_byte_arr):,} bytes")
-        
-        # フォーマットに応じてレスポンスを変更
-        if format_param == 'png':
-            # PNG直接返却
-            return {
-                'statusCode': 200,
-                'headers': {
-                    'Content-Type': 'image/png',
-                    'Content-Disposition': 'inline; filename="composite-image-v2.3.0.png"',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                'body': base64.b64encode(img_byte_arr).decode('utf-8'),
-                'isBase64Encoded': True
-            }
-        else:
-            # HTML表示
-            base64_image = base64.b64encode(img_byte_arr).decode('utf-8')
-            html_content = generate_html_response(
-                base64_image, composite_img, img_byte_arr,
-                img1_params, img2_params, img3_params,  # 新規追加
-                base_image_param, image1_param, image2_param, image3_param,  # 新規追加
-                test_bucket
+            img_params = parse_image_parameters(query_params)
+            logger.info(f"📐 Image parameters parsed successfully [Request ID: {request_id}]")
+        except Exception as e:
+            raise ParameterError(
+                "画像パラメータの解析に失敗しました",
+                details={
+                    "original_error": str(e),
+                    "query_params": query_params
+                }
             )
+        
+        # 画像の並列取得（指定された画像のみ）
+        logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
+        image_paths = {
+            'base': base_image_param,
+            'image1': image1_param,  # 必須
+        }
+        
+        # オプション画像を追加
+        if image2_param:
+            image_paths['image2'] = image2_param
+        if image3_param:
+            image_paths['image3'] = image3_param
+        
+        try:
+            images = fetch_images_parallel(image_paths)
+            logger.info(f"✅ Images fetched: {list(images.keys())} [Request ID: {request_id}]")
+        except Exception as e:
+            raise ImageFetchError(
+                "画像の取得に失敗しました",
+                details={
+                    "image_paths": image_paths,
+                    "original_error": str(e)
+                }
+            )
+        
+        # 画像合成処理
+        logger.info(f"🎨 Starting image composition... [Request ID: {request_id}]")
+        try:
+            composite_img = create_composite_image(
+                images.get('base'),
+                images['image1'],  # 必須
+                images.get('image2'),  # オプション
+                images.get('image3'),  # オプション
+                img_params
+            )
+        except Exception as e:
+            raise ImageProcessingError(
+                "画像の合成処理に失敗しました",
+                details={
+                    "image_count": len([img for img in images.values() if img is not None]),
+                    "img_params": img_params,
+                    "original_error": str(e)
+                }
+            )
+        
+        # 処理時間計算
+        processing_time = time.time() - start_time
+        logger.info(f"⏱️ Processing completed in {processing_time:.2f} seconds [Request ID: {request_id}]")
+        
+        # レスポンス生成
+        try:
+            if format_param == 'png':
+                logger.info(f"📤 Generating PNG response [Request ID: {request_id}]")
+                response = generate_png_response(composite_img)
+            else:
+                logger.info(f"📤 Generating HTML response [Request ID: {request_id}]")
+                html_content = generate_html_response(composite_img, query_params)
+                response = {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'text/html; charset=utf-8',
+                        'Access-Control-Allow-Origin': '*',
+                        'X-Request-ID': request_id
+                    },
+                    'body': html_content
+                }
             
-            return {
-                'statusCode': 200,
-                'headers': {
-                    'Content-Type': 'text/html; charset=utf-8',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                'body': html_content
-            }
+            # レスポンス完了ログ
+            log_response_info(request_id, response, processing_time)
+            
+            return response
+            
+        except Exception as e:
+            raise ImageProcessingError(
+                "レスポンスの生成に失敗しました",
+                details={
+                    "format": format_param,
+                    "original_error": str(e)
+                }
+            )
+        
+    except (ParameterError, ImageFetchError, ImageProcessingError, ValidationError) as e:
+        # 既知のエラータイプの場合
+        logger.warning(f"❌ Known error occurred: {e.message} [Request ID: {request_id}]")
+        response = create_error_response(e, context={"query_params": query_params}, request_id=request_id)
+        log_response_info(request_id, response, time.time() - start_time)
+        return response
         
     except Exception as e:
-        logger.error(f"❌ Error processing request: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        
-        error_html = f"""
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>❌ エラー - 画像合成API v2.3.0</title>
-    <style>
-        body {{ 
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
-            max-width: 600px; 
-            margin: 50px auto; 
-            padding: 20px; 
-            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-            min-height: 100vh;
-        }}
-        .error {{ 
-            background-color: white; 
-            color: #721c24; 
-            padding: 30px; 
-            border-radius: 16px; 
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }}
-        .error h1 {{ color: #e53e3e; }}
-        .error code {{ 
-            background: #fed7d7; 
-            padding: 2px 6px; 
-            border-radius: 4px; 
-            font-family: Monaco, Consolas, monospace;
-        }}
-    </style>
-</head>
-<body>
-    <div class="error">
-        <h1>❌ 画像合成エラーが発生しました</h1>
-        <p><strong>エラー内容:</strong> <code>{str(e)}</code></p>
-        <p>Lambda関数のCloudWatch Logsを確認してください。</p>
-        <p><strong>必須パラメータ:</strong> <code>image1</code>, <code>image2</code></p>
-        <p><strong>使用例:</strong> <code>?baseImage=test&image1=test&image2=test</code></p>
-        <hr>
-        <p><small>画像合成API v2.3.0 - 3画像合成対応版</small></p>
-    </div>
-</body>
-</html>
-        """
-        
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'text/html; charset=utf-8',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': error_html
+        # 予期しないエラーの場合
+        logger.error(f"❌ Unexpected error: {e} [Request ID: {request_id}]")
+        response = create_error_response(
+            e, 
+            context={
+                "query_params": query_params,
+                "lambda_context": {
+                    "function_name": context.function_name if context else "unknown",
+                    "memory_limit": context.memory_limit_in_mb if context else "unknown",
+                    "remaining_time": context.get_remaining_time_in_millis() if context else "unknown"
+                }
+            }, 
+            request_id=request_id
+        )
+        log_response_info(request_id, response, time.time() - start_time)
+        return response
+
+
+if __name__ == "__main__":
+    # ローカルテスト用
+    print(f"🎨 画像合成REST API v{VERSION} - ローカルテスト")
+    
+    # テストイベントの作成
+    test_event = {
+        'queryStringParameters': {
+            'image1': 'test',
+            'image2': 'test',
+            'image3': 'test',
+            'format': 'html'
         }
+    }
+    
+    # ハンドラーを実行
+    try:
+        result = handler(test_event, None)
+        print(f"✅ テスト成功: ステータスコード {result['statusCode']}")
+        print(f"📊 レスポンスヘッダー: {result['headers']}")
+        
+        if result['headers'].get('Content-Type') == 'text/html; charset=utf-8':
+            print("🌐 HTML レスポンス生成完了")
+            # HTMLファイルとして保存
+            with open('test_response.html', 'w', encoding='utf-8') as f:
+                f.write(result['body'])
+            print("💾 test_response.html に保存しました")
+        
+    except Exception as e:
+        print(f"❌ テストエラー: {e}")
