@@ -53,7 +53,7 @@
             <td class="row-header">画像選択</td>
             <td class="image1-cell">
               <ImageSelector
-                v-model="imageConfigs.image1.source"
+                :modelValue="imageConfigs.image1.source"
                 label=""
                 image-type="image1"
                 :required="true"
@@ -62,7 +62,7 @@
             </td>
             <td v-if="imageMode >= 2" class="image2-cell">
               <ImageSelector
-                v-model="imageConfigs.image2.source"
+                :modelValue="imageConfigs.image2.source"
                 label=""
                 image-type="image2"
                 :required="imageMode >= 2"
@@ -71,7 +71,7 @@
             </td>
             <td v-if="imageMode >= 3" class="image3-cell">
               <ImageSelector
-                v-model="imageConfigs.image3.source"
+                :modelValue="imageConfigs.image3.source"
                 label=""
                 image-type="image3"
                 :required="imageMode >= 3"
