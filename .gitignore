@@ -12,3 +12,8 @@ cdk.out
 
 *__pycache__*
 *.pyc
+
+# Test output files (temporary)
+test/test-results/*
+!test/test-results/.gitkeep
+!test/test-results/README.md
