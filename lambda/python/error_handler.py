@@ -154,19 +154,19 @@ def classify_error(error: Exception) -> tuple[ErrorType, ErrorSeverity]:
     ]):
         return ErrorType.IMAGE_PROCESSING_ERROR, ErrorSeverity.MEDIUM
     
+    # タイムアウトエラー（ネットワークエラーより先に判定）
+    if error_type_name == 'timeouterror' or isinstance(error, TimeoutError):
+        return ErrorType.TIMEOUT_ERROR, ErrorSeverity.HIGH
+
+    # メモリエラー
+    if error_type_name == 'memoryerror' or isinstance(error, MemoryError):
+        return ErrorType.MEMORY_ERROR, ErrorSeverity.CRITICAL
+
     # ネットワークエラー
     if any(keyword in error_message for keyword in [
         'network', 'timeout', 'connection', 'dns', 'socket'
-    ]) or error_type_name in ['connectionerror', 'timeout', 'urlerror']:
+    ]) or error_type_name in ['connectionerror', 'urlerror']:
         return ErrorType.NETWORK_ERROR, ErrorSeverity.MEDIUM
-    
-    # タイムアウトエラー
-    if 'timeout' in error_message or error_type_name == 'timeouterror':
-        return ErrorType.TIMEOUT_ERROR, ErrorSeverity.HIGH
-    
-    # メモリエラー
-    if 'memory' in error_message or error_type_name == 'memoryerror':
-        return ErrorType.MEMORY_ERROR, ErrorSeverity.CRITICAL
     
     # デフォルト
     return ErrorType.INTERNAL_ERROR, ErrorSeverity.MEDIUM
