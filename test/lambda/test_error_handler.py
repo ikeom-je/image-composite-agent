@@ -167,7 +167,7 @@ class TestErrorHandler(unittest.TestCase):
         self.assertEqual(result["error_type"], ErrorType.PARAMETER_ERROR.value)
         self.assertEqual(result["severity"], ErrorSeverity.LOW.value)
         self.assertEqual(result["request_id"], self.test_request_id)
-        self.assertEqual(result["version"], "2.4.0")
+        self.assertEqual(result["version"], "2.5.4")
         self.assertIn("error_id", result)
         self.assertIn("timestamp", result)
 
