@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * アップロード→選択→合成の完全ワークフローテスト
  */
 
-const API_BASE_URL = process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
 const UPLOAD_API_URL = `${API_BASE_URL.replace('/images/composite', '')}/upload`;
 
 // テスト用画像データ（小さなPNG画像）

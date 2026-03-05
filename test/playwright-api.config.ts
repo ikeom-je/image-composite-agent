@@ -15,7 +15,7 @@ export default defineConfig({
   quiet: !process.env.DEBUG,
   timeout: 30000, // 30秒のタイムアウト
   use: {
-    baseURL: process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod',
+    baseURL: process.env.API_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -24,7 +24,7 @@ export default defineConfig({
       name: 'api-tests',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod',
+        baseURL: process.env.API_URL || 'http://localhost:3000',
         // timeout: 30000, // プロジェクトレベルで設定
       },
     },

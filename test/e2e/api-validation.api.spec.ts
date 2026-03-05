@@ -7,7 +7,7 @@ import path from 'path';
  * curlによる検証をPlaywrightテストに組み込み
  */
 
-const API_BASE_URL = process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
 const TEST_ASSETS_DIR = path.join(__dirname, '../test-assets');
 
 test.describe('画像合成API検証', () => {

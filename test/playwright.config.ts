@@ -36,7 +36,7 @@ export default defineConfig({
       name: 'api-tests',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod',
+        baseURL: process.env.API_URL || 'http://localhost:3000',
         // timeout: 30000, // API テストは30秒のタイムアウト（プロジェクトレベルで設定）
       },
     },

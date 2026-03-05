@@ -12,7 +12,7 @@ echo "=================================="
 if [ -z "$API_URL" ]; then
     echo "⚠️  警告: API_URL環境変数が設定されていません"
     echo "   デフォルトURLを使用します"
-    export API_URL="https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod"
+    export API_URL="http://localhost:3000"
 fi
 
 echo "📍 テスト対象API: $API_URL"

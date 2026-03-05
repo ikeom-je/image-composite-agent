@@ -877,7 +877,7 @@ export default defineConfig({
   reportSlowTests: null,
   quiet: !process.env.DEBUG,
   use: {
-    baseURL: process.env.API_URL || 'https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod',
+    baseURL: process.env.API_URL || 'https://your-api-id.execute-api.your-region.amazonaws.com/prod',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
