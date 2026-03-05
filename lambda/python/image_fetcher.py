@@ -144,14 +144,14 @@ def get_test_image(image_type: str) -> Image.Image:
         if test_bucket:
             # S3からテスト画像を取得する場合
             test_image_map = {
-                'base': 'images/aws-logo.png',
-                'baseImage': 'images/aws-logo.png',
+                'base': 'images/default-base.png',
+                'baseImage': 'images/default-base.png',
                 'image1': 'images/circle_red.png',
                 'image2': 'images/rectangle_blue.png',
                 'image3': 'images/triangle_green.png'
             }
-            
-            image_path = test_image_map.get(image_type, 'images/aws-logo.png')
+
+            image_path = test_image_map.get(image_type, 'images/default-base.png')
             s3_path = f"s3://{test_bucket}/{image_path}"
             return fetch_image_from_s3(s3_path)
         
@@ -164,7 +164,7 @@ def get_test_image(image_type: str) -> Image.Image:
             elif image_type in ['image3']:
                 image = generate_triangle_image()
             else:
-                # ベース画像用のAWSロゴ風画像を生成
+                # ベース画像用のデフォルト画像を生成
                 image = generate_rectangle_image(size=(400, 200), color=(255, 153, 0))
             
             logger.info(f"✅ Generated test image: {image.size} {image.mode}")
