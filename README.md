@@ -416,7 +416,7 @@ image-processor-api/
 │       ├── upload_manager.py              # アップロード管理Lambda関数 ← 新規追加
 │       ├── requirements.txt               # Python依存関係
 │       └── images/                        # テスト画像
-│           ├── aws-logo.png              # ベース画像用
+│           ├── default-base.png          # ベース画像用（黒背景）
 │           ├── circle_red.png            # 合成画像1用（円）
 │           ├── rectangle_blue.png        # 合成画像2用（四角）
 │           └── triangle_green.png        # 合成画像3用（三角）

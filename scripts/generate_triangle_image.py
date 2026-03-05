@@ -72,7 +72,7 @@ def verify_existing_images():
     """既存のテスト画像の存在確認"""
     images_dir = 'lambda/python/images'
     existing_images = [
-        'aws-logo.png',
+        'default-base.png',
         'circle_red.png', 
         'rectangle_blue.png'
     ]

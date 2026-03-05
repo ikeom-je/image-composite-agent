@@ -692,7 +692,7 @@ curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 - 6つの期待値画像ファイルを正常なPNG形式に変換
   - expected-2-images.png (218,539 bytes)
   - expected-3-images.png (219,288 bytes)
-  - expected-aws-logo-base.png (218,791 bytes)
+  - expected-default-base.png (218,791 bytes)
   - expected-three-images.png (216,414 bytes)
   - expected-transparent-base.png (22,578 bytes)
   - expected-two-images.png (216,322 bytes)
