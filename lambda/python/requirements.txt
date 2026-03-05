@@ -1,7 +1,7 @@
 # 画像合成REST API Lambda関数の依存関係 - v2.6.0
 
 # 画像処理ライブラリ
-Pillow==10.0.0
+Pillow>=10.4.0,<12.0.0
 
 # 動画処理ライブラリ（ffmpegバイナリは別途Lambda Layerで提供）
 # ffmpeg-python==0.2.0  # ffmpegバイナリが必要なため、subprocessで直接呼び出し

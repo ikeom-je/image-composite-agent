@@ -7,7 +7,7 @@ import path from 'path';
  * curlによる検証をPlaywrightテストに組み込み
  */
 
-const API_BASE_URL = process.env.API_URL || 'https://u4v31lnz5m.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod';
 const TEST_ASSETS_DIR = path.join(__dirname, '../test-assets');
 
 test.describe('画像合成API検証', () => {
@@ -32,7 +32,7 @@ test.describe('画像合成API検証', () => {
     
     const htmlContent = await response.text();
     expect(htmlContent).toContain('<!DOCTYPE html>');
-    expect(htmlContent).toContain('画像合成結果 - v2.5.4');
+    expect(htmlContent).toContain('画像合成結果 - v2.6.0');
     expect(htmlContent).toContain('data:image/png;base64,');
   });
 
@@ -95,7 +95,7 @@ test.describe('画像合成API検証', () => {
     
     const htmlContent = await response.text();
     expect(htmlContent).toContain('<!DOCTYPE html>');
-    expect(htmlContent).toContain('画像合成結果 - v2.5.4');
+    expect(htmlContent).toContain('画像合成結果 - v2.6.0');
     expect(htmlContent).toContain('data:image/png;base64,');
   });
 
