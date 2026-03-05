@@ -7,7 +7,7 @@ import path from 'path';
  * 実際のファイルアップロードとサムネイル生成を含む
  */
 
-const API_BASE_URL = process.env.API_URL || 'https://u4v31lnz5m.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.API_URL || 'https://uc2mbbjs64.execute-api.ap-northeast-1.amazonaws.com/prod';
 const UPLOAD_API_URL = `${API_BASE_URL.replace('/images/composite', '')}/upload`;
 
 // テスト用画像データ（1x1ピクセルのPNG）

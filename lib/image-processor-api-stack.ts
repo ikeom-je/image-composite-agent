@@ -105,7 +105,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'bash', '-c', [
               'echo "Starting bundling process with optimized package management..."',
               'pip install --upgrade pip',
-              'pip install -r requirements.txt -t /asset-output --no-cache-dir',
+              'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'echo "Optimizing bundle size..."',
@@ -171,7 +171,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'bash', '-c', [
               'echo "Starting Upload Manager bundling process..."',
               'pip install --upgrade pip',
-              'pip install -r requirements.txt -t /asset-output --no-cache-dir',
+              'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'echo "Optimizing bundle size..."',
