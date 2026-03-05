@@ -31,7 +31,8 @@ const viewerStack = new ImageCompositeViewerStack(app, 'ImageCompositeViewerStac
   description: 'Frontend Viewer for Image Composition REST API',
   env,
   tags,
-  apiEndpoint: apiStack.apiEndpoint
+  apiEndpoint: apiStack.apiEndpoint,
+  uploadApiEndpoint: apiStack.uploadApiEndpoint
 });
 
 // スタック間の依存関係を設定（フロントエンドはバックエンドに依存）
