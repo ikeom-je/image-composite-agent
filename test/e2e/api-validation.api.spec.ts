@@ -75,7 +75,7 @@ test.describe('画像合成API検証', () => {
     expect(imageBuffer.length).toBeGreaterThan(1000); // 画像データのサイズチェック
   });
 
-  test('AWSロゴ背景での1画像合成 - HTML形式', async ({ request }) => {
+  test('デフォルト背景での1画像合成 - HTML形式', async ({ request }) => {
     const response = await request.get(`${API_BASE_URL}/images/composite`, {
       params: {
         baseImage: 'test',
@@ -99,7 +99,7 @@ test.describe('画像合成API検証', () => {
     expect(htmlContent).toContain('data:image/png;base64,');
   });
 
-  test('AWSロゴ背景での1画像合成 - PNG形式と正解画像比較', async ({ request }) => {
+  test('デフォルト背景での1画像合成 - PNG形式と正解画像比較', async ({ request }) => {
     const response = await request.get(`${API_BASE_URL}/images/composite`, {
       params: {
         baseImage: 'test',
@@ -119,7 +119,7 @@ test.describe('画像合成API検証', () => {
     
     const actualImageData = await response.text();
     const actualImageBuffer = Buffer.from(actualImageData, 'base64');
-    const expectedImagePath = path.join(TEST_ASSETS_DIR, 'expected-aws-logo-base.png');
+    const expectedImagePath = path.join(TEST_ASSETS_DIR, 'expected-default-base.png');
     
     // 正解画像が存在することを確認
     expect(fs.existsSync(expectedImagePath)).toBe(true);

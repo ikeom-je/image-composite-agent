@@ -50,8 +50,8 @@ class ExpectedImageGenerator:
                 }
             },
             {
-                'name': 'expected-aws-logo-base.png',
-                'description': 'AWSロゴ背景での1画像合成',
+                'name': 'expected-default-base.png',
+                'description': 'デフォルト背景での1画像合成',
                 'params': {
                     'baseImage': 'test',
                     'image1': 'test',
