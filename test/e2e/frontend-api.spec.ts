@@ -86,7 +86,7 @@ test.describe('フロントエンドAPI接続テスト', () => {
       console.log('S3パスオプションが見つかりました');
       // S3パスを選択（実際のvalue属性を使用）
       await image1Select.selectOption({ 
-        value: 's3://imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z/images/circle_red.png' 
+        value: 's3://your-test-images-bucket/images/circle_red.png' 
       });
       
       // ネットワークリクエストを監視
@@ -172,7 +172,7 @@ test.describe('フロントエンドAPI接続テスト', () => {
     await page.waitForTimeout(2000);
     
     console.log('Actual API URL used:', actualApiUrl);
-    expect(actualApiUrl).toContain('execute-api.ap-northeast-1.amazonaws.com');
+    expect(actualApiUrl).toContain('/images/composite');
   });
 
   test('ネットワークエラーが発生しない', async ({ page }) => {

@@ -406,8 +406,8 @@
 - **後方互換性**: 完全保持（既存の2画像・3画像合成機能に影響なし）
 
 ### デプロイ情報
-- **API URL**: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-- **フロントエンドURL**: `https://d66gmb5py5515.cloudfront.net`
+- **API URL**: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
+- **フロントエンドURL**: `https://your-distribution-id.cloudfront.net`
 - **新エンドポイント**: `/upload/presigned-url`, `/upload/images`
 
 ### 動作確認結果
@@ -457,10 +457,10 @@
 ### 検証方法
 ```bash
 # API直接テスト
-curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://imageprocessorapistack-testimagesbucket4ab1f113-sjc4fwt3v47u/images/circle_red.png&image2=test"
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://your-stack-bucket-name/images/circle_red.png&image2=test"
 
 # フロントエンドでのテスト
-# 1. https://d7kz1a65nk29c.cloudfront.net/ にアクセス
+# 1. https://your-distribution-id.cloudfront.net/ にアクセス
 # 2. 画像1または画像2のプルダウンでS3パスを選択
 # 3. 「画像を生成」ボタンをクリック
 # 4. エラーなく画像が生成されることを確認
@@ -494,20 +494,20 @@ curl "https://gv2g48xpz3.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 ### 修正後の動作確認
 1. **基本テスト**:
 ```bash
-curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
 ```
 ✅ 正常動作確認済み
 
 2. **S3パステスト**:
 ```bash
-curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://imageprocessorapistack-testimagesbucket4ab1f113-swy6fmlebf8o/images/circle_red.png&image2=test"
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=s3://your-stack-bucket-name/images/circle_red.png&image2=test"
 ```
 ✅ 正常動作確認済み
 
 ### デプロイ情報
-- **API URL**: `https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-- **フロントエンドURL**: `https://d2jigwof3rswvi.cloudfront.net`
-- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-swy6fmlebf8o`
+- **API URL**: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
+- **フロントエンドURL**: `https://your-distribution-id.cloudfront.net`
+- **テストバケット**: `your-stack-bucket-name`
 
 ### 検証結果
 - S3パス指定での画像合成が正常に動作
@@ -518,18 +518,18 @@ curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 ### 問題の特定と修正
 - **問題**: フロントエンドで画像生成ボタンを押した際に「Failed to load resource: net::ERR_NAME_NOT_RESOLVED」エラーが発生
 - **原因**: フロントエンドのデフォルトAPI URLが古い値に設定されていた
-  - 設定されていたURL: `https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-  - 実際のURL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+  - 設定されていたURL: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
+  - 実際のURL: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
 
 ### 修正内容
 1. **フロントエンドのAPI URL修正**:
    - `frontend/src/App.vue`のデフォルトAPI URLを正しい値に更新
-   - S3バケット名も正しい値に更新: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+   - S3バケット名も正しい値に更新: `your-stack-bucket-name`
 
 2. **Playwrightテストの更新**:
    - `test/e2e/frontend-api.spec.ts`のテストURLを正しい値に更新
-   - フロントエンドURL: `https://d2jokx0x4ou6mb.cloudfront.net`
-   - API URL: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
+   - フロントエンドURL: `https://your-distribution-id.cloudfront.net`
+   - API URL: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
 
 3. **CloudFrontキャッシュ無効化**:
    - 更新されたフロントエンドが即座に配信されるようにキャッシュを無効化
@@ -555,9 +555,9 @@ curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 - ✅ フロントエンドからのAPI接続: エラー解消
 
 ### デプロイ情報
-- **フロントエンドURL**: `https://d2jokx0x4ou6mb.cloudfront.net`
-- **API URL**: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+- **フロントエンドURL**: `https://your-distribution-id.cloudfront.net`
+- **API URL**: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
+- **テストバケット**: `your-stack-bucket-name`
 
 ### 検証結果
 - フロントエンドからの画像生成機能が正常に動作
@@ -647,9 +647,9 @@ curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
    - 無効状態の適切な表示
 
 ### デプロイ情報
-- **API URL**: `https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite`
-- **フロントエンドURL**: `https://d66gmb5py5515.cloudfront.net`
-- **テストバケット**: `imageprocessorapistack-testimagesbucket4ab1f113-yg0v6o6txw9z`
+- **API URL**: `https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite`
+- **フロントエンドURL**: `https://your-distribution-id.cloudfront.net`
+- **テストバケット**: `your-stack-bucket-name`
 
 ### 動作確認結果
 - ✅ 2画像合成の後方互換性: 正常動作
@@ -661,13 +661,13 @@ curl "https://ccovy8jh60.execute-api.ap-northeast-1.amazonaws.com/prod/images/co
 ### API使用例
 ```bash
 # 2画像合成（後方互換性）
-curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test"
 
 # 3画像合成（新機能）
-curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test"
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test"
 
 # PNG直接ダウンロード
-curl "https://4vssi3zjmd.execute-api.ap-northeast-1.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test&format=png" -o composite.png
+curl "https://your-api-id.execute-api.your-region.amazonaws.com/prod/images/composite?baseImage=test&image1=test&image2=test&image3=test&format=png" -o composite.png
 ```
 
 ### 今後の拡張予定
