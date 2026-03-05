@@ -36,7 +36,7 @@
         <div class="form-group">
           <label class="form-label">ベース画像:</label>
           <select v-model="params.baseImage" class="form-select">
-            <option value="test">テスト画像 (AWS Logo)</option>
+            <option value="test">テスト画像 (黒背景)</option>
             <option value="transparent">透明背景</option>
           </select>
         </div>

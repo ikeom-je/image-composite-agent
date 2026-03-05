@@ -51,7 +51,7 @@ if (rawApiUrl.startsWith('/')) {
 ### 基本テスト画像
 
 - **場所**: `lambda/python/images/`
-- **ファイル**: `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`, `aws-logo.png`
+- **ファイル**: `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`, `default-base.png`
 - **状態**: 正常なPNG画像として維持
 
 ### テスト出力ファイル管理
@@ -552,7 +552,7 @@ BUCKET_NAME=$(aws cloudformation describe-stacks \
     --output text)
 
 # 画像をアップロード
-aws s3 cp "../lambda/python/images/aws-logo.png" "s3://$BUCKET_NAME/images/aws-logo.png"
+aws s3 cp "../lambda/python/images/default-base.png" "s3://$BUCKET_NAME/images/default-base.png"
 aws s3 cp "../lambda/python/images/circle_red.png" "s3://$BUCKET_NAME/images/circle_red.png"
 aws s3 cp "../lambda/python/images/rectangle_blue.png" "s3://$BUCKET_NAME/images/rectangle_blue.png"
 ```
@@ -1092,7 +1092,7 @@ npm run preview
 
 1. **基本テスト画像**: `test/test-assets/` 内の基本画像
    - `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`
-   - `aws-logo.png` 等
+   - `default-base.png` 等
    - これらは常に正常なPNG形式で維持
 
 2. **期待値画像**: `test/test-assets/expected-*.png`
