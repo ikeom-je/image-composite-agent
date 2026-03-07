@@ -62,8 +62,6 @@ export const useConfigStore = defineStore('config', () => {
       return config.value
     }
     
-    appStore.startLoading('Loading configuration...')
-    
     try {
       const configUrls = getConfigUrls()
       
@@ -118,7 +116,7 @@ export const useConfigStore = defineStore('config', () => {
       notificationStore.showError('Failed to load configuration')
       throw error
     } finally {
-      appStore.stopLoading()
+      // loadConfig用のローディングは不要（App.vueに独自の読み込み中表示あり）
     }
   }
   
