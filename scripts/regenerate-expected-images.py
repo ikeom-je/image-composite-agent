@@ -25,7 +25,7 @@ class ExpectedImageGenerator:
     """期待値画像生成クラス"""
     
     def __init__(self):
-        self.api_base_url = os.environ.get('API_URL', 'https://u4v31lnz5m.execute-api.ap-northeast-1.amazonaws.com/prod')
+        self.api_base_url = os.environ.get('API_URL', 'http://localhost:3000')
         self.api_endpoint = f"{self.api_base_url}/images/composite"
         self.test_assets_dir = Path("test/test-assets")
         self.backup_dir = Path("test/test-results")
@@ -50,8 +50,8 @@ class ExpectedImageGenerator:
                 }
             },
             {
-                'name': 'expected-aws-logo-base.png',
-                'description': 'AWSロゴ背景での1画像合成',
+                'name': 'expected-default-base.png',
+                'description': 'デフォルト背景での1画像合成',
                 'params': {
                     'baseImage': 'test',
                     'image1': 'test',

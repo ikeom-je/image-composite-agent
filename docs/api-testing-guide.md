@@ -60,7 +60,7 @@ export API_URL="https://your-api-gateway-url.amazonaws.com/prod"
 
 #### 画像合成機能テスト
 - **透明背景での1画像合成** - HTML/PNG両形式
-- **AWSロゴ背景での1画像合成** - HTML/PNG両形式
+- **デフォルト背景での1画像合成** - HTML/PNG両形式
 - **2画像合成** - 複数画像の配置テスト
 - **3画像合成** - 最大画像数での合成テスト
 
@@ -194,7 +194,7 @@ export API_URL="https://your-api-gateway-url.amazonaws.com/prod"
 
 #### 1. テスト画像が見つからない
 ```
-Error: expected-aws-logo-base.png not found
+Error: expected-default-base.png not found
 ```
 **対処法**: テスト用正解画像を生成
 ```bash

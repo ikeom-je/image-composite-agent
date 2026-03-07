@@ -78,7 +78,7 @@ class TestAssetFixer:
                 purpose = 'expected_value'
             elif filename.startswith('test_'):
                 purpose = 'test_output'
-            elif filename in ['circle_red.png', 'rectangle_blue.png', 'triangle_green.png', 'aws-logo.png']:
+            elif filename in ['circle_red.png', 'rectangle_blue.png', 'triangle_green.png', 'default-base.png']:
                 purpose = 'basic_test_image'
             else:
                 purpose = 'unknown'
