@@ -35,10 +35,11 @@
         <!-- ベース画像選択 -->
         <div class="form-group">
           <label class="form-label">ベース画像:</label>
-          <select v-model="params.baseImage" class="form-select">
-            <option value="test">テスト画像 (黒背景)</option>
-            <option value="transparent">透明背景</option>
-          </select>
+          <ImageSelector
+            v-model="params.baseImage"
+            image-type="base"
+            label="ベース画像"
+          />
         </div>
 
         <!-- 画像設定テーブル -->
@@ -119,6 +120,7 @@ import NotificationSystem from '@/components/NotificationSystem.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
 import PerformanceMonitor from '@/components/PerformanceMonitor.vue'
 import ImageUploader from '@/components/ImageUploader.vue'
+import ImageSelector from '@/components/ImageSelector.vue'
 import ImageConfigTable from '@/components/ImageConfigTable.vue'
 import ResultDisplay from '@/components/ResultDisplay.vue'
 import axios from 'axios'
