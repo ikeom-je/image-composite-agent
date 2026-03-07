@@ -233,8 +233,12 @@ const getPresignedUrl = async (file: File) => {
     throw new Error('API設定が読み込まれていません')
   }
 
-  const uploadApiUrl = `${uploadBaseUrl}/presigned-url`
-  
+  // URLを安全に構築（末尾スラッシュの重複を防ぐ）
+  const base = uploadBaseUrl.replace(/\/+$/, '')
+  const uploadApiUrl = `${base}/presigned-url`
+
+  console.log(`[ImageUploader] Requesting presigned URL from: ${uploadApiUrl}`)
+
   const response = await axios.post(uploadApiUrl, {
     fileName: file.name,
     fileType: file.type,
@@ -244,20 +248,35 @@ const getPresignedUrl = async (file: File) => {
       'Content-Type': 'application/json'
     }
   })
-  
-  return response.data
+
+  const data = response.data
+  if (!data || !data.uploadUrl) {
+    console.error('[ImageUploader] Invalid presigned URL response:', data)
+    throw new Error('署名付きURLの取得に失敗しました')
+  }
+
+  console.log(`[ImageUploader] Presigned URL obtained for key: ${data.s3Key}`)
+  return data
 }
 
 const uploadToS3 = async (file: File, uploadUrl: string): Promise<void> => {
+  // presigned URLの検証
+  try {
+    new URL(uploadUrl)
+  } catch {
+    console.error('[ImageUploader] Invalid presigned upload URL:', uploadUrl)
+    throw new Error('無効なアップロードURLです。再試行してください。')
+  }
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    
+
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable) {
         uploadProgress.value = Math.round((event.loaded / event.total) * 100)
       }
     })
-    
+
     xhr.addEventListener('load', () => {
       if (xhr.status === 200) {
         resolve()
@@ -265,15 +284,15 @@ const uploadToS3 = async (file: File, uploadUrl: string): Promise<void> => {
         reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`))
       }
     })
-    
+
     xhr.addEventListener('error', () => {
       reject(new Error('Network error during upload'))
     })
-    
+
     xhr.addEventListener('timeout', () => {
       reject(new Error('Upload timeout'))
     })
-    
+
     xhr.open('PUT', uploadUrl)
     xhr.setRequestHeader('Content-Type', file.type)
     xhr.timeout = 60000 // 60秒タイムアウト
