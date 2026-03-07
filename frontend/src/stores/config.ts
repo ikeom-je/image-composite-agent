@@ -37,15 +37,30 @@ export const useConfigStore = defineStore('config', () => {
     if (envUploadUrl) {
       return envUploadUrl
     }
-    
+
     // 設定ファイルから取得
     const configUploadUrl = config.value?.uploadApiUrl
     if (configUploadUrl) {
       // 相対パスの場合は絶対URLに変換
-      return configUploadUrl.startsWith('/') ? window.location.origin + configUploadUrl : configUploadUrl
+      if (configUploadUrl.startsWith('/')) {
+        return window.location.origin + configUploadUrl
+      }
+      // 絶対URLの場合はそのまま返す
+      if (configUploadUrl.startsWith('http://') || configUploadUrl.startsWith('https://')) {
+        return configUploadUrl
+      }
+      // その他（スキームなし）の場合はhttpsを付与
+      return `https://${configUploadUrl}`
     }
-    
-    // フォールバック: 動的に構築
+
+    // フォールバック: apiUrlベースで構築
+    const configApiUrl = config.value?.apiUrl
+    if (configApiUrl) {
+      const base = configApiUrl.replace(/\/images\/composite$/, '')
+      return `${base}/upload`
+    }
+
+    // 最終フォールバック
     return `${window.location.origin}/api/upload`
   })
   const cloudfrontUrl = computed(() => config.value?.cloudfrontUrl || '')
