@@ -1,29 +1,25 @@
 <template>
   <div class="min-h-screen flex flex-col bg-gray-50">
-    <!-- ナビゲーションバー -->
-    <nav class="bg-gradient-to-r from-blue-600 to-indigo-700 shadow-lg">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-14">
-          <!-- ロゴ -->
-          <router-link to="/" class="flex items-center gap-2 text-white font-bold text-lg hover:opacity-90 transition-opacity">
-            <span class="text-xl">Image Compositor</span>
-          </router-link>
+    <!-- ヘッダー -->
+    <header class="bg-gradient-to-r from-blue-600 to-indigo-700 shadow-lg px-4 py-3">
+      <h1 class="text-xl font-bold text-white tracking-wide">Image Compositor</h1>
+      <p class="text-blue-200 text-xs mt-0.5">画像合成REST API &amp; チャットエージェント</p>
+    </header>
 
-          <!-- ナビリンク -->
-          <div class="flex items-center gap-1">
-            <router-link
-              v-for="link in navLinks"
-              :key="link.to"
-              :to="link.to"
-              class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
-              :class="isActive(link.to)
-                ? 'bg-white/20 text-white'
-                : 'text-blue-100 hover:bg-white/10 hover:text-white'"
-            >
-              {{ link.label }}
-            </router-link>
-          </div>
-        </div>
+    <!-- タブナビゲーション -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm">
+      <div class="flex">
+        <router-link
+          v-for="tab in tabs"
+          :key="tab.to"
+          :to="tab.to"
+          class="tab-link px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap"
+          :class="isActive(tab.to)
+            ? 'border-blue-600 text-blue-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+        >
+          {{ tab.label }}
+        </router-link>
       </div>
     </nav>
 
@@ -39,10 +35,10 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
-const navLinks = [
+const tabs = [
   { to: '/', label: 'Portal' },
-  { to: '/api', label: 'API' },
-  { to: '/chat', label: 'Chat' },
+  { to: '/api', label: 'APIDemo' },
+  { to: '/chat', label: 'ChatAgent' },
 ]
 
 const isActive = (path: string) => {
