@@ -10,7 +10,7 @@
     <PerformanceMonitor v-if="configStore.isDebugMode || configStore.isDevelopment" />
 
     <header>
-      <h1>🎨 画像合成REST API v2.5.4</h1>
+      <h1>🎨 画像合成REST API v2.6.0</h1>
       <p class="subtitle">S3画像アップロード機能付き | 3画像合成対応 | Vue.js 3 + AWS Lambda + S3</p>
       <div v-if="configStore.config" class="config-info">
         <small>Version: {{ configStore.version }} | Environment: {{ configStore.environment }}</small>
@@ -36,7 +36,7 @@
         <div class="form-group">
           <label class="form-label">ベース画像:</label>
           <select v-model="params.baseImage" class="form-select">
-            <option value="test">テスト画像 (AWS Logo)</option>
+            <option value="test">テスト画像 (黒背景)</option>
             <option value="transparent">透明背景</option>
           </select>
         </div>

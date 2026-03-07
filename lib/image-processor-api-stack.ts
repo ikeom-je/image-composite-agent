@@ -24,6 +24,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
   public readonly uploadBucket: s3.Bucket;  // 新規追加: アップロード用バケット
   public readonly distribution: cloudfront.Distribution;
   public readonly apiEndpoint: string;
+  public readonly uploadApiEndpoint: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -105,7 +106,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'bash', '-c', [
               'echo "Starting bundling process with optimized package management..."',
               'pip install --upgrade pip',
-              'pip install -r requirements.txt -t /asset-output --no-cache-dir',
+              'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'echo "Optimizing bundle size..."',
@@ -171,7 +172,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'bash', '-c', [
               'echo "Starting Upload Manager bundling process..."',
               'pip install --upgrade pip',
-              'pip install -r requirements.txt -t /asset-output --no-cache-dir',
+              'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'echo "Optimizing bundle size..."',
@@ -529,6 +530,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // APIエンドポイントを保存
     this.apiEndpoint = `${api.url}images/composite`;
+    this.uploadApiEndpoint = `${api.url}upload`;
 
     // CloudFront Origin Access Identity (OAI) の作成
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OriginAccessIdentity', {
@@ -1147,7 +1149,8 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // 出力値の設定
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: this.apiEndpoint,
-      description: 'URL for the Image Processor API'
+      description: 'URL for the Image Processor API',
+      exportName: 'ImageProcessorApiEndpoint',
     });
 
     new cdk.CfnOutput(this, 'FrontendUrl', {
@@ -1186,8 +1189,9 @@ export class ImageProcessorApiStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'UploadApiUrl', {
-      value: `${api.url}upload`,
-      description: 'URL for the Upload API'
+      value: this.uploadApiEndpoint,
+      description: 'URL for the Upload API',
+      exportName: 'ImageProcessorUploadApiEndpoint',
     });
 
     new cdk.CfnOutput(this, 'DashboardUrl', {

@@ -4,7 +4,7 @@
 # Usage: ./upload-test-images.sh [bucket-name]
 # 
 # アップロード対象画像:
-# - aws-logo.png (ベース画像)
+# - default-base.png (ベース画像)
 # - circle_red.png (合成画像1)
 # - rectangle_blue.png (合成画像2) 
 # - triangle_green.png (合成画像3) ← 新規追加
@@ -53,8 +53,8 @@ if [ ! -d "$IMAGE_DIR" ]; then
 fi
 
 # 各画像ファイルの確認とアップロード
-declare -a images=("aws-logo.png" "circle_red.png" "rectangle_blue.png" "triangle_green.png")
-declare -a descriptions=("AWS Logo (ベース画像)" "赤い円 (合成画像1)" "青い四角形 (合成画像2)" "緑の三角形 (合成画像3)")
+declare -a images=("default-base.png" "circle_red.png" "rectangle_blue.png" "triangle_green.png")
+declare -a descriptions=("デフォルトベース画像 (黒背景)" "赤い円 (合成画像1)" "青い四角形 (合成画像2)" "緑の三角形 (合成画像3)")
 
 echo ""
 echo "📤 画像アップロード開始..."

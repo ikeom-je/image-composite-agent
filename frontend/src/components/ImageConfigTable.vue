@@ -53,7 +53,7 @@
             <td class="row-header">画像選択</td>
             <td class="image1-cell">
               <ImageSelector
-                v-model="imageConfigs.image1.source"
+                :modelValue="imageConfigs.image1.source"
                 label=""
                 image-type="image1"
                 :required="true"
@@ -62,7 +62,7 @@
             </td>
             <td v-if="imageMode >= 2" class="image2-cell">
               <ImageSelector
-                v-model="imageConfigs.image2.source"
+                :modelValue="imageConfigs.image2.source"
                 label=""
                 image-type="image2"
                 :required="imageMode >= 2"
@@ -71,7 +71,7 @@
             </td>
             <td v-if="imageMode >= 3" class="image3-cell">
               <ImageSelector
-                v-model="imageConfigs.image3.source"
+                :modelValue="imageConfigs.image3.source"
                 label=""
                 image-type="image3"
                 :required="imageMode >= 3"
@@ -843,17 +843,21 @@ const getVideoExtension = (format: string): string => {
 
 .mode-button {
   padding: 8px 16px;
-  border: 1px solid #e0e0e0;
-  background: white;
+  border: 2px solid #6c757d;
+  background: #f8f9fa;
+  color: #333;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
   transition: all 0.2s ease;
 }
 
-.mode-button:hover {
-  background: #f8f9fa;
-  border-color: #007bff;
+.mode-button:hover,
+.mode-button:focus {
+  background: #e2e6ea;
+  border-color: #0056b3;
+  color: #0056b3;
 }
 
 .mode-button.active {
