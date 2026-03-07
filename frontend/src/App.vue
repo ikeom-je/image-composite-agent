@@ -808,7 +808,7 @@ onMounted(async () => {
 })
 </script>
 
-<style>
+<style scoped>
 :root {
   --primary-color: #0078d7;
   --secondary-color: #00a2ed;
