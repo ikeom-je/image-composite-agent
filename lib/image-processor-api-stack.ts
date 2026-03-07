@@ -323,7 +323,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     const images = api.root.addResource('images', {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
     });
@@ -331,7 +331,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     const composite = images.addResource('composite', {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
     });
@@ -345,7 +345,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': "'*'",
             'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
-            'method.response.header.Access-Control-Allow-Methods': "'GET,OPTIONS'",
+            'method.response.header.Access-Control-Allow-Methods': "'GET,POST,OPTIONS'",
           },
         },
         {
@@ -379,8 +379,35 @@ export class ImageProcessorApiStack extends cdk.Stack {
       ],
     });
 
-    // GETメソッドの追加（認証なし、エラーレスポンス対応）
+    // GETメソッドの追加（後方互換性のため維持）
     composite.addMethod('GET', lambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+            'method.response.header.Access-Control-Allow-Headers': true,
+            'method.response.header.Access-Control-Allow-Methods': true,
+          },
+        },
+        {
+          statusCode: '400',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '500',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    // POSTメソッドの追加（フロントエンドからの合成リクエスト用）
+    composite.addMethod('POST', lambdaIntegration, {
       authorizationType: apigateway.AuthorizationType.NONE,
       methodResponses: [
         {
