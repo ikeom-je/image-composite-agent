@@ -544,7 +544,7 @@ const loadExample = (example: any) => {
     imageConfigs.value.image3.source = ''
   }
 
-  generateImage()
+  notificationStore.showSuccess(`「${example.title}」のパラメータを設定しました`)
 }
 
 const handleUploadComplete = (uploadData: any) => {
@@ -797,8 +797,10 @@ onMounted(async () => {
     // アプリストアを初期化
     appStore.initialize()
 
-    // 設定を読み込み
-    await configStore.loadConfig()
+    // 設定を読み込み（未ロードの場合のみ）
+    if (!configStore.isLoaded) {
+      await configStore.loadConfig()
+    }
 
     console.log('[App] Application initialized successfully')
   } catch (error) {
@@ -809,7 +811,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-:root {
+.app-container {
   --primary-color: #0078d7;
   --secondary-color: #00a2ed;
   --accent-color: #ff9900;
