@@ -8,7 +8,11 @@
       :class="{ 'required': required && !modelValue }"
     >
       <option value="">{{ required ? '選択してください' : '選択しない' }}</option>
-      <optgroup label="テスト画像">
+      <optgroup v-if="imageType === 'base'" label="ベース画像">
+        <option value="test">テスト画像（黒背景）</option>
+        <option value="transparent">透明背景</option>
+      </optgroup>
+      <optgroup v-else label="テスト画像">
         <option value="test">自動選択（{{ getAutoSelectDescription() }}）</option>
         <option value="circle">🔴 赤い円</option>
         <option value="rectangle">🔷 青い四角</option>
@@ -187,6 +191,7 @@ const selectedS3ImageDisplay = computed(() => {
 
 const getAutoSelectDescription = () => {
   const descriptions = {
+    base: '黒背景',
     image1: '赤い円',
     image2: '青い四角',
     image3: '緑の三角'
@@ -203,6 +208,14 @@ const handleSelectionChange = () => {
     return
   }
   
+  // base タイプの場合は test/transparent をそのまま emit
+  if (props.imageType === 'base') {
+    if (value === 'test' || value === 'transparent') {
+      emit('update:modelValue', value)
+      return
+    }
+  }
+
   if (value === 'test') {
     emit('update:modelValue', 'test')
   } else if (['circle', 'rectangle', 'triangle'].includes(value)) {
@@ -328,6 +341,8 @@ const updateDisplayValue = () => {
     displayValue.value = ''
   } else if (value === 'test') {
     displayValue.value = 'test'
+  } else if (props.imageType === 'base' && value === 'transparent') {
+    displayValue.value = 'transparent'
   } else if (value.startsWith('s3://')) {
     const config = configStore.config
     const testBucket = config?.s3BucketNames?.testImages
