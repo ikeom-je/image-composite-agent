@@ -240,91 +240,62 @@ const examples = ref([
 ])
 
 // メソッド
-const buildApiUrl = (enableVideoGeneration: boolean = videoConfig.value.enabled) => {
-  // API URLが設定されているかチェック
+// APIエンドポイントURLを取得
+const getApiEndpoint = (): string => {
   const rawApiUrl = configStore.apiUrl
   if (!rawApiUrl) {
     throw new Error('API URL is not configured. Please check your configuration.')
   }
 
-  // URLの検証と正規化
-  let apiUrl: string
-  try {
-    if (rawApiUrl.startsWith('/')) {
-      // 相対パスの場合は絶対URLに変換
-      apiUrl = window.location.origin + rawApiUrl
-    } else if (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://')) {
-      // 既に絶対URLの場合はそのまま使用
-      apiUrl = rawApiUrl
-    } else {
-      // プロトコルが省略されている場合は現在のプロトコルを使用
-      apiUrl = `${window.location.protocol}//${rawApiUrl}`
-    }
-
-    // URLの妥当性を検証
-    const url = new URL(apiUrl)
-    console.log('[App] Using API URL:', url.toString())
-
-    // ベース画像パラメータを追加
-    if (params.value.baseImage) {
-      url.searchParams.set('baseImage', params.value.baseImage)
-    }
-
-    // 必須パラメータ（image1のみ）
-    if (!imageConfigs.value.image1.source) {
-      throw new Error('Image1 is required for image composition')
-    }
-    url.searchParams.set('image1', imageConfigs.value.image1.source)
-
-    // 画像1のパラメータ（境界チェック付き）
-    url.searchParams.set('image1X', Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)).toString())
-    url.searchParams.set('image1Y', Math.max(0, Math.min(imageConfigs.value.image1.y, 1080 - imageConfigs.value.image1.height)).toString())
-    url.searchParams.set('image1Width', Math.max(1, Math.min(imageConfigs.value.image1.width, 1920)).toString())
-    url.searchParams.set('image1Height', Math.max(1, Math.min(imageConfigs.value.image1.height, 1080)).toString())
-
-    // 画像2のパラメータ（モードが2以上で選択されている場合のみ）
-    if (imageMode.value >= 2 && imageConfigs.value.image2.source) {
-      url.searchParams.set('image2', imageConfigs.value.image2.source)
-      url.searchParams.set('image2X', Math.max(0, Math.min(imageConfigs.value.image2.x, 1920 - imageConfigs.value.image2.width)).toString())
-      url.searchParams.set('image2Y', Math.max(0, Math.min(imageConfigs.value.image2.y, 1080 - imageConfigs.value.image2.height)).toString())
-      url.searchParams.set('image2Width', Math.max(1, Math.min(imageConfigs.value.image2.width, 1920)).toString())
-      url.searchParams.set('image2Height', Math.max(1, Math.min(imageConfigs.value.image2.height, 1080)).toString())
-    }
-
-    // 第3画像のパラメータ（モードが3で選択されている場合のみ）
-    if (imageMode.value >= 3 && imageConfigs.value.image3.source) {
-      url.searchParams.set('image3', imageConfigs.value.image3.source)
-      url.searchParams.set('image3X', Math.max(0, Math.min(imageConfigs.value.image3.x, 1920 - imageConfigs.value.image3.width)).toString())
-      url.searchParams.set('image3Y', Math.max(0, Math.min(imageConfigs.value.image3.y, 1080 - imageConfigs.value.image3.height)).toString())
-      url.searchParams.set('image3Width', Math.max(1, Math.min(imageConfigs.value.image3.width, 1920)).toString())
-      url.searchParams.set('image3Height', Math.max(1, Math.min(imageConfigs.value.image3.height, 1080)).toString())
-    }
-
-    // 動画生成パラメータ（enableVideoGenerationパラメータに基づく）
-    if (enableVideoGeneration) {
-      url.searchParams.set('generate_video', 'true')
-      url.searchParams.set('video_duration', videoConfig.value.duration.toString())
-      url.searchParams.set('video_format', videoConfig.value.format)
-      // 動画生成時は出力形式をpngに設定（Lambda側で動画生成を判定）
-      url.searchParams.set('format', 'png')
-    } else {
-      // 静止画像の場合はPNG固定
-      url.searchParams.set('format', 'png')
-    }
-
-    console.log('[App] Built API URL:', url.toString())
-    console.log('[App] Image configurations:', {
-      image1: imageConfigs.value.image1,
-      image2: imageConfigs.value.image2,
-      image3: imageConfigs.value.image3
-    })
-    console.log('[App] Video configuration:', videoConfig.value)
-    return url.toString()
-
-  } catch (urlError) {
-    console.error('[App] Invalid API URL:', rawApiUrl, urlError)
-    throw new Error(`Invalid API URL configuration: ${rawApiUrl}`)
+  if (rawApiUrl.startsWith('/')) {
+    return window.location.origin + rawApiUrl
+  } else if (rawApiUrl.startsWith('http://') || rawApiUrl.startsWith('https://')) {
+    return rawApiUrl
+  } else {
+    return `${window.location.protocol}//${rawApiUrl}`
   }
+}
+
+// 合成パラメータオブジェクトを構築
+const buildCompositeParams = (enableVideoGeneration: boolean = videoConfig.value.enabled): Record<string, string | number | boolean> => {
+  if (!imageConfigs.value.image1.source) {
+    throw new Error('Image1 is required for image composition')
+  }
+
+  const p: Record<string, string | number | boolean> = {
+    baseImage: params.value.baseImage,
+    format: 'png',
+    image1: imageConfigs.value.image1.source,
+    image1X: Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)),
+    image1Y: Math.max(0, Math.min(imageConfigs.value.image1.y, 1080 - imageConfigs.value.image1.height)),
+    image1Width: Math.max(1, Math.min(imageConfigs.value.image1.width, 1920)),
+    image1Height: Math.max(1, Math.min(imageConfigs.value.image1.height, 1080)),
+  }
+
+  if (imageMode.value >= 2 && imageConfigs.value.image2.source) {
+    p.image2 = imageConfigs.value.image2.source
+    p.image2X = Math.max(0, Math.min(imageConfigs.value.image2.x, 1920 - imageConfigs.value.image2.width))
+    p.image2Y = Math.max(0, Math.min(imageConfigs.value.image2.y, 1080 - imageConfigs.value.image2.height))
+    p.image2Width = Math.max(1, Math.min(imageConfigs.value.image2.width, 1920))
+    p.image2Height = Math.max(1, Math.min(imageConfigs.value.image2.height, 1080))
+  }
+
+  if (imageMode.value >= 3 && imageConfigs.value.image3.source) {
+    p.image3 = imageConfigs.value.image3.source
+    p.image3X = Math.max(0, Math.min(imageConfigs.value.image3.x, 1920 - imageConfigs.value.image3.width))
+    p.image3Y = Math.max(0, Math.min(imageConfigs.value.image3.y, 1080 - imageConfigs.value.image3.height))
+    p.image3Width = Math.max(1, Math.min(imageConfigs.value.image3.width, 1920))
+    p.image3Height = Math.max(1, Math.min(imageConfigs.value.image3.height, 1080))
+  }
+
+  if (enableVideoGeneration) {
+    p.generate_video = 'true'
+    p.video_duration = videoConfig.value.duration
+    p.video_format = videoConfig.value.format
+  }
+
+  console.log('[App] Composite params:', p)
+  return p
 }
 
 const generateImage = async () => {
@@ -339,18 +310,19 @@ const generateImage = async () => {
   resultUrl.value = ''
 
   try {
-    const url = buildApiUrl()
-    apiUrl.value = url
+    const endpoint = getApiEndpoint()
+    const compositeParams = buildCompositeParams(false)
+    apiUrl.value = endpoint
 
     // デバッグ情報をログ出力
-    logApiCallDetails(url)
+    console.log('[App] Starting PNG image generation via POST...')
+    console.log('[App] Endpoint:', endpoint)
 
-    console.log('[App] Starting PNG image generation request...')
-
-    // PNG形式で直接blobとして受信
-    const response = await axios.get(url, {
+    // POST形式でリクエスト
+    const response = await axios.post(endpoint, compositeParams, {
       responseType: 'blob',
       headers: {
+        'Content-Type': 'application/json',
         'Accept': 'image/png, image/*'
       },
       timeout: 30000
@@ -609,12 +581,14 @@ const generateVideo = async () => {
     videoGenerationProgress.value = 10
     appStore.updateLoadingMessage('合成画像を生成中...')
 
-    const staticImageApiUrl = buildApiUrl(false) // 動画生成なしのURL
-    console.log('[App] Generating static image first:', staticImageApiUrl)
+    const endpoint = getApiEndpoint()
+    const staticParams = buildCompositeParams(false)
+    console.log('[App] Generating static image first via POST')
 
-    const staticImageResponse = await axios.get(staticImageApiUrl, {
+    const staticImageResponse = await axios.post(endpoint, staticParams, {
       responseType: 'blob',
       headers: {
+        'Content-Type': 'application/json',
         'Accept': 'image/png, image/*'
       },
       timeout: 30000
@@ -630,21 +604,19 @@ const generateVideo = async () => {
     videoGenerationProgress.value = 30
     appStore.updateLoadingMessage('動画に変換中...')
 
-    const videoApiUrl = buildApiUrl(true) // 動画生成ありのURL
-    apiUrl.value = videoApiUrl
+    const videoParams = buildCompositeParams(true)
+    apiUrl.value = endpoint
 
-    // デバッグ情報をログ出力
-    logApiCallDetails(videoApiUrl)
-
-    console.log('[App] Starting video generation request...')
+    console.log('[App] Starting video generation via POST...')
 
     // 動画生成のタイムアウトを延長（90秒）
-    const response = await axios.get(videoApiUrl, {
-      responseType: 'json', // JSONレスポンスを期待
+    const response = await axios.post(endpoint, videoParams, {
+      responseType: 'json',
       headers: {
+        'Content-Type': 'application/json',
         'Accept': 'application/json, video/mp4, video/webm, video/*, application/octet-stream'
       },
-      timeout: 90000, // 90秒
+      timeout: 90000,
       onDownloadProgress: (progressEvent) => {
         if (progressEvent.total) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total)

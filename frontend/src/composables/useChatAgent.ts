@@ -146,10 +146,14 @@ export function useChatAgent() {
     const loadingId = chatStore.addLoadingMessage()
 
     try {
-      const url = buildApiUrl(cmd)
-      const response = await axios.get(url, {
+      const endpoint = getApiEndpoint()
+      const params = buildPostParams(cmd)
+      const response = await axios.post(endpoint, params, {
         responseType: 'blob',
-        headers: { Accept: 'image/png, image/*' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'image/png, image/*',
+        },
         timeout: cmd.videoEnabled ? 90000 : 30000,
       })
 
@@ -171,59 +175,55 @@ export function useChatAgent() {
     }
   }
 
-  function buildApiUrl(cmd: typeof chatStore.command): string {
+  function getApiEndpoint(): string {
     const rawApiUrl = configStore.apiUrl
     if (!rawApiUrl) throw new Error('API URLが設定されていません')
 
-    let base: string
     if (rawApiUrl.startsWith('/')) {
-      base = window.location.origin + rawApiUrl
+      return window.location.origin + rawApiUrl
     } else if (rawApiUrl.startsWith('http')) {
-      base = rawApiUrl
+      return rawApiUrl
     } else {
-      base = `${window.location.protocol}//${rawApiUrl}`
+      return `${window.location.protocol}//${rawApiUrl}`
+    }
+  }
+
+  function buildPostParams(cmd: typeof chatStore.command): Record<string, string | number> {
+    const p: Record<string, string | number> = {
+      baseImage: cmd.baseImage,
+      format: 'png',
+      image1: cmd.images.image1.source,
+      image1X: cmd.images.image1.x,
+      image1Y: cmd.images.image1.y,
+      image1Width: cmd.images.image1.width,
+      image1Height: cmd.images.image1.height,
     }
 
-    const url = new URL(base)
-    url.searchParams.set('baseImage', cmd.baseImage)
-    url.searchParams.set('format', 'png')
-
-    // image1 (必須)
-    const img1 = cmd.images.image1
-    url.searchParams.set('image1', img1.source)
-    url.searchParams.set('image1X', String(img1.x))
-    url.searchParams.set('image1Y', String(img1.y))
-    url.searchParams.set('image1Width', String(img1.width))
-    url.searchParams.set('image1Height', String(img1.height))
-
-    // image2
     if (cmd.imageMode >= 2 && cmd.images.image2.source) {
       const img2 = cmd.images.image2
-      url.searchParams.set('image2', img2.source)
-      url.searchParams.set('image2X', String(img2.x))
-      url.searchParams.set('image2Y', String(img2.y))
-      url.searchParams.set('image2Width', String(img2.width))
-      url.searchParams.set('image2Height', String(img2.height))
+      p.image2 = img2.source
+      p.image2X = img2.x
+      p.image2Y = img2.y
+      p.image2Width = img2.width
+      p.image2Height = img2.height
     }
 
-    // image3
     if (cmd.imageMode >= 3 && cmd.images.image3.source) {
       const img3 = cmd.images.image3
-      url.searchParams.set('image3', img3.source)
-      url.searchParams.set('image3X', String(img3.x))
-      url.searchParams.set('image3Y', String(img3.y))
-      url.searchParams.set('image3Width', String(img3.width))
-      url.searchParams.set('image3Height', String(img3.height))
+      p.image3 = img3.source
+      p.image3X = img3.x
+      p.image3Y = img3.y
+      p.image3Width = img3.width
+      p.image3Height = img3.height
     }
 
-    // 動画
     if (cmd.videoEnabled) {
-      url.searchParams.set('generate_video', 'true')
-      url.searchParams.set('video_duration', String(cmd.videoDuration))
-      url.searchParams.set('video_format', cmd.videoFormat)
+      p.generate_video = 'true'
+      p.video_duration = cmd.videoDuration
+      p.video_format = cmd.videoFormat
     }
 
-    return url.toString()
+    return p
   }
 
   return { showWelcome, handleUserInput }
