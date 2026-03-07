@@ -288,14 +288,14 @@ const loadS3Images = async () => {
   loadingImages.value = true
   
   try {
-    const config = configStore.config
-    if (!config?.apiUrl) {
+    const apiUrl = configStore.apiUrl
+    if (!apiUrl) {
       console.warn('[ImageSelector] API設定が読み込まれていません')
       return
     }
-    
+
     // アップロードAPIのURLを正しく構築
-    const baseApiUrl = config.apiUrl.replace('/images/composite', '')
+    const baseApiUrl = apiUrl.replace('/images/composite', '')
     const uploadApiUrl = `${baseApiUrl}/upload/images`
     
     console.log(`[ImageSelector] Loading S3 images from: ${uploadApiUrl}`)

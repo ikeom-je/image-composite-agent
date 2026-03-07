@@ -228,12 +228,12 @@ const validateFile = (file: File): boolean => {
 }
 
 const getPresignedUrl = async (file: File) => {
-  const config = configStore.config
-  if (!config?.apiUrl) {
+  const apiUrl = configStore.apiUrl
+  if (!apiUrl) {
     throw new Error('API設定が読み込まれていません')
   }
-  
-  const uploadApiUrl = config.apiUrl.replace('/images/composite', '/upload/presigned-url')
+
+  const uploadApiUrl = apiUrl.replace('/images/composite', '/upload/presigned-url')
   
   const response = await axios.post(uploadApiUrl, {
     fileName: file.name,
