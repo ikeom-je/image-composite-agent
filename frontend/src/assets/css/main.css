@@ -1,105 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* カスタムスタイル */
-@layer base {
-  html {
-    font-family: 'Inter', system-ui, sans-serif;
-  }
-  
-  body {
-    @apply bg-gray-50 text-gray-900;
-  }
-}
-
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors duration-200;
-  }
-  
-  .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
-  }
-  
-  .btn-secondary {
-    @apply btn bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500;
-  }
-  
-  .btn-success {
-    @apply btn bg-success-600 text-white hover:bg-success-700 focus:ring-success-500;
-  }
-  
-  .btn-warning {
-    @apply btn bg-warning-600 text-white hover:bg-warning-700 focus:ring-warning-500;
-  }
-  
-  .btn-error {
-    @apply btn bg-error-600 text-white hover:bg-error-700 focus:ring-error-500;
-  }
-  
-  .btn-outline {
-    @apply btn bg-transparent border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500;
-  }
-  
-  .input {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
-  }
-  
-  .input-error {
-    @apply input border-error-300 focus:ring-error-500 focus:border-error-500;
-  }
-  
-  .card {
-    @apply bg-white overflow-hidden shadow rounded-lg;
-  }
-  
-  .card-header {
-    @apply px-4 py-5 sm:px-6 border-b border-gray-200;
-  }
-  
-  .card-body {
-    @apply px-4 py-5 sm:p-6;
-  }
-  
-  .card-footer {
-    @apply px-4 py-4 sm:px-6 border-t border-gray-200;
-  }
-  
-  .alert {
-    @apply rounded-md p-4 mb-4;
-  }
-  
-  .alert-success {
-    @apply alert bg-success-50 border border-success-200 text-success-800;
-  }
-  
-  .alert-warning {
-    @apply alert bg-warning-50 border border-warning-200 text-warning-800;
-  }
-  
-  .alert-error {
-    @apply alert bg-error-50 border border-error-200 text-error-800;
-  }
-  
-  .alert-info {
-    @apply alert bg-primary-50 border border-primary-200 text-primary-800;
-  }
-}
-
-@layer utilities {
-  .text-shadow {
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-  
-  .text-shadow-lg {
-    text-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  }
-  
-  .backdrop-blur-xs {
-    backdrop-filter: blur(2px);
-  }
-}
+@import "tailwindcss";
 
 /* カスタムアニメーション */
 .fade-enter-active,
@@ -112,64 +11,36 @@
   opacity: 0;
 }
 
-.slide-up-enter-active,
-.slide-up-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-up-enter-from {
-  transform: translateY(20px);
-  opacity: 0;
-}
-
-.slide-up-leave-to {
-  transform: translateY(-20px);
-  opacity: 0;
-}
-
 /* ローディングスピナー */
 .spinner {
-  @apply inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin;
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: spin 1s linear infinite;
 }
 
-.spinner-lg {
-  @apply w-8 h-8 border-4;
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-/* レスポンシブ画像 */
-.responsive-img {
-  @apply max-w-full h-auto;
-}
-
-/* スクロールバーのカスタマイズ */
+/* カスタムスクロールバー */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded-full;
+  background: #f3f4f6;
+  border-radius: 9999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded-full hover:bg-gray-400;
+  background: #d1d5db;
+  border-radius: 9999px;
 }
 
-/* フォーカス表示の改善 */
-.focus-visible:focus-visible {
-  @apply outline-none ring-2 ring-primary-500 ring-offset-2;
-}
-
-/* プリント用スタイル */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  .print-break-before {
-    page-break-before: always;
-  }
-  
-  .print-break-after {
-    page-break-after: always;
-  }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }

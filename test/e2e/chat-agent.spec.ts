@@ -7,7 +7,7 @@ test.describe('チャットエージェント E2Eテスト', () => {
   test.describe('ポータルページ', () => {
     test('ポータルページが正しく表示される', async ({ page }) => {
       await page.goto(FRONTEND_URL);
-      await expect(page.getByRole('heading', { name: 'Image Compositor' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Image Compositor', level: 1 })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'API確認ページ' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'チャットエージェント' })).toBeVisible();
     });
@@ -27,27 +27,27 @@ test.describe('チャットエージェント E2Eテスト', () => {
   });
 
   test.describe('ナビゲーション', () => {
-    test('ナビゲーションバーが全ページで表示される', async ({ page }) => {
+    test('タブナビゲーションが全ページで表示される', async ({ page }) => {
       await page.goto(FRONTEND_URL);
       const nav = page.locator('nav');
       await expect(nav).toBeVisible();
       await expect(nav.getByText('Portal')).toBeVisible();
-      await expect(nav.getByText('API')).toBeVisible();
-      await expect(nav.getByText('Chat')).toBeVisible();
+      await expect(nav.getByText('APIDemo')).toBeVisible();
+      await expect(nav.getByText('ChatAgent')).toBeVisible();
     });
 
-    test('ナビゲーションでページ間遷移が動作する', async ({ page }) => {
+    test('タブでページ間遷移が動作する', async ({ page }) => {
       await page.goto(FRONTEND_URL);
 
-      // Chat へ遷移
-      await page.locator('nav').getByText('Chat').click();
+      // ChatAgent タブへ遷移
+      await page.locator('nav').getByText('ChatAgent').click();
       await expect(page).toHaveURL(/\/chat/);
 
-      // API へ遷移
-      await page.locator('nav').getByText('API').click();
+      // APIDemo タブへ遷移
+      await page.locator('nav').getByText('APIDemo').click();
       await expect(page).toHaveURL(/\/api/);
 
-      // Portal へ戻る
+      // Portal タブへ戻る
       await page.locator('nav').getByText('Portal').click();
       await expect(page).toHaveURL(new RegExp(`^${FRONTEND_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
     });
