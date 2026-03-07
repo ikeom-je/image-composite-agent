@@ -294,7 +294,9 @@ const loadS3Images = async () => {
       return
     }
 
-    const uploadApiUrl = `${uploadBaseUrl}/images`
+    // URLを安全に構築（末尾スラッシュの重複を防ぐ）
+    const base = uploadBaseUrl.replace(/\/+$/, '')
+    const uploadApiUrl = `${base}/images`
     
     console.log(`[ImageSelector] Loading S3 images from: ${uploadApiUrl}`)
     
