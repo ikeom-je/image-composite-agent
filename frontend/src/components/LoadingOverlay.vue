@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-transparent">
       <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
         <div class="flex items-center space-x-4">
           <div class="flex-shrink-0">
