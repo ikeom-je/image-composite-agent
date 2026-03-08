@@ -437,7 +437,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     const upload = api.root.addResource('upload', {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'POST', 'OPTIONS'],
+        allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
     });
@@ -451,7 +451,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': "'*'",
             'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
-            'method.response.header.Access-Control-Allow-Methods': "'GET,POST,OPTIONS'",
+            'method.response.header.Access-Control-Allow-Methods': "'GET,POST,DELETE,OPTIONS'",
           },
         },
         {
@@ -524,9 +524,35 @@ export class ImageProcessorApiStack extends cdk.Stack {
     const imagesList = upload.addResource('images', {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'OPTIONS'],
+        allowMethods: ['GET', 'DELETE', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization'],
       },
+    });
+
+    imagesList.addMethod('DELETE', uploadLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+            'method.response.header.Access-Control-Allow-Headers': true,
+            'method.response.header.Access-Control-Allow-Methods': true,
+          },
+        },
+        {
+          statusCode: '400',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '500',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
     });
 
     imagesList.addMethod('GET', uploadLambdaIntegration, {
