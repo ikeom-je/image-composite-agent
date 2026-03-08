@@ -416,9 +416,22 @@ def handler(event, context):
         
         logger.info(f"🚀 Image composition started - v{VERSION} [Request ID: {request_id}]")
         
-        # パラメータ解析
-        query_params = event.get('queryStringParameters', {}) or {}
-        logger.info(f"📋 Query parameters: {query_params} [Request ID: {request_id}]")
+        # パラメータ解析（POST bodyまたはGETクエリパラメータ）
+        http_method = event.get('httpMethod', 'GET')
+        if http_method == 'POST':
+            # POSTの場合はbodyからJSONパラメータを取得
+            body = event.get('body', '{}') or '{}'
+            if event.get('isBase64Encoded', False):
+                body = base64.b64decode(body).decode('utf-8')
+            try:
+                body_params = json.loads(body)
+            except (json.JSONDecodeError, TypeError):
+                body_params = {}
+            # bodyの値をすべて文字列に変換（クエリパラメータとの互換性のため）
+            query_params = {k: str(v) for k, v in body_params.items()}
+        else:
+            query_params = event.get('queryStringParameters', {}) or {}
+        logger.info(f"📋 [{http_method}] Parameters: {query_params} [Request ID: {request_id}]")
         
         # 必須パラメータの検証
         validation_errors = validate_required_parameters(query_params)

@@ -300,14 +300,78 @@ def generate_thumbnail(bucket_name: str, object_key: str) -> None:
     except Exception as e:
         logger.error(f"Thumbnail generation error for {object_key}: {e}")
 
+def delete_uploaded_image(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    アップロードされた画像をS3から削除
+
+    Args:
+        event: API Gateway event（queryStringParameters.keyでS3キーを指定）
+        context: Lambda context
+
+    Returns:
+        削除結果を含むレスポンス
+    """
+    try:
+        upload_bucket = os.environ.get('UPLOAD_BUCKET')
+        if not upload_bucket:
+            return format_response(500, {'error': 'Upload bucket not configured'})
+
+        # クエリパラメータからS3キーを取得
+        query_params = event.get('queryStringParameters') or {}
+        s3_key = query_params.get('key', '')
+
+        if not s3_key:
+            return format_response(400, {'error': 'key parameter is required'})
+
+        # パストラバーサル防止: uploads/images/ 配下のみ許可
+        if not s3_key.startswith('uploads/images/'):
+            return format_response(400, {'error': 'Invalid key: only uploads/images/ prefix is allowed'})
+
+        logger.info(f"Deleting image: {s3_key} from bucket: {upload_bucket}")
+
+        # 元画像の存在確認
+        try:
+            s3_client.head_object(Bucket=upload_bucket, Key=s3_key)
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                return format_response(404, {'error': f'Image not found: {s3_key}'})
+            raise
+
+        # サムネイルキーを生成
+        thumbnail_key = s3_key.replace('uploads/images/', 'thumbnails/').replace(
+            s3_key.split('.')[-1], 'png'
+        )
+
+        # 元画像を削除
+        s3_client.delete_object(Bucket=upload_bucket, Key=s3_key)
+        logger.info(f"Deleted original image: {s3_key}")
+
+        # サムネイルを削除（存在しなくてもエラーにしない）
+        try:
+            s3_client.delete_object(Bucket=upload_bucket, Key=thumbnail_key)
+            logger.info(f"Deleted thumbnail: {thumbnail_key}")
+        except Exception as e:
+            logger.warning(f"Thumbnail deletion skipped for {thumbnail_key}: {e}")
+
+        return format_response(200, {
+            'message': 'Image deleted successfully',
+            'deletedKey': s3_key,
+            'deletedThumbnailKey': thumbnail_key
+        })
+
+    except Exception as e:
+        logger.error(f"Image deletion error: {e}")
+        return format_response(500, {'error': str(e)})
+
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     メインハンドラー関数
-    
+
     Args:
         event: Lambda event
         context: Lambda context
-        
+
     Returns:
         処理結果
     """
@@ -315,13 +379,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # HTTPメソッドとパスに基づいてルーティング
         http_method = event.get('httpMethod', '').upper()
         path = event.get('path', '')
-        
+
         logger.info(f"Processing request: {http_method} {path}")
-        
+
         if http_method == 'POST' and path.endswith('/presigned-url'):
             return generate_presigned_upload_url(event, context)
         elif http_method == 'GET' and path.endswith('/images'):
             return list_uploaded_images(event, context)
+        elif http_method == 'DELETE' and path.endswith('/images'):
+            return delete_uploaded_image(event, context)
         elif 'Records' in event:
             # S3イベント
             return handle_upload_completion(event, context)
