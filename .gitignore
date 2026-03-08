@@ -12,3 +12,28 @@ cdk.out
 
 *__pycache__*
 *.pyc
+
+# Test output files (temporary)
+test/test-results/*
+!test/test-results/.gitkeep
+!test/test-results/README.md
+
+# Claude Code
+.claude/
+
+# Environment files (keep .env.example only)
+.env.local
+frontend/.env
+frontend/.env.local
+
+# Lambda layers (built artifacts)
+lambda-layers/
+
+# Frontend build artifacts
+frontend/dist/
+
+# MCP configuration (local settings)
+.mcp.json
+
+# Amazon Q credentials
+.amazonq/rules/credentials.md
