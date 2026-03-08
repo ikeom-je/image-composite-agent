@@ -6,7 +6,7 @@ import path from 'path';
  * S3アップロードAPI検証テスト
  */
 
-const API_BASE_URL = process.env.API_URL || 'https://u4v31lnz5m.execute-api.ap-northeast-1.amazonaws.com/prod';
+const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
 const UPLOAD_API_URL = `${API_BASE_URL.replace('/images/composite', '')}/upload`;
 
 test.describe('S3アップロードAPI検証', () => {

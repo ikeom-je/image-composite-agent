@@ -42,6 +42,16 @@ defineProps<Props>()
 
 <style scoped>
 .spinner-lg {
-  @apply inline-block w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin;
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  border: 4px solid #e0e7ff;
+  border-top-color: #4f46e5;
+  border-radius: 9999px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>
