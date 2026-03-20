@@ -9,6 +9,8 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
@@ -25,6 +27,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
   public readonly distribution: cloudfront.Distribution;
   public readonly apiEndpoint: string;
   public readonly uploadApiEndpoint: string;
+  public readonly chatApiEndpoint: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -581,9 +584,176 @@ export class ImageProcessorApiStack extends cdk.Stack {
       ],
     });
 
+    // ========================================
+    // Strands Agent チャットエージェント - v2.9.0
+    // ========================================
+
+    // DynamoDB テーブル（会話履歴）
+    const chatHistoryTable = new dynamodb.Table(this, 'ChatHistoryTable', {
+      tableName: 'ImageCompositor-ChatHistory',
+      partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    // Secrets Manager 参照（Anthropic APIキー）
+    const anthropicApiKeySecret = secretsmanager.Secret.fromSecretNameV2(
+      this, 'AnthropicApiKey', 'image-compositor/anthropic-api-key'
+    );
+
+    // Agent Lambda用 DLQ
+    const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
+      queueName: 'agent-handler-dlq',
+      retentionPeriod: cdk.Duration.days(14),
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+    });
+
+    // Agent Lambda用 Log Group
+    const agentLogGroup = new logs.LogGroup(this, 'AgentLogGroup', {
+      logGroupName: '/aws/lambda/agent-handler-function',
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Agent Lambda関数
+    const agentFunction = new lambda.Function(this, 'AgentFunction', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: lambda.Architecture.X86_64,
+      handler: 'agent_handler.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/python'), {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          command: [
+            'bash', '-c', [
+              'echo "Starting Agent Lambda bundling..."',
+              'pip install --upgrade pip',
+              'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
+              'pip install strands-agents strands-agents-tools anthropic -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
+              'cp *.py /asset-output/',
+              'if [ -d images ]; then cp -r images /asset-output/; fi',
+              'echo "Optimizing bundle size..."',
+              'find /asset-output -name "*.pyc" -delete',
+              'find /asset-output -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true',
+              'find /asset-output -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true',
+              'echo "Agent Lambda bundling completed"'
+            ].join(' && ')
+          ],
+          user: 'root'
+        },
+      }),
+      layers: [ffmpegLayer],
+      memorySize: 2048,
+      timeout: cdk.Duration.seconds(90),
+      reservedConcurrentExecutions: 5,
+      deadLetterQueue: agentDLQ,
+      retryAttempts: 0,
+      logGroup: agentLogGroup,
+      environment: {
+        CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
+        ANTHROPIC_SECRET_NAME: 'image-compositor/anthropic-api-key',
+        S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
+        S3_UPLOAD_BUCKET: this.uploadBucket.bucketName,
+        UPLOAD_BUCKET: this.uploadBucket.bucketName,
+        TEST_BUCKET: this.testImagesBucket.bucketName,
+        VERSION: VERSION,
+        LOG_LEVEL: 'INFO',
+        PYTHONPATH: '/var/runtime',
+        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
+      },
+      description: `Strands Agent chat handler with Anthropic Claude - v${VERSION}`,
+    });
+
+    // Agent Lambda IAM権限
+    chatHistoryTable.grantReadWriteData(agentFunction);
+    anthropicApiKeySecret.grantRead(agentFunction);
+    this.resourcesBucket.grantReadWrite(agentFunction);
+    this.uploadBucket.grantRead(agentFunction);
+    this.testImagesBucket.grantRead(agentFunction);
+
+    // Agent Lambda の S3 削除権限（アセット管理用）
+    this.uploadBucket.grantDelete(agentFunction);
+
+    // Agent Lambda の CloudFront ドメイン追加
+    agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+
+    // API Gateway - Agent エンドポイント
+    const agentLambdaIntegration = new apigateway.LambdaIntegration(agentFunction, {
+      proxy: true,
+    });
+
+    const chatResource = api.root.addResource('chat', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    // POST /chat
+    chatResource.addMethod('POST', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '400',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '500',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    // /chat/history/{sessionId}
+    const chatHistoryResource = chatResource.addResource('history');
+    const chatSessionResource = chatHistoryResource.addResource('{sessionId}', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    chatSessionResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    chatSessionResource.addMethod('DELETE', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
     // APIエンドポイントを保存
     this.apiEndpoint = `${api.url}images/composite`;
     this.uploadApiEndpoint = `${api.url}upload`;
+    this.chatApiEndpoint = `${api.url}chat`;
 
     // CloudFront Origin Access Identity (OAI) の作成
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OriginAccessIdentity', {
@@ -1042,6 +1212,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       // 基本API設定
       apiUrl: this.apiEndpoint,
       uploadApiUrl: `${api.url}upload`,
+      chatApiUrl: this.chatApiEndpoint,
       cloudfrontUrl: customDomain ? `https://${customDomain}` : `https://${this.distribution.distributionDomainName}`,
 
       // S3バケット設定
@@ -1250,6 +1421,12 @@ export class ImageProcessorApiStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DashboardUrl', {
       value: `https://console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${dashboard.dashboardName}`,
       description: 'URL for the CloudWatch Dashboard'
+    });
+
+    new cdk.CfnOutput(this, 'ChatApiUrl', {
+      value: this.chatApiEndpoint,
+      description: 'URL for the Chat Agent API',
+      exportName: 'ImageProcessorChatApiEndpoint',
     });
   }
 }
