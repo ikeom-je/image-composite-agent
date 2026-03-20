@@ -1,12 +1,23 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ChatMessage, CompositeCommand } from '@/types/chat'
+
+const SESSION_STORAGE_KEY = 'chat-session-id'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const command = ref<CompositeCommand>(createDefaultCommand())
+  const sessionId = ref<string>(
+    localStorage.getItem(SESSION_STORAGE_KEY) || crypto.randomUUID()
+  )
+  const isProcessing = ref(false)
 
   const messageCount = computed(() => messages.value.length)
+
+  // sessionIdをlocalStorageに永続化
+  watch(sessionId, (newId) => {
+    localStorage.setItem(SESSION_STORAGE_KEY, newId)
+  }, { immediate: true })
 
   function createDefaultCommand(): CompositeCommand {
     return {
@@ -20,7 +31,7 @@ export const useChatStore = defineStore('chat', () => {
       format: 'png',
       videoEnabled: false,
       videoDuration: 3,
-      videoFormat: 'XMF',
+      videoFormat: 'MXF',
     }
   }
 
@@ -59,14 +70,22 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
+  function newSession() {
+    sessionId.value = crypto.randomUUID()
+    messages.value = []
+  }
+
   return {
     messages,
     command,
+    sessionId,
+    isProcessing,
     messageCount,
     addMessage,
     addLoadingMessage,
     replaceMessage,
     resetCommand,
     clearMessages,
+    newSession,
   }
 })
