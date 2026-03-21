@@ -675,9 +675,6 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // Agent Lambda の S3 削除権限（アセット管理用）
     this.uploadBucket.grantDelete(agentFunction);
 
-    // Agent Lambda の CloudFront ドメイン追加
-    agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
-
     // API Gateway - Agent エンドポイント
     const agentLambdaIntegration = new apigateway.LambdaIntegration(agentFunction, {
       proxy: true,
@@ -944,6 +941,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Lambda関数の環境変数にCloudFrontドメインを追加
     imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+    agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
 
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {
