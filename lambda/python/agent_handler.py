@@ -9,10 +9,37 @@ DELETE /chat/history/{sessionId} - 会話履歴削除
 import json
 import os
 import re
+import sys
 import uuid
 import logging
 import time
+from types import ModuleType
 from typing import Dict, Any, Optional
+
+# OpenTelemetry entry_points 問題の回避
+# strands-agents が opentelemetry をimportする際、Lambda環境では
+# entry_pointsメタデータが正しく解決されずStopIterationが発生する。
+# importlib.metadata.entry_points をパッチして回避する。
+import importlib.metadata
+
+_original_entry_points = importlib.metadata.entry_points
+
+def _patched_entry_points(**kwargs):
+    """entry_points のパッチ版。opentelemetry_context グループの結果が空の場合にフォールバックを提供する。"""
+    result = _original_entry_points(**kwargs)
+    group = kwargs.get('group', '')
+    if group == 'opentelemetry_context':
+        items = list(result) if hasattr(result, '__iter__') else []
+        if not items:
+            class _FakeEntryPoint:
+                name = 'contextvars_context'
+                def load(self):
+                    from opentelemetry.context.contextvars_context import ContextVarsRuntimeContext
+                    return ContextVarsRuntimeContext
+            return [_FakeEntryPoint()]
+    return result
+
+importlib.metadata.entry_points = _patched_entry_points
 
 try:
     import boto3
@@ -85,7 +112,7 @@ def create_agent():
     model = AnthropicModel(
         client_args={"api_key": api_key},
         model_id="claude-sonnet-4-20250514",
-        params={"max_tokens": 4096},
+        max_tokens=4096,
     )
 
     agent = Agent(
@@ -189,7 +216,9 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
             'requestId': request_id,
         })
     except Exception as e:
-        logger.error(f"Chat error: {e} [Request ID: {request_id}]")
+        import traceback
+        logger.error(f"Chat error: {type(e).__name__}: {e} [Request ID: {request_id}]")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return format_response(500, {
             'error': 'エージェントの処理中にエラーが発生しました。しばらくお待ちください。',
             'requestId': request_id,

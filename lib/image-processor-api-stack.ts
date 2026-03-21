@@ -620,7 +620,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     // Agent Lambda関数（ffmpegレイヤー不要 - 動画生成は既存Lambdaに委譲）
     const agentFunction = new lambda.Function(this, 'AgentFunction', {
       runtime: lambda.Runtime.PYTHON_3_12,
-      architecture: lambda.Architecture.X86_64,
+      architecture: lambda.Architecture.ARM_64,
       handler: 'agent_handler.handler',
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/python'), {
         bundling: {
@@ -629,16 +629,52 @@ export class ImageProcessorApiStack extends cdk.Stack {
             'bash', '-c', [
               'echo "Starting Agent Lambda bundling..."',
               'pip install --upgrade pip',
-              // Agent専用依存のみインストール（Pillow等は既存requirements.txtから）
-              'pip install strands-agents anthropic pillow boto3 -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
+              // Agent専用依存のみインストール（opentelemetry-sdk含む、strands-agentsが依存）
+              'pip install strands-agents anthropic pillow boto3 opentelemetry-sdk opentelemetry-api opentelemetry-exporter-otlp-proto-http -t /asset-output --no-cache-dir 2>&1 | tail -5',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'echo "Optimizing bundle size..."',
               'find /asset-output -name "*.pyc" -delete',
               'find /asset-output -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true',
-              'find /asset-output -name "*.dist-info" -type d -exec rm -rf {} + 2>/dev/null || true',
+              // .dist-info はentry_pointsメタデータに必要なため保持（opentelemetry等）
               // テスト関連・不要パッケージの削除でサイズ削減
               'rm -rf /asset-output/tests /asset-output/test 2>/dev/null || true',
+              // OpenTelemetry context の entry_points 解決失敗をパッチ（保険）
+              // _load_runtime_context() が entry_points を解決できない場合に ContextVarsRuntimeContext を直接返す
+              `python3 -c "
+import pathlib
+p = pathlib.Path('/asset-output/opentelemetry/context/__init__.py')
+if p.exists():
+    code = p.read_text()
+    if 'PATCHED' not in code:
+        # _load_runtime_context 関数全体を安全な実装に置き換え
+        old = 'def _load_runtime_context()'
+        if old in code:
+            idx = code.index(old)
+            # 関数の終了位置を検出（次のモジュールレベル定義まで）
+            rest = code[idx:]
+            lines = rest.split('\\n')
+            end_idx = 0
+            for i, line in enumerate(lines[1:], 1):
+                if line and not line.startswith(' ') and not line.startswith('\\t') and not line.startswith('#') and line.strip():
+                    end_idx = i
+                    break
+            if end_idx == 0:
+                end_idx = len(lines)
+            new_func = '''def _load_runtime_context():  # PATCHED
+    from opentelemetry.context.contextvars_context import ContextVarsRuntimeContext
+    return ContextVarsRuntimeContext()
+'''
+            patched = code[:idx] + new_func + '\\n'.join(lines[end_idx:])
+            p.write_text(patched)
+            print('Patched opentelemetry context __init__.py')
+        else:
+            print('Could not find _load_runtime_context, skipping')
+    else:
+        print('Already patched')
+else:
+    print('opentelemetry context not found')
+"`,
               'echo "Agent Lambda bundling completed"'
             ].join(' && ')
           ],
