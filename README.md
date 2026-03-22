@@ -1,47 +1,39 @@
-# 🎨 画像合成REST API
+# 🎨 Image Compositor
 
-高性能・アルファチャンネル対応の画像合成REST APIシステムです。**3画像同時合成**に対応し、AWS CDK、Lambda、API Gatewayを使用して構築された、本格的なプロダクション対応システムです。uvによる高速パッケージ管理、動的設定管理、環境別デプロイ、包括的な監視機能を備えています。
+高性能・アルファチャンネル対応の画像合成REST APIシステムです。**3画像同時合成**・**自然言語チャットエージェント**に対応し、AWS CDK、Lambda、API Gatewayを使用して構築されたプロダクション対応システムです。
 
 ## ✨ 主な特徴
 
 - **🎨 3画像同時合成**: 最大3つの画像を同時に合成（後方互換性完全保持）
+- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock Claude Sonnet 4.5）
 - **📁 画像アップロード機能**: ドラッグ&ドロップによる直接S3アップロード
-- **🚀 高性能**: ARM64アーキテクチャ + uvによる高速パッケージ管理
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
 - **⚡ 並列処理**: 最大3画像の同時取得による高速化
-- **🌐 ブラウザフレンドリー**: 美しいHTML表示 + JavaScriptダウンロード
 - **🔧 柔軟な画像指定**: HTTP URL、S3パス、テスト画像、アップロード画像に対応
 - **📊 動的設定管理**: 環境別設定ファイルによる柔軟な構成管理
 - **🔍 包括的監視**: CloudWatch ダッシュボード、アラーム、ログ機能
 - **🛡️ セキュリティ強化**: 署名付きURL、使用量制限、CORS設定
 - **🌍 CDN配信**: CloudFront による高速コンテンツ配信
-- **📈 スケーラブル**: Lambda 同時実行制限、API Gateway スロットリング
 
 ## 🏗️ アーキテクチャ
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   API Gateway   │───▶│   AWS Lambda     │───▶│   Amazon S3     │
-│                 │    │  (Python 3.11)  │    │  (画像ストレージ) │
-│ REST API        │    │  + uv + venv     │    │                 │
-│ /images/        │    │  + Pillow        │    │ - テスト画像     │
-│ composite       │    │  + boto3         │    │ - リソース画像   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                                       ▲
-                                                       │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │  CloudFront    │
-                                              │  Distribution   │
-                                              └───────┬─────────┘
-                                                      │
-                                                      ▼
-                                              ┌─────────────────┐
-                                              │   S3 Bucket     │
-                                              │  (Private)      │
-                                              │  Vue.js 3      │
-                                              │  フロントエンド  │
-                                              └─────────────────┘
+┌──────────────────┐    ┌───────────────────┐    ┌─────────────────┐
+│   API Gateway    │───▶│ Image Processor   │───▶│   Amazon S3     │
+│                  │    │ Lambda (Py 3.12)  │    │  (画像/動画)     │
+│ /images/composite│    │ + Pillow + boto3  │    └────────┬────────┘
+│ /upload          │    └───────────────────┘             │
+│ /chat            │    ┌───────────────────┐    ┌────────▼────────┐
+│                  │───▶│ Agent Lambda      │───▶│  CloudFront     │
+└──────────────────┘    │ (Py 3.12, ARM64)  │    │  Distribution   │
+                        │ Strands Agent SDK │    └────────┬────────┘
+        ┌───────────────┤                   │             │
+        │               └───────────────────┘    ┌────────▼────────┐
+        ▼                        │               │   S3 Bucket     │
+┌───────────────┐       ┌───────▼───────┐       │  Vue.js 3       │
+│   DynamoDB    │       │  AWS Bedrock  │       │  フロントエンド   │
+│ ChatHistory   │       │ Claude 4.5    │       └─────────────────┘
+└───────────────┘       └───────────────┘
 ```
 
 ## 🚀 クイックスタート
@@ -53,6 +45,7 @@
 デプロイ後、以下の環境変数またはCloudFormation出力から必要な情報を取得してください：
 
 - **API エンドポイント**: `${CloudFormation出力: ApiUrl}`
+- **Chat API エンドポイント**: `${CloudFormation出力: ChatApiUrl}`
 - **フロントエンド URL**: `${CloudFormation出力: FrontendUrl}`
 - **アップロード API URL**: `${CloudFormation出力: UploadApiUrl}`
 - **監視ダッシュボード**: `${CloudFormation出力: DashboardUrl}`
@@ -131,7 +124,7 @@ echo "UPLOAD_BUCKET: ${UPLOAD_BUCKET}"
 **スタック情報:**
 - スタック名: `ImageProcessorApiStack`
 - リージョン: `ap-northeast-1`（デフォルト）
-- 主要リソース: API Gateway、Lambda関数、S3バケット、CloudFront Distribution
+- 主要リソース: API Gateway、Lambda関数x2、S3バケット、CloudFront、DynamoDB、Bedrock
 
 **デプロイ後の情報取得:**
 ```bash
@@ -208,10 +201,10 @@ curl "${API_URL}?baseImage=test&image1=test&image2=test&image3=test"
 
 ### テスト環境
 
-- **ユニットテスト**: Python unittest（Lambda関数）
-- **統合テスト**: Playwright（API）
-- **E2Eテスト**: Playwright（フロントエンド）
-- **テスト対象**: Lambda関数、API、アップロード機能、画像選択、統合ワークフロー
+- **ユニットテスト**: Python unittest（Lambda関数、Agent）
+- **統合テスト**: Playwright（画像合成API、Chat Agent API）
+- **E2Eテスト**: Playwright（フロントエンド、Chat Agent UI）
+- **テスト対象**: Lambda関数、API、アップロード機能、画像選択、統合ワークフロー、Chat Agent
 
 ### テストの実行
 
@@ -226,6 +219,11 @@ npm run test:upload         # アップロード機能E2Eテスト
 npm run test:selection      # 画像選択機能E2Eテスト
 npm run test:integration    # 統合ワークフローE2Eテスト
 npm run test:all-e2e        # 全E2Eテスト実行
+
+# Chat Agent テスト
+npm run test:agent                                        # Agentユニットテスト
+CHAT_API_URL=... npx playwright test --config=test/playwright-api.config.ts --grep "Chat Agent"  # API統合テスト
+FRONTEND_URL=... npx playwright test --project=chat-agent-tests                                   # E2Eテスト
 ```
 
 ### テスト構成
@@ -233,9 +231,14 @@ npm run test:all-e2e        # 全E2Eテスト実行
 - `test/lambda/`: Lambda関数のユニットテスト
   - `test_image_processor.py`: 画像処理機能のテスト
   - `test_upload_manager.py`: アップロード管理機能のテスト
+  - `test_agent_handler.py`: Agentハンドラーのテスト
+  - `test_agent_tools.py`: Agentツールのテスト
+  - `test_chat_history.py`: 会話履歴管理のテスト
 - `test/e2e/`: PlaywrightによるE2Eテスト
   - `api-validation.api.spec.ts`: API機能の検証テスト
   - `image-processor.api.spec.ts`: API機能のテスト
+  - `chat-agent.api.spec.ts`: Chat Agent API統合テスト
+  - `chat-agent.spec.ts`: Chat Agent E2Eテスト
   - `upload-functionality.spec.ts`: アップロード機能のテスト
   - `image-selection.spec.ts`: 画像選択機能のテスト
   - `integration-workflow.spec.ts`: 統合ワークフローのテスト
@@ -260,11 +263,14 @@ npm run regenerate-expected-images
 
 ### テストカバレッジ
 
-✅ Lambda関数のユニットテスト（画像処理・アップロード管理）  
-✅ API統合テスト（エンドポイント・エラーハンドリング）  
-✅ アップロード機能E2Eテスト（UI・ファイル処理・エラー）  
-✅ 画像選択機能E2Eテスト（3択選択・S3一覧・モード切り替え）  
+✅ Lambda関数のユニットテスト（画像処理・アップロード管理）
+✅ API統合テスト（エンドポイント・エラーハンドリング）
+✅ アップロード機能E2Eテスト（UI・ファイル処理・エラー）
+✅ 画像選択機能E2Eテスト（3択選択・S3一覧・モード切り替え）
 ✅ 統合ワークフローE2Eテスト（完全フロー・互換性・パフォーマンス）
+✅ Chat Agent ユニットテスト（ハンドラー・ツール・履歴管理: 42件）
+✅ Chat Agent API統合テスト（POST/GET/DELETE: 13件）
+✅ Chat Agent E2Eテスト（UI操作・メッセージ送受信: 14件）
 
 ## 📖 API仕様
 
@@ -381,18 +387,19 @@ curl "${API_URL}?baseImage=s3://${UPLOAD_BUCKET}/uploads/images/base.png&image1=
 
 ### Lambda関数
 
-- **ランタイム**: Python 3.12
-- **アーキテクチャ**: X86_64（ライブラリ互換性重視）
-- **メモリ**: 1024MB
-- **タイムアウト**: 30秒
-- **パッケージ管理**: uv（高速Pythonパッケージマネージャー）
+| Lambda | ランタイム | アーキテクチャ | メモリ | タイムアウト | 用途 |
+|--------|----------|--------------|--------|------------|------|
+| ImageProcessorFunction | Python 3.12 | X86_64 | 2048MB | 90秒 | 画像合成・動画生成 |
+| AgentFunction | Python 3.12 | ARM_64 | 2048MB | 90秒 | Chat Agent (Bedrock) |
+
 - **並列処理**: 最大3画像の同時取得
 
 ### 主要ライブラリ
 
 - **Pillow**: 高性能画像処理
 - **boto3**: AWS SDK
-- **requests**: HTTP通信
+- **Strands Agents SDK**: AIエージェントフレームワーク
+- **AWS Bedrock**: Claude Sonnet 4.5 LLM推論
 
 ### 出力仕様
 
@@ -413,34 +420,47 @@ image-processor-api/
 ├── lambda/
 │   └── python/
 │       ├── image_processor.py             # メインLambda関数（3画像対応）
-│       ├── upload_manager.py              # アップロード管理Lambda関数 ← 新規追加
+│       ├── image_compositor.py            # 合成エンジン
+│       ├── image_fetcher.py               # 画像取得（S3/HTTP/テスト画像）
+│       ├── upload_manager.py              # アップロード管理Lambda関数
+│       ├── video_generator.py             # 動画生成
+│       ├── agent_handler.py               # Chat Agent Lambdaハンドラー
+│       ├── agent_tools.py                 # Strands @tool 定義
+│       ├── agent_prompts.py               # システムプロンプト・座標マッピング
+│       ├── chat_history.py                # DynamoDB会話履歴管理
 │       ├── requirements.txt               # Python依存関係
 │       └── images/                        # テスト画像
-│           ├── default-base.png          # ベース画像用（黒背景）
-│           ├── circle_red.png            # 合成画像1用（円）
-│           ├── rectangle_blue.png        # 合成画像2用（四角）
-│           └── triangle_green.png        # 合成画像3用（三角）
-├── frontend/                             # Vue.js フロントエンド（アップロード機能付き）
+├── frontend/                             # Vue.js フロントエンド
 │   ├── src/
+│   │   ├── pages/                        # ページコンポーネント
+│   │   │   ├── PortalPage.vue            # ポータル
+│   │   │   ├── ApiPage.vue               # API Demo
+│   │   │   └── ChatPage.vue              # Chat Agent
 │   │   ├── components/
-│   │   │   ├── ImageUploader.vue         # 画像アップロードコンポーネント ← 新規追加
-│   │   │   ├── ImageSelector.vue         # 画像選択コンポーネント ← 新規追加
-│   │   │   ├── ImageConfigTable.vue     # 画像設定テーブル
-│   │   │   └── ResultDisplay.vue        # 結果表示コンポーネント
+│   │   │   ├── ImageUploader.vue         # 画像アップロード
+│   │   │   ├── ImageSelector.vue         # 画像選択
+│   │   │   ├── ImageConfigTable.vue      # 画像設定テーブル
+│   │   │   ├── ResultDisplay.vue         # 結果表示
+│   │   │   └── chat/                     # チャットUIコンポーネント
+│   │   ├── composables/
+│   │   │   └── useChatAgent.ts           # Agent API統合
 │   │   ├── stores/                       # Pinia状態管理
-│   │   ├── utils/                        # ユーティリティ関数
-│   │   ├── App.vue                       # メインコンポーネント（統合済み）
-│   │   └── main.js                       # エントリーポイント
+│   │   └── utils/                        # ユーティリティ関数
 │   └── package.json                      # 依存関係
-├── test/                                 # 包括的テストスイート ← 拡張
+├── test/                                 # 包括的テストスイート
 │   ├── lambda/
 │   │   ├── test_image_processor.py       # 画像処理テスト
-│   │   └── test_upload_manager.py        # アップロード機能テスト ← 新規追加
+│   │   ├── test_upload_manager.py        # アップロード機能テスト
+│   │   ├── test_agent_handler.py         # Agentハンドラーテスト
+│   │   ├── test_agent_tools.py           # Agentツールテスト
+│   │   └── test_chat_history.py          # 会話履歴テスト
 │   ├── e2e/
-│   │   ├── upload-functionality.spec.ts  # アップロード機能E2Eテスト ← 新規追加
-│   │   ├── image-selection.spec.ts       # 画像選択機能E2Eテスト ← 新規追加
-│   │   └── integration-workflow.spec.ts  # 統合ワークフローテスト ← 新規追加
-│   └── run-comprehensive-tests.sh        # 包括的テスト実行スクリプト ← 新規追加
+│   │   ├── chat-agent.api.spec.ts        # Chat Agent API統合テスト
+│   │   ├── chat-agent.spec.ts            # Chat Agent E2Eテスト
+│   │   ├── upload-functionality.spec.ts  # アップロード機能E2Eテスト
+│   │   ├── image-selection.spec.ts       # 画像選択機能E2Eテスト
+│   │   └── integration-workflow.spec.ts  # 統合ワークフローテスト
+│   └── run-comprehensive-tests.sh        # 包括的テスト実行スクリプト
 ├── scripts/
 │   ├── generate_triangle_image.py        # 三角形画像生成スクリプト
 │   ├── upload-test-images.sh             # テスト画像アップロード（3画像対応）
@@ -549,10 +569,10 @@ aws logs tail /aws/lambda/ImageProcessorApiStack-ImageProcessorFunction --follow
 
 ## 📊 パフォーマンス
 
-- ⚡ **uvによる高速パッケージ管理**: 従来のpipより高速
 - 🔄 **並列画像取得**: 複数画像の同時ダウンロード
-- 💪 **ARM64アーキテクチャ**: 高性能・低コスト
+- 💪 **ARM64アーキテクチャ**: Agent Lambda（高性能・低コスト）
 - 🎯 **効率的なメモリ使用**: 画像処理の最適化
+- 🤖 **Bedrock推論**: US Cross-Region推論プロファイルによる安定したAI推論
 
 ## 🤝 貢献
 
@@ -573,4 +593,4 @@ aws logs tail /aws/lambda/ImageProcessorApiStack-ImageProcessorFunction --follow
 
 ---
 
-**画像合成REST API** - 高性能・アルファチャンネル対応の画像合成システム 🎨✨
+**Image Compositor** - 高性能画像合成 + AIチャットエージェント 🎨🤖
