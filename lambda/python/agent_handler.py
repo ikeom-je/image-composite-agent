@@ -101,18 +101,16 @@ def get_anthropic_api_key() -> str:
 
 
 def create_agent():
-    """Strands Agentを初期化する"""
+    """Strands Agentを初期化する（AWS Bedrock経由）"""
     from strands import Agent
-    from strands.models.anthropic import AnthropicModel
+    from strands.models.bedrock import BedrockModel
     from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help
     from agent_prompts import SYSTEM_PROMPT
 
-    api_key = get_anthropic_api_key()
-
-    model = AnthropicModel(
-        client_args={"api_key": api_key},
-        model_id="claude-sonnet-4-20250514",
+    model = BedrockModel(
+        model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
         max_tokens=4096,
+        region_name="us-east-1",
     )
 
     agent = Agent(

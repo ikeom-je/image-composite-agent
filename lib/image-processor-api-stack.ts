@@ -704,7 +704,14 @@ else:
 
     // Agent Lambda IAM権限
     chatHistoryTable.grantReadWriteData(agentFunction);
-    anthropicApiKeySecret.grantRead(agentFunction);
+    // Bedrock InvokeModel 権限
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        'arn:aws:bedrock:*::foundation-model/anthropic.*',
+        'arn:aws:bedrock:*:*:inference-profile/us.anthropic.*',
+      ],
+    }));
     this.resourcesBucket.grantReadWrite(agentFunction);
     this.uploadBucket.grantRead(agentFunction);
     this.testImagesBucket.grantRead(agentFunction);
