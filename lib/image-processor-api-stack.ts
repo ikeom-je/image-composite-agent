@@ -10,7 +10,7 @@ import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
@@ -598,11 +598,6 @@ export class ImageProcessorApiStack extends cdk.Stack {
       timeToLiveAttribute: 'ttl',
     });
 
-    // Secrets Manager 参照（Anthropic APIキー）
-    const anthropicApiKeySecret = secretsmanager.Secret.fromSecretNameV2(
-      this, 'AnthropicApiKey', 'image-compositor/anthropic-api-key'
-    );
-
     // Agent Lambda用 DLQ
     const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
       queueName: 'agent-handler-dlq',
@@ -707,7 +702,7 @@ else:
     // Bedrock InvokeModel 権限
     // Bedrock Marketplace: モデルサブスクリプション確認に必要
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+      actions: ['aws-marketplace:ViewSubscriptions'],
       resources: ['*'],
     }));
     // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス

@@ -52,7 +52,7 @@ logger.setLevel(logging.INFO)
 VERSION = os.environ.get('VERSION', '2.9.0')
 
 # APIキーキャッシュ（コールドスタート間で再利用）
-_cached_api_key: Optional[str] = None
+
 
 
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
@@ -72,32 +72,6 @@ def format_response(status_code: int, body: Any, headers: Dict[str, str] = None)
         'body': json.dumps(body, ensure_ascii=False, default=str) if isinstance(body, (dict, list)) else body,
     }
 
-
-def get_anthropic_api_key() -> str:
-    """Secrets ManagerからAnthropic APIキーを取得する（キャッシュ付き）"""
-    global _cached_api_key
-    if _cached_api_key:
-        return _cached_api_key
-
-    secret_name = os.environ.get('ANTHROPIC_SECRET_NAME', '')
-    if not secret_name:
-        raise RuntimeError("ANTHROPIC_SECRET_NAME environment variable is not set")
-
-    if boto3 is None:
-        raise RuntimeError("boto3 is not available")
-
-    client = boto3.client('secretsmanager')
-    response = client.get_secret_value(SecretId=secret_name)
-    secret_string = response['SecretString']
-
-    # JSON形式の場合（{"api_key": "..."} 形式）
-    try:
-        secret_data = json.loads(secret_string)
-        _cached_api_key = secret_data.get('api_key', secret_string)
-    except (json.JSONDecodeError, TypeError):
-        _cached_api_key = secret_string
-
-    return _cached_api_key
 
 
 def create_agent():

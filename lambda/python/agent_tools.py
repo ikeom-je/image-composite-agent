@@ -332,9 +332,8 @@ def delete_uploaded_image(image_key: str) -> dict:
         s3_client.delete_object(Bucket=upload_bucket, Key=image_key)
 
         # サムネイルも削除
-        thumbnail_key = image_key.replace('uploads/images/', 'thumbnails/').replace(
-            image_key.split('.')[-1], 'png'
-        )
+        base_name, _ = os.path.splitext(image_key.replace('uploads/images/', 'thumbnails/'))
+        thumbnail_key = f"{base_name}.png"
         try:
             s3_client.delete_object(Bucket=upload_bucket, Key=thumbnail_key)
         except Exception:
