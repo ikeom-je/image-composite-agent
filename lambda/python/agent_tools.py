@@ -268,7 +268,6 @@ def list_uploaded_images() -> dict:
     """アップロード済み画像の一覧を取得します。S3にアップロードされた画像のファイル名・サイズ・日時・サムネイルURLを返します。"""
     s3_client = _get_s3_client()
     upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
-    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
 
     if not upload_bucket:
         return {'success': False, 'error': 'アップロードバケットが設定されていません'}
@@ -293,9 +292,16 @@ def list_uploaded_images() -> dict:
                     'size_display': _format_size(obj['Size']),
                     'last_modified': obj['LastModified'].isoformat(),
                 }
-                if cloudfront_domain:
-                    thumb_name = os.path.splitext(filename)[0] + '.png'
-                    image_info['thumbnail_url'] = f"https://{cloudfront_domain}/thumbnails/{thumb_name}"
+                # S3署名付きURLでサムネイル（元画像）を返却
+                try:
+                    presigned_url = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': upload_bucket, 'Key': obj['Key']},
+                        ExpiresIn=3600,
+                    )
+                    image_info['thumbnail_url'] = presigned_url
+                except Exception:
+                    pass
                 images.append(image_info)
 
         return {
