@@ -145,7 +145,9 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
             except Exception as e:
                 logger.warning(f"Failed to save user message: {e}")
 
-        # Agent実行
+        # Agent実行（メディア結果をリセット）
+        import agent_tools
+        agent_tools._last_media_result = None
         agent = create_agent()
 
         # 会話履歴がある場合はメッセージに追加
@@ -294,45 +296,18 @@ def _enrich_image_list(images: list) -> list:
 
 def _extract_media_from_result(result, agent) -> Optional[Dict]:
     """Agentの実行結果からメディアデータを抽出する"""
-    # Agentのメッセージ履歴からツール結果を検索
     try:
-        if hasattr(agent, 'messages') and agent.messages:
-            for msg in reversed(agent.messages):
-                if msg.get('role') == 'user' and isinstance(msg.get('content'), list):
-                    for block in msg['content']:
-                        if isinstance(block, dict) and block.get('toolResult'):
-                            tool_result = block['toolResult']
-                            content = tool_result.get('content', [])
-                            for item in content:
-                                if isinstance(item, dict) and 'text' in item:
-                                    try:
-                                        data = json.loads(item['text'])
-                                        if isinstance(data, dict):
-                                            # 画像結果
-                                            if data.get('image_base64'):
-                                                return {
-                                                    'type': 'image',
-                                                    'data': data['image_base64'],
-                                                    'url': None,
-                                                }
-                                            # 動画結果
-                                            if data.get('video_url'):
-                                                return {
-                                                    'type': 'video',
-                                                    'data': None,
-                                                    'url': data['video_url'],
-                                                }
-                                            # 画像一覧結果（署名付きURLを付与）
-                                            if data.get('type') == 'image_list' and data.get('images') is not None:
-                                                return {
-                                                    'type': 'image_list',
-                                                    'images': _enrich_image_list(data['images']),
-                                                    'count': data.get('count', len(data['images'])),
-                                                }
-                                    except (json.JSONDecodeError, TypeError):
-                                        continue
+        # agent_tools._last_media_result から直接取得（コンテキスト超過対策）
+        from agent_tools import _last_media_result
+        if _last_media_result:
+            media = _last_media_result.copy()
+            # image_listの場合は署名付きURLを付与
+            if media.get('type') == 'image_list' and media.get('images') is not None:
+                media['images'] = _enrich_image_list(media['images'])
+                media.setdefault('count', len(media['images']))
+            return media
     except Exception as e:
-        logger.warning(f"Failed to extract media: {e}")
+        logger.warning(f"Failed to extract media from _last_media_result: {e}")
 
     return None
 

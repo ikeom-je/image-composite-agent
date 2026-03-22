@@ -204,7 +204,20 @@ def fetch_image(url_or_s3_path: str, image_type: str = "unknown") -> Image.Image
     # HTTP/HTTPSの場合
     if url_or_s3_path.startswith(('http://', 'https://')):
         return fetch_image_from_url(url_or_s3_path)
-    
+
+    # アップロード済み画像（ファイル名またはS3キー）
+    upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
+    if upload_bucket and boto3 is not None:
+        # S3キー形式（uploads/images/...）の場合はそのまま使用
+        if url_or_s3_path.startswith('uploads/'):
+            s3_key = url_or_s3_path
+        else:
+            # ファイル名のみの場合はプレフィックスを付与
+            s3_key = f"uploads/images/{url_or_s3_path}"
+
+        logger.info(f"Fetching uploaded image: s3://{upload_bucket}/{s3_key}")
+        return fetch_image_from_s3(f"s3://{upload_bucket}/{s3_key}")
+
     raise ValueError(f"Unsupported image path format: {url_or_s3_path}")
 
 
@@ -289,7 +302,11 @@ def validate_image_path(path: str) -> bool:
     if path.startswith(('http://', 'https://')):
         url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
         return bool(re.match(url_pattern, path))
-    
+
+    # アップロード済み画像（ファイル名またはS3キー）
+    if path.startswith('uploads/') or '.' in path:
+        return True
+
     return False
 
 

@@ -29,6 +29,10 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# メディアデータの一時保存（Agentのコンテキストウィンドウ超過を防ぐため）
+# compose_images/generate_videoの結果をここに保存し、agent_handlerで取得する
+_last_media_result = None
+
 
 def _get_s3_client():
     """S3クライアントを取得"""
@@ -65,7 +69,7 @@ def compose_images(
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
     Args:
-        image1: 画像1のソース。"test"でテスト画像、S3キー、HTTP URLを指定可能。必須。
+        image1: 画像1のソース。"test"でテスト画像、アップロード済み画像のファイル名（例: "338b77e1-xxx.jpeg"）、HTTP URLを指定可能。必須。アップロード済み画像を使う場合はlist_uploaded_imagesで取得したfilenameをそのまま指定してください。
         image1_position: 画像1の配置位置。"左上","中央","右下"等の名前、または"x,y"座標。
         image1_size: 画像1のサイズ。"幅x高さ"形式（例: "400x400"）。
         image2: 画像2のソース。空文字で省略。
@@ -135,9 +139,17 @@ def compose_images(
             f"画像3: source={image3}, 位置=({params['image3']['x']}, {params['image3']['y']}), サイズ={params['image3']['width']}x{params['image3']['height']}"
         )
 
+    # base64はコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
+    # agent_handler._extract_media_from_result()で取得する
+    global _last_media_result
+    _last_media_result = {
+        'type': 'image',
+        'data': img_base64,
+    }
+
     return {
         'success': True,
-        'image_base64': img_base64,
+        'image_generated': True,
         'image_count': image_count,
         'canvas_size': '1920x1080',
         'base_image': base_image,
@@ -253,9 +265,16 @@ def generate_video(
             ExpiresIn=3600,
         )
 
+    # video_urlはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
+    global _last_media_result
+    _last_media_result = {
+        'type': 'video',
+        'url': video_url,
+    }
+
     return {
         'success': True,
-        'video_url': video_url,
+        'video_generated': True,
         'filename': filename,
         'format': video_format,
         'duration': duration,
@@ -293,11 +312,19 @@ def list_uploaded_images() -> dict:
                     'last_modified': obj['LastModified'].isoformat(),
                 })
 
-        return {
-            'success': True,
+        # 画像一覧データはグローバル変数に保存（agent_handlerで署名付きURL付与）
+        global _last_media_result
+        _last_media_result = {
+            'type': 'image_list',
             'images': images,
             'count': len(images),
+        }
+
+        return {
+            'success': True,
+            'count': len(images),
             'type': 'image_list',
+            'images': [{'filename': img['filename'], 'size_display': img['size_display'], 'last_modified': img['last_modified']} for img in images],
         }
     except Exception as e:
         logger.error(f"Failed to list images: {e}")
