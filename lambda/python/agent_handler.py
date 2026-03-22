@@ -269,6 +269,29 @@ def _get_history_manager():
         return None
 
 
+def _enrich_image_list(images: list) -> list:
+    """画像一覧にS3署名付きURLを付与する（フロントエンド表示用）"""
+    try:
+        upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
+        if not upload_bucket or boto3 is None:
+            return images
+
+        s3_client = boto3.client('s3')
+        for img in images:
+            if 'thumbnail_url' not in img and img.get('key'):
+                try:
+                    img['thumbnail_url'] = s3_client.generate_presigned_url(
+                        'get_object',
+                        Params={'Bucket': upload_bucket, 'Key': img['key']},
+                        ExpiresIn=3600,
+                    )
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Failed to enrich image list: {e}")
+    return images
+
+
 def _extract_media_from_result(result, agent) -> Optional[Dict]:
     """Agentの実行結果からメディアデータを抽出する"""
     # Agentのメッセージ履歴からツール結果を検索
@@ -299,11 +322,11 @@ def _extract_media_from_result(result, agent) -> Optional[Dict]:
                                                     'data': None,
                                                     'url': data['video_url'],
                                                 }
-                                            # 画像一覧結果
+                                            # 画像一覧結果（署名付きURLを付与）
                                             if data.get('type') == 'image_list' and data.get('images') is not None:
                                                 return {
                                                     'type': 'image_list',
-                                                    'images': data['images'],
+                                                    'images': _enrich_image_list(data['images']),
                                                     'count': data.get('count', len(data['images'])),
                                                 }
                                     except (json.JSONDecodeError, TypeError):

@@ -265,7 +265,7 @@ def generate_video(
 
 @tool
 def list_uploaded_images() -> dict:
-    """アップロード済み画像の一覧を取得します。S3にアップロードされた画像のファイル名・サイズ・日時・サムネイルURLを返します。"""
+    """アップロード済み画像の一覧を取得します。ファイル名・サイズ・日時を返します。サムネイルURLは応答テキストに含めないでください。"""
     s3_client = _get_s3_client()
     upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
 
@@ -285,24 +285,13 @@ def list_uploaded_images() -> dict:
                 filename = obj['Key'].split('/')[-1]
                 if not filename:
                     continue
-                image_info = {
+                images.append({
                     'key': obj['Key'],
                     'filename': filename,
                     'size_bytes': obj['Size'],
                     'size_display': _format_size(obj['Size']),
                     'last_modified': obj['LastModified'].isoformat(),
-                }
-                # S3署名付きURLでサムネイル（元画像）を返却
-                try:
-                    presigned_url = s3_client.generate_presigned_url(
-                        'get_object',
-                        Params={'Bucket': upload_bucket, 'Key': obj['Key']},
-                        ExpiresIn=3600,
-                    )
-                    image_info['thumbnail_url'] = presigned_url
-                except Exception:
-                    pass
-                images.append(image_info)
+                })
 
         return {
             'success': True,
