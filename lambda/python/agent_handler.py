@@ -107,8 +107,9 @@ def create_agent():
     from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help
     from agent_prompts import SYSTEM_PROMPT
 
+    agent_model_id = os.environ.get('AGENT_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
     model = BedrockModel(
-        model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        model_id=agent_model_id,
         max_tokens=4096,
         region_name="us-east-1",
     )

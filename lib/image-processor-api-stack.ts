@@ -689,7 +689,7 @@ else:
       logGroup: agentLogGroup,
       environment: {
         CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
-        ANTHROPIC_SECRET_NAME: 'image-compositor/anthropic-api-key',
+        AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
         S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
         S3_UPLOAD_BUCKET: this.uploadBucket.bucketName,
         UPLOAD_BUCKET: this.uploadBucket.bucketName,
@@ -699,18 +699,38 @@ else:
         PYTHONPATH: '/var/runtime',
         PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
       },
-      description: `Strands Agent chat handler with Anthropic Claude - v${VERSION}`,
+      description: `Strands Agent chat handler with Bedrock Claude - v${VERSION}`,
     });
 
     // Agent Lambda IAM権限
     chatHistoryTable.grantReadWriteData(agentFunction);
     // Bedrock InvokeModel 権限
+    // Bedrock Marketplace: モデルサブスクリプション確認に必要
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['aws-marketplace:ViewSubscriptions', 'aws-marketplace:Subscribe'],
+      resources: ['*'],
+    }));
+    // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス
+    // region_name="us-east-1"でBedrock呼び出しするため、us-east-1のARNが必要
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
       resources: [
-        'arn:aws:bedrock:*::foundation-model/anthropic.*',
-        'arn:aws:bedrock:*:*:inference-profile/us.anthropic.*',
+        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
       ],
+    }));
+    // Bedrock US Cross-Region Inference: 基盤モデルへのアクセス（推論プロファイル経由）
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+      ],
+      conditions: {
+        StringLike: {
+          'bedrock:InferenceProfileArn': `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+        },
+      },
     }));
     this.resourcesBucket.grantReadWrite(agentFunction);
     this.uploadBucket.grantRead(agentFunction);
