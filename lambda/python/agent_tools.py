@@ -265,9 +265,10 @@ def generate_video(
 
 @tool
 def list_uploaded_images() -> dict:
-    """アップロード済み画像の一覧を取得します。S3にアップロードされた画像のファイル名・サイズ・日時を返します。"""
+    """アップロード済み画像の一覧を取得します。S3にアップロードされた画像のファイル名・サイズ・日時・サムネイルURLを返します。"""
     s3_client = _get_s3_client()
     upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
+    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
 
     if not upload_bucket:
         return {'success': False, 'error': 'アップロードバケットが設定されていません'}
@@ -285,18 +286,23 @@ def list_uploaded_images() -> dict:
                 filename = obj['Key'].split('/')[-1]
                 if not filename:
                     continue
-                images.append({
+                image_info = {
                     'key': obj['Key'],
                     'filename': filename,
                     'size_bytes': obj['Size'],
                     'size_display': _format_size(obj['Size']),
                     'last_modified': obj['LastModified'].isoformat(),
-                })
+                }
+                if cloudfront_domain:
+                    thumb_name = os.path.splitext(filename)[0] + '.png'
+                    image_info['thumbnail_url'] = f"https://{cloudfront_domain}/thumbnails/{thumb_name}"
+                images.append(image_info)
 
         return {
             'success': True,
             'images': images,
             'count': len(images),
+            'type': 'image_list',
         }
     except Exception as e:
         logger.error(f"Failed to list images: {e}")

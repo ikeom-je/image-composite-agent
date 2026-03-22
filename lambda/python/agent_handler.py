@@ -299,6 +299,13 @@ def _extract_media_from_result(result, agent) -> Optional[Dict]:
                                                     'data': None,
                                                     'url': data['video_url'],
                                                 }
+                                            # 画像一覧結果
+                                            if data.get('type') == 'image_list' and data.get('images') is not None:
+                                                return {
+                                                    'type': 'image_list',
+                                                    'images': data['images'],
+                                                    'count': data.get('count', len(data['images'])),
+                                                }
                                     except (json.JSONDecodeError, TypeError):
                                         continue
     except Exception as e:
