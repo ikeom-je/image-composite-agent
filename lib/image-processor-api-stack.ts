@@ -9,6 +9,8 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
@@ -25,6 +27,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
   public readonly distribution: cloudfront.Distribution;
   public readonly apiEndpoint: string;
   public readonly uploadApiEndpoint: string;
+  public readonly chatApiEndpoint: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -581,9 +584,232 @@ export class ImageProcessorApiStack extends cdk.Stack {
       ],
     });
 
+    // ========================================
+    // Strands Agent チャットエージェント - v2.9.0
+    // ========================================
+
+    // DynamoDB テーブル（会話履歴）
+    const chatHistoryTable = new dynamodb.Table(this, 'ChatHistoryTable', {
+      tableName: 'ImageCompositor-ChatHistory',
+      partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.NUMBER },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      timeToLiveAttribute: 'ttl',
+    });
+
+    // Agent Lambda用 DLQ
+    const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
+      queueName: 'agent-handler-dlq',
+      retentionPeriod: cdk.Duration.days(14),
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+    });
+
+    // Agent Lambda用 Log Group
+    const agentLogGroup = new logs.LogGroup(this, 'AgentLogGroup', {
+      logGroupName: '/aws/lambda/agent-handler-function',
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Agent Lambda関数（ffmpegレイヤー不要 - 動画生成は既存Lambdaに委譲）
+    const agentFunction = new lambda.Function(this, 'AgentFunction', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      architecture: lambda.Architecture.ARM_64,
+      handler: 'agent_handler.handler',
+      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/python'), {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          command: [
+            'bash', '-c', [
+              'echo "Starting Agent Lambda bundling..."',
+              'pip install --upgrade pip',
+              // Agent専用依存のみインストール（opentelemetry-sdk含む、strands-agentsが依存）
+              'pip install strands-agents anthropic pillow boto3 opentelemetry-sdk opentelemetry-api opentelemetry-exporter-otlp-proto-http -t /asset-output --no-cache-dir 2>&1 | tail -5',
+              'cp *.py /asset-output/',
+              'if [ -d images ]; then cp -r images /asset-output/; fi',
+              'echo "Optimizing bundle size..."',
+              'find /asset-output -name "*.pyc" -delete',
+              'find /asset-output -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true',
+              // .dist-info はentry_pointsメタデータに必要なため保持（opentelemetry等）
+              // テスト関連・不要パッケージの削除でサイズ削減
+              'rm -rf /asset-output/tests /asset-output/test 2>/dev/null || true',
+              // OpenTelemetry context の entry_points 解決失敗をパッチ（保険）
+              // _load_runtime_context() が entry_points を解決できない場合に ContextVarsRuntimeContext を直接返す
+              `python3 -c "
+import pathlib
+p = pathlib.Path('/asset-output/opentelemetry/context/__init__.py')
+if p.exists():
+    code = p.read_text()
+    if 'PATCHED' not in code:
+        # _load_runtime_context 関数全体を安全な実装に置き換え
+        old = 'def _load_runtime_context()'
+        if old in code:
+            idx = code.index(old)
+            # 関数の終了位置を検出（次のモジュールレベル定義まで）
+            rest = code[idx:]
+            lines = rest.split('\\n')
+            end_idx = 0
+            for i, line in enumerate(lines[1:], 1):
+                if line and not line.startswith(' ') and not line.startswith('\\t') and not line.startswith('#') and line.strip():
+                    end_idx = i
+                    break
+            if end_idx == 0:
+                end_idx = len(lines)
+            new_func = '''def _load_runtime_context():  # PATCHED
+    from opentelemetry.context.contextvars_context import ContextVarsRuntimeContext
+    return ContextVarsRuntimeContext()
+'''
+            patched = code[:idx] + new_func + '\\n'.join(lines[end_idx:])
+            p.write_text(patched)
+            print('Patched opentelemetry context __init__.py')
+        else:
+            print('Could not find _load_runtime_context, skipping')
+    else:
+        print('Already patched')
+else:
+    print('opentelemetry context not found')
+"`,
+              'echo "Agent Lambda bundling completed"'
+            ].join(' && ')
+          ],
+          user: 'root'
+        },
+      }),
+      memorySize: 2048,
+      timeout: cdk.Duration.seconds(90),
+      reservedConcurrentExecutions: 5,
+      deadLetterQueue: agentDLQ,
+      retryAttempts: 0,
+      logGroup: agentLogGroup,
+      environment: {
+        CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
+        AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
+        S3_UPLOAD_BUCKET: this.uploadBucket.bucketName,
+        UPLOAD_BUCKET: this.uploadBucket.bucketName,
+        TEST_BUCKET: this.testImagesBucket.bucketName,
+        VERSION: VERSION,
+        LOG_LEVEL: 'INFO',
+        PYTHONPATH: '/var/runtime',
+        PATH: '/opt/bin:/usr/local/bin:/usr/bin:/bin',
+      },
+      description: `Strands Agent chat handler with Bedrock Claude - v${VERSION}`,
+    });
+
+    // Agent Lambda IAM権限
+    chatHistoryTable.grantReadWriteData(agentFunction);
+    // Bedrock InvokeModel 権限
+    // Bedrock Marketplace: モデルサブスクリプション確認に必要
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['aws-marketplace:ViewSubscriptions'],
+      resources: ['*'],
+    }));
+    // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス
+    // region_name="us-east-1"でBedrock呼び出しするため、us-east-1のARNが必要
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+      ],
+    }));
+    // Bedrock US Cross-Region Inference: 基盤モデルへのアクセス（推論プロファイル経由）
+    agentFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: [
+        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+        'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
+      ],
+      conditions: {
+        StringLike: {
+          'bedrock:InferenceProfileArn': `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+        },
+      },
+    }));
+    this.resourcesBucket.grantReadWrite(agentFunction);
+    this.uploadBucket.grantRead(agentFunction);
+    this.testImagesBucket.grantRead(agentFunction);
+
+    // Agent Lambda の S3 削除権限（アセット管理用）
+    this.uploadBucket.grantDelete(agentFunction);
+
+    // API Gateway - Agent エンドポイント
+    const agentLambdaIntegration = new apigateway.LambdaIntegration(agentFunction, {
+      proxy: true,
+    });
+
+    const chatResource = api.root.addResource('chat', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    // POST /chat
+    chatResource.addMethod('POST', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '400',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+        {
+          statusCode: '500',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    // /chat/history/{sessionId}
+    const chatHistoryResource = chatResource.addResource('history');
+    const chatSessionResource = chatHistoryResource.addResource('{sessionId}', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    chatSessionResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    chatSessionResource.addMethod('DELETE', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
     // APIエンドポイントを保存
     this.apiEndpoint = `${api.url}images/composite`;
     this.uploadApiEndpoint = `${api.url}upload`;
+    this.chatApiEndpoint = `${api.url}chat`;
 
     // CloudFront Origin Access Identity (OAI) の作成
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OriginAccessIdentity', {
@@ -774,6 +1000,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Lambda関数の環境変数にCloudFrontドメインを追加
     imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+    agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
 
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {
@@ -1042,6 +1269,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       // 基本API設定
       apiUrl: this.apiEndpoint,
       uploadApiUrl: `${api.url}upload`,
+      chatApiUrl: this.chatApiEndpoint,
       cloudfrontUrl: customDomain ? `https://${customDomain}` : `https://${this.distribution.distributionDomainName}`,
 
       // S3バケット設定
@@ -1250,6 +1478,12 @@ export class ImageProcessorApiStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DashboardUrl', {
       value: `https://console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${dashboard.dashboardName}`,
       description: 'URL for the CloudWatch Dashboard'
+    });
+
+    new cdk.CfnOutput(this, 'ChatApiUrl', {
+      value: this.chatApiEndpoint,
+      description: 'URL for the Chat Agent API',
+      exportName: 'ImageProcessorChatApiEndpoint',
     });
   }
 }

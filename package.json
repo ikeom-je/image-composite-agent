@@ -54,6 +54,8 @@
     "diff": "cdk diff",
     "diff:api": "cdk diff ImageProcessorApiStack",
     "diff:frontend": "cdk diff ImageCompositeViewerStack",
+    "build-agent-layer": "bash scripts/build-agent-layer.sh",
+    "test:agent": "source .venv/bin/activate && cd test/lambda && python -m unittest test_chat_history.py test_agent_tools.py test_agent_handler.py && deactivate",
     "build-frontend": "cd frontend && npm install && npm run build",
     "deploy-all": "npm run deploy",
     "setup-env": "source scripts/setup-env.sh",

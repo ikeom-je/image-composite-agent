@@ -63,6 +63,26 @@ export const useConfigStore = defineStore('config', () => {
     // 最終フォールバック
     return `${window.location.origin}/api/upload`
   })
+  const chatApiUrl = computed(() => {
+    const envChatUrl = import.meta.env.VITE_CHAT_API_URL
+    if (envChatUrl) return envChatUrl
+
+    const configChatUrl = (config.value as any)?.chatApiUrl
+    if (configChatUrl) {
+      if (configChatUrl.startsWith('/')) return window.location.origin + configChatUrl
+      if (configChatUrl.startsWith('http')) return configChatUrl
+      return `https://${configChatUrl}`
+    }
+
+    // apiUrlベースで構築
+    const configApiUrl = config.value?.apiUrl
+    if (configApiUrl) {
+      const base = configApiUrl.replace(/\/images\/composite$/, '')
+      return `${base}/chat`
+    }
+
+    return `${window.location.origin}/api/chat`
+  })
   const cloudfrontUrl = computed(() => config.value?.cloudfrontUrl || '')
   const version = computed(() => config.value?.version || '2.4.0')
   const environment = computed(() => config.value?.environment || 'production')
@@ -383,6 +403,7 @@ export const useConfigStore = defineStore('config', () => {
     // Getters
     apiUrl,
     uploadApiUrl,
+    chatApiUrl,
     cloudfrontUrl,
     version,
     environment,
