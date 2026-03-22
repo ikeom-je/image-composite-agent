@@ -78,7 +78,7 @@ export default defineConfig({
     },
   ],
   outputDir: 'test-results',
-  webServer: process.env.LOCAL_TEST ? {
+  webServer: process.env.FRONTEND_URL ? undefined : process.env.LOCAL_TEST ? {
     command: 'cd ../lambda/python && python -m http.server 8000',
     url: 'http://localhost:8000',
     reuseExistingServer: !process.env.CI,

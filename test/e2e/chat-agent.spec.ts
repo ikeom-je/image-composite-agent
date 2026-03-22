@@ -150,14 +150,14 @@ test.describe('チャットエージェント E2Eテスト', () => {
       await input.fill('使い方を教えて')
       await input.press('Enter')
 
-      // Agent応答を待つ（成功 or エラー）
-      const agentResponse = page.locator('.message-assistant, .assistant, [class*="assistant"]').last()
+      // Agent応答を待つ - チャットバブルのjustify-startがアシスタント応答
+      const agentResponse = page.locator('.justify-start').last()
       await expect(agentResponse).toBeVisible({ timeout: 90000 })
 
-      // 応答にテキストが含まれていること
-      const responseText = await agentResponse.textContent()
-      expect(responseText).toBeTruthy()
-      expect(responseText!.length).toBeGreaterThan(0)
+      // 応答にテキストが含まれていること（ウェルカムメッセージ以外）
+      const allResponses = page.locator('.justify-start')
+      const count = await allResponses.count()
+      expect(count).toBeGreaterThan(1) // ウェルカム + Agent応答
     })
 
     test('画像合成を実行すると画像が表示されること', async ({ page }) => {

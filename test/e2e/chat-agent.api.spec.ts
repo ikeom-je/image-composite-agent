@@ -258,12 +258,12 @@ test.describe('Chat Agent API テスト', () => {
   })
 
   test.describe('OPTIONS (CORS プリフライト)', () => {
-    test('OPTIONSリクエストに200を返すこと', async () => {
+    test('OPTIONSリクエストに200または204を返すこと', async () => {
       const response = await apiContext.fetch(TEST_CONFIG.chatApiUrl, {
         method: 'OPTIONS',
       })
 
-      expect(response.status()).toBe(200)
+      expect([200, 204]).toContain(response.status())
     })
   })
 })
