@@ -5,12 +5,12 @@
 
     <!-- 単体画像 -->
     <div v-else-if="mediaType === 'image'" class="rounded-lg overflow-hidden border border-gray-200 max-w-md">
-      <img :src="mediaUrl" alt="合成結果" class="w-full h-auto" />
+      <img :src="mediaUrl" alt="合成結果" class="w-full h-auto" @load="$emit('media-loaded')" />
     </div>
 
     <!-- 動画 -->
     <div v-else-if="mediaType === 'video'" class="rounded-lg overflow-hidden border border-gray-200 max-w-md">
-      <video :src="mediaUrl" controls class="w-full h-auto" />
+      <video :src="mediaUrl" controls class="w-full h-auto" @loadeddata="$emit('media-loaded')" />
     </div>
   </div>
 </template>
@@ -23,5 +23,9 @@ defineProps<{
   mediaUrl?: string
   mediaType: 'image' | 'video' | 'image_list'
   imageList?: AssetImage[]
+}>()
+
+defineEmits<{
+  'media-loaded': []
 }>()
 </script>
