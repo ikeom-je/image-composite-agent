@@ -922,24 +922,25 @@ else:
             enableAcceptEncodingBrotli: true,
           }),
         },
-        // 画像ファイル用のキャッシュ
-        '*.png': {
-          origin: new origins.S3Origin(this.frontendBucket, {
-            originAccessIdentity,
+        // 合成画像用のキャッシュ（リソースバケットから配信）
+        'generated-images/*': {
+          origin: new origins.S3Origin(this.resourcesBucket, {
+            originAccessIdentity: resourcesOAI,
           }),
           compress: false, // 画像は既に圧縮済み
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'ImageCachePolicy', {
-            cachePolicyName: 'image-processor-images-cache',
-            comment: 'Cache policy for image files',
-            defaultTtl: cdk.Duration.days(7),
+          cachePolicy: new cloudfront.CachePolicy(this, 'GeneratedImageCachePolicy', {
+            cachePolicyName: 'image-processor-generated-images-cache',
+            comment: 'Cache policy for agent-generated composite images',
+            defaultTtl: cdk.Duration.hours(24),
             maxTtl: cdk.Duration.days(365),
             minTtl: cdk.Duration.hours(1),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           }),
+          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
         },
         // 動画ファイル用のキャッシュ（リソースバケットから配信）
         'generated-videos/*': {
@@ -1402,6 +1403,8 @@ else:
         distribution: this.distribution,
         distributionPaths: ['/*', '/index.html', '/config*.json'], // 設定ファイルのキャッシュ無効化
         retainOnDelete: false,
+        // 生成済みファイルを保護（合成画像・動画を削除しない）
+        exclude: ['generated-images/*', 'generated-videos/*'],
         // メモリ最適化
         memoryLimit: 512,
         // ログ保持期間
