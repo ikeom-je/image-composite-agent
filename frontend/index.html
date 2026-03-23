@@ -9,6 +9,28 @@
 </head>
 <body>
   <div id="app"></div>
+  <script>
+    // ブラウザキャッシュの古いJSを検知してリロード
+    // index.htmlに埋め込まれたハッシュとサーバーのconfig.jsonを比較
+    (function() {
+      var BUILD_HASH = '%%BUILD_HASH%%';
+      if (BUILD_HASH.indexOf('%%') === 0) return; // dev mode
+      if (sessionStorage.getItem('_ver_checked') === BUILD_HASH) return; // チェック済み
+      fetch('/config.production.json', { cache: 'no-store' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(c) {
+          if (!c) return;
+          var serverHash = c.buildHash || '';
+          if (serverHash && serverHash !== BUILD_HASH) {
+            console.log('[VersionCheck] Stale JS: local=' + BUILD_HASH + ', server=' + serverHash);
+            location.reload();
+          } else {
+            sessionStorage.setItem('_ver_checked', BUILD_HASH);
+          }
+        })
+        .catch(function() {});
+    })();
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

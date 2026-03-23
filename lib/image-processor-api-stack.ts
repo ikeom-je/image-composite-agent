@@ -1312,6 +1312,10 @@ else:
       version: VERSION,
       environment: environment,
       buildTimestamp: new Date().toISOString(),
+      // フロントエンドビルドハッシュ（ブラウザキャッシュ検知用）
+      buildHash: fs.existsSync(path.join(__dirname, '../frontend/dist/.build-hash'))
+        ? fs.readFileSync(path.join(__dirname, '../frontend/dist/.build-hash'), 'utf-8').trim()
+        : '',
       region: this.region,
 
       // 機能フラグ
