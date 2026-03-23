@@ -1492,7 +1492,14 @@ else:
 
     new cdk.CfnOutput(this, 'ResourcesBucketName', {
       value: this.resourcesBucket.bucketName,
-      description: 'Name of the resources bucket'
+      description: 'Name of the resources bucket',
+      exportName: 'ImageProcessorResourcesBucketName',
+    });
+
+    new cdk.CfnOutput(this, 'ResourcesBucketArn', {
+      value: this.resourcesBucket.bucketArn,
+      description: 'ARN of the resources bucket',
+      exportName: 'ImageProcessorResourcesBucketArn',
     });
 
     new cdk.CfnOutput(this, 'FrontendBucketName', {
