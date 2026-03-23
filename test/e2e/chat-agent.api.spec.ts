@@ -85,6 +85,10 @@ test.describe('Chat Agent API テスト', () => {
         expect(body.response.media.type).toBe('image')
         expect(body.response.media.url).toBeTruthy()
         expect(body.response.media.url).toMatch(/^https:\/\//)
+        // 画像URLがアクセス可能でContent-Typeがimage/pngであること
+        const imgResponse = await apiContext.get(body.response.media.url)
+        expect(imgResponse.status()).toBe(200)
+        expect(imgResponse.headers()['content-type']).toMatch(/image\/png/)
       }
     })
 
@@ -108,6 +112,10 @@ test.describe('Chat Agent API テスト', () => {
         expect(body.response.media.type).toBe('video')
         expect(body.response.media.url).toBeTruthy()
         expect(body.response.media.url).toMatch(/^https:\/\/.*\.(mp4|mxf|webm|avi)$/)
+        // 動画URLがアクセス可能であること
+        const vidResponse = await apiContext.get(body.response.media.url)
+        expect(vidResponse.status()).toBe(200)
+        expect(vidResponse.headers()['content-type']).toMatch(/video\//)
       }
     })
 

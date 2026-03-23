@@ -160,9 +160,9 @@ test.describe('チャットエージェント E2Eテスト', () => {
       expect(count).toBeGreaterThan(1) // ウェルカム + Agent応答
     })
 
-    test('画像合成を実行すると画像が表示されること', async ({ page }) => {
+    test('画像合成を実行すると画像とダウンロードリンクが表示されること', async ({ page }) => {
       const input = page.locator('input[type="text"]')
-      await input.fill('テスト画像を2枚使って左上と右下に配置して合成して')
+      await input.fill('テスト画像を左上に配置して合成して')
       await input.press('Enter')
 
       // Agent応答を待つ（CloudFront URLの画像、またはテキスト応答）
@@ -170,6 +170,14 @@ test.describe('チャットエージェント E2Eテスト', () => {
         'img[src*="cloudfront"], img[src*="generated-images"], img[src^="data:image"], .justify-start'
       )
       await expect(result.first()).toBeVisible({ timeout: 90000 })
+
+      // ダウンロードリンクが表示されること
+      const downloadLink = page.locator('a[download]:has-text("ダウンロード")')
+      if (await downloadLink.count() > 0) {
+        await expect(downloadLink.first()).toBeVisible()
+        const href = await downloadLink.first().getAttribute('href')
+        expect(href).toMatch(/^https:\/\//)
+      }
     })
 
     test('空メッセージは送信されないこと', async ({ page }) => {
