@@ -97,12 +97,15 @@ export function useChatAgent() {
       if (messages.length > 0) {
         chatStore.clearMessages()
         for (const msg of messages) {
-          chatStore.addMessage({
+          const addMsg: any = {
             role: msg.role,
             content: msg.content,
-            mediaUrl: msg.mediaUrl,
-            mediaType: msg.mediaType,
-          })
+          }
+          if (msg.mediaUrl) addMsg.mediaUrl = msg.mediaUrl
+          if (msg.mediaType) addMsg.mediaType = msg.mediaType
+          // image_listは履歴に保存されないため、mediaTypeのみ保持
+          // （サムネイルURLは有効期限があるため再取得が必要）
+          chatStore.addMessage(addMsg)
         }
       }
     } catch (err) {
