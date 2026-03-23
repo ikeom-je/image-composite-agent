@@ -849,7 +849,7 @@ else:
           cachePolicyName: 'image-processor-default-cache',
           comment: 'Default cache policy for Image Processor frontend',
           defaultTtl: cdk.Duration.seconds(5),
-          maxTtl: cdk.Duration.days(365),
+          maxTtl: cdk.Duration.seconds(60),
           minTtl: cdk.Duration.seconds(0),
           cookieBehavior: cloudfront.CacheCookieBehavior.none(),
           headerBehavior: cloudfront.CacheHeaderBehavior.allowList('CloudFront-Viewer-Country'),
@@ -872,7 +872,7 @@ else:
             cachePolicyName: 'image-processor-html-cache',
             comment: 'Short-term cache for HTML files',
             defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.minutes(5),
+            maxTtl: cdk.Duration.seconds(60),
             minTtl: cdk.Duration.seconds(0),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.none(),
@@ -893,7 +893,7 @@ else:
             cachePolicyName: 'image-processor-static-assets',
             comment: 'Short-term cache for static assets during development',
             defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.hours(1),
+            maxTtl: cdk.Duration.seconds(60),
             minTtl: cdk.Duration.seconds(0),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.none(),
@@ -913,7 +913,7 @@ else:
             cachePolicyName: 'image-processor-css-cache',
             comment: 'Short-term cache for CSS files during development',
             defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.hours(1),
+            maxTtl: cdk.Duration.seconds(60),
             minTtl: cdk.Duration.seconds(0),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.none(),
@@ -922,24 +922,25 @@ else:
             enableAcceptEncodingBrotli: true,
           }),
         },
-        // 画像ファイル用のキャッシュ
-        '*.png': {
-          origin: new origins.S3Origin(this.frontendBucket, {
-            originAccessIdentity,
+        // 合成画像用のキャッシュ（リソースバケットから配信）
+        'generated-images/*': {
+          origin: new origins.S3Origin(this.resourcesBucket, {
+            originAccessIdentity: resourcesOAI,
           }),
           compress: false, // 画像は既に圧縮済み
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'ImageCachePolicy', {
-            cachePolicyName: 'image-processor-images-cache',
-            comment: 'Cache policy for image files',
-            defaultTtl: cdk.Duration.days(7),
+          cachePolicy: new cloudfront.CachePolicy(this, 'GeneratedImageCachePolicy', {
+            cachePolicyName: 'image-processor-generated-images-cache',
+            comment: 'Cache policy for agent-generated composite images',
+            defaultTtl: cdk.Duration.hours(24),
             maxTtl: cdk.Duration.days(365),
             minTtl: cdk.Duration.hours(1),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           }),
+          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
         },
         // 動画ファイル用のキャッシュ（リソースバケットから配信）
         'generated-videos/*': {
@@ -1001,6 +1002,8 @@ else:
     // Lambda関数の環境変数にCloudFrontドメインを追加
     imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
     agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+    agentFunction.addEnvironment('IMAGE_PROCESSOR_FUNCTION', imageProcessorFunction.functionName);
+    imageProcessorFunction.grantInvoke(agentFunction);
 
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {
@@ -1390,6 +1393,8 @@ else:
     // フロントエンドと設定ファイルを同時にデプロイ（環境別設定対応）
     // 注意: frontend/distディレクトリが存在する場合のみ有効
     if (fs.existsSync(path.join(__dirname, '../frontend/dist'))) {
+      // デプロイ毎にハッシュを変更してBucketDeploymentの再実行を保証
+      const deployTimestamp = new Date().toISOString();
       new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
         sources: [
           s3deploy.Source.asset(path.join(__dirname, '../frontend/dist')),
@@ -1397,11 +1402,13 @@ else:
           s3deploy.Source.jsonData('config.development.json', developmentConfig), // 開発環境設定
           s3deploy.Source.jsonData('config.staging.json', stagingConfig), // ステージング環境設定
           s3deploy.Source.jsonData('config.production.json', configContent), // 本番環境設定（メインと同じ）
+          s3deploy.Source.jsonData('.deploy-meta.json', { deployedAt: deployTimestamp, version: VERSION }), // デプロイ毎にハッシュ変更を強制
         ],
         destinationBucket: this.frontendBucket,
         distribution: this.distribution,
         distributionPaths: ['/*', '/index.html', '/config*.json'], // 設定ファイルのキャッシュ無効化
         retainOnDelete: false,
+        prune: false, // 既存ファイルを削除しない（generated-images/generated-videos保護）
         // メモリ最適化
         memoryLimit: 512,
         // ログ保持期間

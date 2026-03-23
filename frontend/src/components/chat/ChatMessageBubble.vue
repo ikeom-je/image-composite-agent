@@ -16,9 +16,10 @@
 
       <!-- メディア結果 -->
       <ChatMediaResult
-        v-if="message.mediaUrl && message.mediaType"
+        v-if="(message.mediaUrl && message.mediaType) || (message.mediaType === 'image_list' && message.imageList?.length)"
         :media-url="message.mediaUrl"
-        :media-type="message.mediaType"
+        :media-type="message.mediaType!"
+        :image-list="message.imageList"
       />
     </div>
   </div>

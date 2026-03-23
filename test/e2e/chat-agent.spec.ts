@@ -165,9 +165,9 @@ test.describe('チャットエージェント E2Eテスト', () => {
       await input.fill('テスト画像を2枚使って左上と右下に配置して合成して')
       await input.press('Enter')
 
-      // Agent応答を待つ（画像が表示されるか、テキスト応答が返る）
+      // Agent応答を待つ（CloudFront URLの画像、またはテキスト応答）
       const result = page.locator(
-        'img[src^="data:image"], .message-assistant, .assistant, [class*="assistant"]'
+        'img[src*="cloudfront"], img[src*="generated-images"], img[src^="data:image"], .justify-start'
       )
       await expect(result.first()).toBeVisible({ timeout: 90000 })
     })

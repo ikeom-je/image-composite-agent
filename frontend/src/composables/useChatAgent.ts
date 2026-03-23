@@ -1,5 +1,6 @@
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
+import type { AssetImage } from '@/types/chat'
 import axios from 'axios'
 
 export function useChatAgent() {
@@ -45,14 +46,19 @@ export function useChatAgent() {
       const { content, media } = response.data.response
 
       let mediaUrl: string | undefined
-      let mediaType: 'image' | 'video' | undefined
+      let mediaType: 'image' | 'video' | 'image_list' | undefined
+      let imageList: AssetImage[] | undefined
 
       if (media) {
         mediaType = media.type
-        if (media.type === 'image' && media.data) {
+        if (media.type === 'image' && media.url) {
+          mediaUrl = media.url
+        } else if (media.type === 'image' && media.data) {
           mediaUrl = `data:image/png;base64,${media.data}`
         } else if (media.type === 'video' && media.url) {
           mediaUrl = media.url
+        } else if (media.type === 'image_list' && media.images) {
+          imageList = media.images
         }
       }
 
@@ -60,6 +66,7 @@ export function useChatAgent() {
         content: content || '',
         mediaUrl,
         mediaType,
+        imageList,
       })
     } catch (err: any) {
       let errMsg = 'エラーが発生しました'
