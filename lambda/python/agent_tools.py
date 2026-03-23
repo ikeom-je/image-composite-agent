@@ -214,11 +214,6 @@ def generate_video(
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。
     """
-    from image_fetcher import fetch_image
-    from image_compositor import create_composite_image
-    from video_generator import generate_video_from_image, get_video_mime_type, get_video_extension
-    from datetime import datetime
-
     logger.info(f"generate_video: duration={duration}, format={video_format}")
 
     # バリデーション
@@ -228,68 +223,75 @@ def generate_video(
         video_format = 'MP4'
     video_format = video_format.upper()
 
-    # 画像合成（compose_imagesと同じロジック）
+    # 位置・サイズを解決
     pos1 = _resolve_position(image1_position)
     sz1 = _resolve_size(image1_size)
-    params = {
-        'image1': {'x': pos1[0], 'y': pos1[1], 'width': sz1[0], 'height': sz1[1]},
-        'image2': {'x': 0, 'y': 0, 'width': 400, 'height': 400},
-        'image3': {'x': 0, 'y': 0, 'width': 400, 'height': 400},
+
+    # ImageProcessor Lambdaにパラメータを組み立て
+    invoke_params = {
+        'image1': image1,
+        'image1_x': str(pos1[0]),
+        'image1_y': str(pos1[1]),
+        'image1_width': str(sz1[0]),
+        'image1_height': str(sz1[1]),
+        'base_image': base_image,
+        'format': 'png',
+        'generate_video': 'true',
+        'video_duration': str(duration),
+        'video_format': video_format,
     }
 
-    img1 = fetch_image(image1, 'image1')
-    img2 = None
     if image2:
         pos2 = _resolve_position(image2_position)
         sz2 = _resolve_size(image2_size)
-        params['image2'] = {'x': pos2[0], 'y': pos2[1], 'width': sz2[0], 'height': sz2[1]}
-        img2 = fetch_image(image2, 'image2')
-    img3 = None
+        invoke_params.update({
+            'image2': image2,
+            'image2_x': str(pos2[0]),
+            'image2_y': str(pos2[1]),
+            'image2_width': str(sz2[0]),
+            'image2_height': str(sz2[1]),
+        })
+
     if image3:
         pos3 = _resolve_position(image3_position)
         sz3 = _resolve_size(image3_size)
-        params['image3'] = {'x': pos3[0], 'y': pos3[1], 'width': sz3[0], 'height': sz3[1]}
-        img3 = fetch_image(image3, 'image3')
+        invoke_params.update({
+            'image3': image3,
+            'image3_x': str(pos3[0]),
+            'image3_y': str(pos3[1]),
+            'image3_width': str(sz3[0]),
+            'image3_height': str(sz3[1]),
+        })
 
-    base_img = None
-    if base_image and base_image != 'transparent':
-        base_img = fetch_image(base_image, 'base')
+    # ImageProcessor Lambda を呼び出し（ffmpegはそちらに搭載）
+    function_name = os.environ.get('IMAGE_PROCESSOR_FUNCTION', '')
+    if not function_name:
+        return {'success': False, 'error': '動画生成サービスが設定されていません'}
 
-    composite = create_composite_image(base_img, img1, img2, img3, params)
+    lambda_client = boto3.client('lambda')
+    lambda_payload = {
+        'httpMethod': 'GET',
+        'path': '/images/composite',
+        'queryStringParameters': invoke_params,
+    }
 
-    # 動画生成
-    video_data = generate_video_from_image(
-        composite, duration=duration, format_name=video_format
+    response = lambda_client.invoke(
+        FunctionName=function_name,
+        InvocationType='RequestResponse',
+        Payload=json.dumps(lambda_payload),
     )
 
-    # S3にアップロード
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    video_ext = get_video_extension(video_format)
-    filename = f"composite-video-agent-{timestamp}.{video_ext}"
-    s3_key = f"generated-videos/{filename}"
+    result_payload = json.loads(response['Payload'].read())
+    status_code = result_payload.get('statusCode', 0)
+    result_body = json.loads(result_payload.get('body', '{}'))
 
-    s3_client = _get_s3_client()
-    resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', '')
+    if status_code != 200:
+        error_msg = result_body.get('error', '動画生成に失敗しました')
+        return {'success': False, 'error': error_msg}
 
-    s3_client.put_object(
-        Bucket=resources_bucket,
-        Key=s3_key,
-        Body=video_data,
-        ContentType=get_video_mime_type(video_format),
-        ContentDisposition=f'attachment; filename="{filename}"',
-        CacheControl='public, max-age=3600',
-    )
-
-    # CloudFront URLを生成
-    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
-    if cloudfront_domain:
-        video_url = f"https://{cloudfront_domain}/{s3_key}"
-    else:
-        video_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': resources_bucket, 'Key': s3_key},
-            ExpiresIn=3600,
-        )
+    video_url = result_body.get('url', '')
+    if not video_url:
+        return {'success': False, 'error': '動画URLが返却されませんでした'}
 
     # video_urlはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
     global _last_media_result
@@ -301,10 +303,9 @@ def generate_video(
     return {
         'success': True,
         'video_generated': True,
-        'filename': filename,
+        'filename': result_body.get('filename', ''),
         'format': video_format,
         'duration': duration,
-        'size_bytes': len(video_data),
     }
 
 

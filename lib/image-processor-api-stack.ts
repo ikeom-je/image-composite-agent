@@ -1002,6 +1002,8 @@ else:
     // Lambda関数の環境変数にCloudFrontドメインを追加
     imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
     agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+    agentFunction.addEnvironment('IMAGE_PROCESSOR_FUNCTION', imageProcessorFunction.functionName);
+    imageProcessorFunction.grantInvoke(agentFunction);
 
     // API Gateway使用量プランとAPIキーの設定
     const usagePlan = api.addUsagePlan('ImageProcessorUsagePlan', {
