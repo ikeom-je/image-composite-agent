@@ -835,6 +835,28 @@ else:
       comment: 'OAI for resources bucket (videos)',
     });
 
+    // フロントエンドアセット用ResponseHeadersPolicy（ブラウザキャッシュ制御）
+    const frontendResponseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, 'FrontendResponseHeaders', {
+      responseHeadersPolicyName: 'image-processor-frontend-headers',
+      comment: 'Add Cache-Control header to prevent stale browser cache',
+      corsBehavior: {
+        accessControlAllowOrigins: ['*'],
+        accessControlAllowHeaders: ['*'],
+        accessControlAllowMethods: ['GET', 'HEAD', 'OPTIONS'],
+        accessControlAllowCredentials: false,
+        originOverride: true,
+      },
+      customHeadersBehavior: {
+        customHeaders: [
+          {
+            header: 'Cache-Control',
+            value: 'no-cache, must-revalidate',
+            override: true,
+          },
+        ],
+      },
+    });
+
     // CloudFrontディストリビューション（キャッシュ機能強化） - v2.6.0
     this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
       defaultRootObject: 'index.html',
@@ -857,7 +879,7 @@ else:
           enableAcceptEncodingGzip: true,
           enableAcceptEncodingBrotli: true,
         }),
-        responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS_WITH_PREFLIGHT_AND_SECURITY_HEADERS,
+        responseHeadersPolicy: frontendResponseHeadersPolicy,
       },
       additionalBehaviors: {
         // HTMLファイル用の短期キャッシュ（開発時の更新反映を早くするため）
@@ -880,6 +902,7 @@ else:
             enableAcceptEncodingGzip: true,
             enableAcceptEncodingBrotli: true,
           }),
+          responseHeadersPolicy: frontendResponseHeadersPolicy,
         },
         // 静的アセット（JS/CSS）用の長期キャッシュ
         '*.js': {
@@ -901,6 +924,7 @@ else:
             enableAcceptEncodingGzip: true,
             enableAcceptEncodingBrotli: true,
           }),
+          responseHeadersPolicy: frontendResponseHeadersPolicy,
         },
         '*.css': {
           origin: new origins.S3Origin(this.frontendBucket, {
@@ -921,6 +945,7 @@ else:
             enableAcceptEncodingGzip: true,
             enableAcceptEncodingBrotli: true,
           }),
+          responseHeadersPolicy: frontendResponseHeadersPolicy,
         },
         // 合成画像用のキャッシュ（リソースバケットから配信）
         'generated-images/*': {
