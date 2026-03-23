@@ -3,6 +3,7 @@ import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ImageProcessorApiStack } from '../lib/image-processor-api-stack';
 import { ImageCompositeViewerStack } from '../lib/image-composite-viewer-stack';
+import { FrontendStack } from '../lib/frontend-stack';
 
 const app = new cdk.App();
 
@@ -37,3 +38,11 @@ const viewerStack = new ImageCompositeViewerStack(app, 'ImageCompositeViewerStac
 
 // スタック間の依存関係を設定（フロントエンドはバックエンドに依存）
 viewerStack.addDependency(apiStack);
+
+// 新フロントエンドスタック（独立デプロイ対応）
+const frontendStack = new FrontendStack(app, 'FrontendStack', {
+  description: 'Frontend for Image Compositor (independent deploy)',
+  env,
+  tags,
+});
+frontendStack.addDependency(apiStack);
