@@ -24,7 +24,7 @@ import ChatInput from '@/components/chat/ChatInput.vue'
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()
-const { showWelcome, handleUserInput } = useChatAgent()
+const { showWelcome, handleUserInput, loadHistory } = useChatAgent()
 
 const isBusy = ref(false)
 
@@ -41,6 +41,8 @@ onMounted(async () => {
   if (!configStore.isLoaded) {
     await configStore.loadConfig()
   }
+  // サーバーから会話履歴を復元（media情報含む）
+  await loadHistory()
   if (chatStore.messages.length === 0) {
     showWelcome()
   }
