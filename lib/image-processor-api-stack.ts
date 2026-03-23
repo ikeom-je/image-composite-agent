@@ -1393,6 +1393,8 @@ else:
     // フロントエンドと設定ファイルを同時にデプロイ（環境別設定対応）
     // 注意: frontend/distディレクトリが存在する場合のみ有効
     if (fs.existsSync(path.join(__dirname, '../frontend/dist'))) {
+      // デプロイ毎にハッシュを変更してBucketDeploymentの再実行を保証
+      const deployTimestamp = new Date().toISOString();
       new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
         sources: [
           s3deploy.Source.asset(path.join(__dirname, '../frontend/dist')),
@@ -1400,13 +1402,13 @@ else:
           s3deploy.Source.jsonData('config.development.json', developmentConfig), // 開発環境設定
           s3deploy.Source.jsonData('config.staging.json', stagingConfig), // ステージング環境設定
           s3deploy.Source.jsonData('config.production.json', configContent), // 本番環境設定（メインと同じ）
+          s3deploy.Source.jsonData('.deploy-meta.json', { deployedAt: deployTimestamp, version: VERSION }), // デプロイ毎にハッシュ変更を強制
         ],
         destinationBucket: this.frontendBucket,
         distribution: this.distribution,
         distributionPaths: ['/*', '/index.html', '/config*.json'], // 設定ファイルのキャッシュ無効化
         retainOnDelete: false,
-        // 生成済みファイルを保護（合成画像・動画を削除しない）
-        exclude: ['generated-images/*', 'generated-videos/*'],
+        prune: false, // 既存ファイルを削除しない（generated-images/generated-videos保護）
         // メモリ最適化
         memoryLimit: 512,
         // ログ保持期間
