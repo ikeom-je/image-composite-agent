@@ -51,7 +51,9 @@ export function useChatAgent() {
 
       if (media) {
         mediaType = media.type
-        if (media.type === 'image' && media.data) {
+        if (media.type === 'image' && media.url) {
+          mediaUrl = media.url
+        } else if (media.type === 'image' && media.data) {
           mediaUrl = `data:image/png;base64,${media.data}`
         } else if (media.type === 'video' && media.url) {
           mediaUrl = media.url

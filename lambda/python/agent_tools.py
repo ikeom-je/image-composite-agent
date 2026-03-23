@@ -120,10 +120,36 @@ def compose_images(
     # 合成実行
     composite = create_composite_image(base_img, img1, img2, img3, params)
 
-    # Base64エンコード
+    # S3に保存してCloudFront URLを生成
+    from datetime import datetime
     buffer = io.BytesIO()
     composite.save(buffer, format='PNG', optimize=True)
-    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    png_data = buffer.getvalue()
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"composite-agent-{timestamp}.png"
+    s3_key = f"generated-images/{filename}"
+
+    s3_client = _get_s3_client()
+    resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', '')
+
+    s3_client.put_object(
+        Bucket=resources_bucket,
+        Key=s3_key,
+        Body=png_data,
+        ContentType='image/png',
+        CacheControl='public, max-age=3600',
+    )
+
+    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
+    if cloudfront_domain:
+        image_url = f"https://{cloudfront_domain}/{s3_key}"
+    else:
+        image_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': resources_bucket, 'Key': s3_key},
+            ExpiresIn=3600,
+        )
 
     # 使用パラメータのサマリ
     image_count = 1 + (1 if image2 else 0) + (1 if image3 else 0)
@@ -139,12 +165,11 @@ def compose_images(
             f"画像3: source={image3}, 位置=({params['image3']['x']}, {params['image3']['y']}), サイズ={params['image3']['width']}x{params['image3']['height']}"
         )
 
-    # base64はコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
-    # agent_handler._extract_media_from_result()で取得する
+    # URLはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
     global _last_media_result
     _last_media_result = {
         'type': 'image',
-        'data': img_base64,
+        'url': image_url,
     }
 
     return {
@@ -153,6 +178,7 @@ def compose_images(
         'image_count': image_count,
         'canvas_size': '1920x1080',
         'base_image': base_image,
+        'filename': filename,
         'parameters_summary': '\n'.join(summary_lines),
     }
 
