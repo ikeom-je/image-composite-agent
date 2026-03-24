@@ -70,26 +70,8 @@ export class FrontendStack extends cdk.Stack {
       },
     });
 
-    // ハッシュ付きアセット用: immutable
-    const immutableCachePolicy = new cloudfront.ResponseHeadersPolicy(this, 'ImmutableHeaders', {
-      responseHeadersPolicyName: `frontend-immutable-v${VERSION.replace(/\./g, '-')}`,
-      corsBehavior: {
-        accessControlAllowOrigins: ['*'],
-        accessControlAllowHeaders: ['*'],
-        accessControlAllowMethods: ['GET', 'HEAD', 'OPTIONS'],
-        accessControlAllowCredentials: false,
-        originOverride: true,
-      },
-      customHeadersBehavior: {
-        customHeaders: [{
-          header: 'Cache-Control',
-          value: 'public, max-age=31536000, immutable',
-          override: true,
-        }],
-      },
-    });
-
     // --- CloudFront CachePolicy ---
+    // 開発用: 全パス60秒キャッシュ
     const shortCachePolicy = new cloudfront.CachePolicy(this, 'ShortCachePolicy', {
       cachePolicyName: `frontend-short-cache-v${VERSION.replace(/\./g, '-')}`,
       defaultTtl: cdk.Duration.seconds(0),
@@ -100,16 +82,6 @@ export class FrontendStack extends cdk.Stack {
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
-    });
-
-    const longCachePolicy = new cloudfront.CachePolicy(this, 'LongCachePolicy', {
-      cachePolicyName: `frontend-long-cache-v${VERSION.replace(/\./g, '-')}`,
-      defaultTtl: cdk.Duration.hours(24),
-      maxTtl: cdk.Duration.days(365),
-      minTtl: cdk.Duration.hours(1),
-      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
     });
 
     // --- CloudFront Distribution ---
@@ -124,14 +96,14 @@ export class FrontendStack extends cdk.Stack {
         responseHeadersPolicy: noCachePolicy,
       },
       additionalBehaviors: {
-        // ハッシュ付きアセット（JS/CSS）→ immutable長期キャッシュ
+        // アセット（JS/CSS）→ 60秒キャッシュ
         'assets/*': {
           origin: new origins.S3Origin(this.frontendBucket, { originAccessIdentity: frontendOAI }),
           compress: true,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: longCachePolicy,
-          responseHeadersPolicy: immutableCachePolicy,
+          cachePolicy: shortCachePolicy,
+          responseHeadersPolicy: noCachePolicy,
         },
         // 合成画像（リソースバケット）
         'generated-images/*': {
@@ -139,7 +111,7 @@ export class FrontendStack extends cdk.Stack {
           compress: false,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: longCachePolicy,
+          cachePolicy: shortCachePolicy,
           responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
         },
         // 動画（リソースバケット）
@@ -150,9 +122,9 @@ export class FrontendStack extends cdk.Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: new cloudfront.CachePolicy(this, 'VideoCachePolicy', {
             cachePolicyName: `frontend-video-cache-v${VERSION.replace(/\./g, '-')}`,
-            defaultTtl: cdk.Duration.hours(24),
-            maxTtl: cdk.Duration.days(365),
-            minTtl: cdk.Duration.hours(1),
+            defaultTtl: cdk.Duration.seconds(0),
+            maxTtl: cdk.Duration.seconds(60),
+            minTtl: cdk.Duration.seconds(0),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Range'),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),

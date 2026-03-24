@@ -31,8 +31,14 @@ function htmlBuildHashPlugin() {
   }
 }
 
+const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'))
+
 export default defineConfig({
   plugins: [tailwindcss(), vue(), htmlBuildHashPlugin(), writeBuildHashPlugin()],
+  define: {
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+    __BUILD_HASH__: JSON.stringify(buildHash),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
