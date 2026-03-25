@@ -87,6 +87,7 @@ case "$STACK" in
   backend|api)
     echo "🚀 バックエンドのみデプロイ..."
     npx cdk deploy ImageProcessorApiStack --require-approval never
+    update_lambda_cloudfront_domain
     ;;
   frontend|front)
     echo "🔨 フロントエンドビルド..."

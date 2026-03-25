@@ -2,9 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
@@ -22,9 +20,7 @@ const VERSION = packageJson.version;
 export class ImageProcessorApiStack extends cdk.Stack {
   public readonly resourcesBucket: s3.Bucket;
   public readonly testImagesBucket: s3.Bucket;
-  public readonly frontendBucket: s3.Bucket;
-  public readonly uploadBucket: s3.Bucket;  // 新規追加: アップロード用バケット
-  public readonly distribution: cloudfront.Distribution;
+  public readonly uploadBucket: s3.Bucket;
   public readonly apiEndpoint: string;
   public readonly uploadApiEndpoint: string;
   public readonly chatApiEndpoint: string;
@@ -48,14 +44,6 @@ export class ImageProcessorApiStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // S3バケットの作成（フロントエンド用）
-    this.frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
-      accessControl: s3.BucketAccessControl.PRIVATE,
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
 
     // S3バケットの作成（アップロード用） - v2.4.1新機能
     this.uploadBucket = new s3.Bucket(this, 'UploadBucket', {
@@ -812,221 +800,7 @@ else:
     this.chatApiEndpoint = `${api.url}chat`;
 
     // CloudFront Origin Access Identity (OAI) の作成
-    const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OriginAccessIdentity', {
-      comment: 'Access to the frontend bucket',
-    });
-
-    // S3バケットポリシーの設定 - CloudFrontからのアクセスのみを許可
-    this.frontendBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        effect: iam.Effect.ALLOW,
-        principals: [
-          new iam.CanonicalUserPrincipal(
-            originAccessIdentity.cloudFrontOriginAccessIdentityS3CanonicalUserId
-          ),
-        ],
-        resources: [this.frontendBucket.arnForObjects('*')],
-      })
-    );
-
-    // リソースバケット用のOrigin Access Identity
-    const resourcesOAI = new cloudfront.OriginAccessIdentity(this, 'ResourcesOAI', {
-      comment: 'OAI for resources bucket (videos)',
-    });
-
-    // フロントエンドアセット用ResponseHeadersPolicy（ブラウザキャッシュ制御）
-    const frontendResponseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, 'FrontendResponseHeaders', {
-      responseHeadersPolicyName: 'image-processor-frontend-headers',
-      comment: 'Add Cache-Control header to prevent stale browser cache',
-      corsBehavior: {
-        accessControlAllowOrigins: ['*'],
-        accessControlAllowHeaders: ['*'],
-        accessControlAllowMethods: ['GET', 'HEAD', 'OPTIONS'],
-        accessControlAllowCredentials: false,
-        originOverride: true,
-      },
-      customHeadersBehavior: {
-        customHeaders: [
-          {
-            header: 'Cache-Control',
-            value: 'no-cache, must-revalidate',
-            override: true,
-          },
-        ],
-      },
-    });
-
-    // CloudFrontディストリビューション（キャッシュ機能強化） - v2.6.0
-    this.distribution = new cloudfront.Distribution(this, 'FrontendDistribution', {
-      defaultRootObject: 'index.html',
-      defaultBehavior: {
-        origin: new origins.S3Origin(this.frontendBucket, {
-          originAccessIdentity,
-        }),
-        compress: true,
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        cachePolicy: new cloudfront.CachePolicy(this, 'DefaultCachePolicy', {
-          cachePolicyName: 'image-processor-default-cache',
-          comment: 'Default cache policy for Image Processor frontend',
-          defaultTtl: cdk.Duration.seconds(5),
-          maxTtl: cdk.Duration.seconds(60),
-          minTtl: cdk.Duration.seconds(0),
-          cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-          headerBehavior: cloudfront.CacheHeaderBehavior.allowList('CloudFront-Viewer-Country'),
-          queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-          enableAcceptEncodingGzip: true,
-          enableAcceptEncodingBrotli: true,
-        }),
-        responseHeadersPolicy: frontendResponseHeadersPolicy,
-      },
-      additionalBehaviors: {
-        // HTMLファイル用の短期キャッシュ（開発時の更新反映を早くするため）
-        '*.html': {
-          origin: new origins.S3Origin(this.frontendBucket, {
-            originAccessIdentity,
-          }),
-          compress: true,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'HTMLCachePolicy', {
-            cachePolicyName: 'image-processor-html-cache',
-            comment: 'Short-term cache for HTML files',
-            defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.seconds(60),
-            minTtl: cdk.Duration.seconds(0),
-            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-            headerBehavior: cloudfront.CacheHeaderBehavior.none(),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-            enableAcceptEncodingGzip: true,
-            enableAcceptEncodingBrotli: true,
-          }),
-          responseHeadersPolicy: frontendResponseHeadersPolicy,
-        },
-        // 静的アセット（JS/CSS）用の長期キャッシュ
-        '*.js': {
-          origin: new origins.S3Origin(this.frontendBucket, {
-            originAccessIdentity,
-          }),
-          compress: true,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'StaticAssetsCachePolicy', {
-            cachePolicyName: 'image-processor-static-assets',
-            comment: 'Short-term cache for static assets during development',
-            defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.seconds(60),
-            minTtl: cdk.Duration.seconds(0),
-            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-            headerBehavior: cloudfront.CacheHeaderBehavior.none(),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-            enableAcceptEncodingGzip: true,
-            enableAcceptEncodingBrotli: true,
-          }),
-          responseHeadersPolicy: frontendResponseHeadersPolicy,
-        },
-        '*.css': {
-          origin: new origins.S3Origin(this.frontendBucket, {
-            originAccessIdentity,
-          }),
-          compress: true,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'CSSCachePolicy', {
-            cachePolicyName: 'image-processor-css-cache',
-            comment: 'Short-term cache for CSS files during development',
-            defaultTtl: cdk.Duration.seconds(5),
-            maxTtl: cdk.Duration.seconds(60),
-            minTtl: cdk.Duration.seconds(0),
-            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-            headerBehavior: cloudfront.CacheHeaderBehavior.none(),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-            enableAcceptEncodingGzip: true,
-            enableAcceptEncodingBrotli: true,
-          }),
-          responseHeadersPolicy: frontendResponseHeadersPolicy,
-        },
-        // 合成画像用のキャッシュ（リソースバケットから配信）
-        'generated-images/*': {
-          origin: new origins.S3Origin(this.resourcesBucket, {
-            originAccessIdentity: resourcesOAI,
-          }),
-          compress: false, // 画像は既に圧縮済み
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'GeneratedImageCachePolicy', {
-            cachePolicyName: 'image-processor-generated-images-cache',
-            comment: 'Cache policy for agent-generated composite images',
-            defaultTtl: cdk.Duration.hours(24),
-            maxTtl: cdk.Duration.days(365),
-            minTtl: cdk.Duration.hours(1),
-            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-            headerBehavior: cloudfront.CacheHeaderBehavior.none(),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-          }),
-          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
-        },
-        // 動画ファイル用のキャッシュ（リソースバケットから配信）
-        'generated-videos/*': {
-          origin: new origins.S3Origin(this.resourcesBucket, {
-            originAccessIdentity: resourcesOAI,
-          }),
-          compress: false, // 動画は既に圧縮済み
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: new cloudfront.CachePolicy(this, 'VideoCachePolicy', {
-            cachePolicyName: 'image-processor-video-cache',
-            comment: 'Cache policy for video files',
-            defaultTtl: cdk.Duration.hours(24),
-            maxTtl: cdk.Duration.days(365),
-            minTtl: cdk.Duration.hours(1),
-            cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Range'),
-            queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
-          }),
-          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
-        },
-      },
-      // SPAのルーティングをサポートするためのエラーレスポンス設定
-      errorResponses: [
-        {
-          httpStatus: 404,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.seconds(0),
-        },
-        {
-          httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.seconds(0),
-        },
-      ],
-      priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // コスト最適化
-      comment: `Image Processor Frontend Distribution with optimized caching - v${VERSION}`,
-      enabled: true,
-      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
-      // ログ設定（オプション）
-      enableLogging: false, // 本番環境では有効化を検討
-      // webAclId: undefined, // WAF設定（必要に応じて）
-      // 地理的制限なし
-      // geoRestriction: cloudfront.GeoRestriction.allowlist() // 全世界許可
-    });
-
-    // リソースバケットにCloudFrontからのアクセス権限を付与
-    this.resourcesBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        actions: ['s3:GetObject'],
-        resources: [this.resourcesBucket.arnForObjects('*')],
-        principals: [new iam.CanonicalUserPrincipal(resourcesOAI.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
-      })
-    );
-
-    // Lambda関数の環境変数にCloudFrontドメインを追加
-    imageProcessorFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
-    agentFunction.addEnvironment('CLOUDFRONT_DOMAIN', this.distribution.distributionDomainName);
+    // Lambda関数の環境変数（CLOUDFRONT_DOMAINはdeploy.shでFrontendStackデプロイ後に設定）
     agentFunction.addEnvironment('IMAGE_PROCESSOR_FUNCTION', imageProcessorFunction.functionName);
     imageProcessorFunction.grantInvoke(agentFunction);
 
@@ -1246,243 +1020,14 @@ else:
             height: 6,
           }),
         ],
-        [
-          // CloudFront メトリクス
-          new cloudwatch.GraphWidget({
-            title: 'CloudFront Requests',
-            left: [
-              new cloudwatch.Metric({
-                namespace: 'AWS/CloudFront',
-                metricName: 'Requests',
-                dimensionsMap: {
-                  DistributionId: this.distribution.distributionId,
-                },
-                period: cdk.Duration.minutes(5),
-                statistic: cloudwatch.Statistic.SUM,
-                label: 'Total Requests',
-              }),
-            ],
-            width: 6,
-            height: 6,
-          }),
-          new cloudwatch.GraphWidget({
-            title: 'CloudFront Cache Hit Rate',
-            left: [
-              new cloudwatch.Metric({
-                namespace: 'AWS/CloudFront',
-                metricName: 'CacheHitRate',
-                dimensionsMap: {
-                  DistributionId: this.distribution.distributionId,
-                },
-                period: cdk.Duration.minutes(5),
-                statistic: cloudwatch.Statistic.AVERAGE,
-                label: 'Cache Hit Rate',
-              }),
-            ],
-            width: 6,
-            height: 6,
-          }),
-        ],
       ],
     });
-
-    // 環境固有の設定を取得
-    const environment = this.node.tryGetContext('environment') || 'production';
-    const enableDebugMode = this.node.tryGetContext('enableDebugMode') === 'true';
-    const customDomain = this.node.tryGetContext('customDomain');
-    const enableAnalytics = this.node.tryGetContext('enableAnalytics') !== 'false'; // デフォルトで有効
-
-    // 設定ファイルの内容を動的生成（環境固有設定対応） - v2.4.1
-    const configContent = {
-      // 基本API設定
-      apiUrl: this.apiEndpoint,
-      uploadApiUrl: `${api.url}upload`,
-      chatApiUrl: this.chatApiEndpoint,
-      cloudfrontUrl: customDomain ? `https://${customDomain}` : `https://${this.distribution.distributionDomainName}`,
-
-      // S3バケット設定
-      s3BucketNames: {
-        resources: this.resourcesBucket.bucketName,
-        testImages: this.testImagesBucket.bucketName,
-        frontend: this.frontendBucket.bucketName,
-        upload: this.uploadBucket.bucketName,
-      },
-
-      // バージョンと環境情報
-      version: VERSION,
-      environment: environment,
-      buildTimestamp: new Date().toISOString(),
-      // フロントエンドビルドハッシュ（ブラウザキャッシュ検知用）
-      buildHash: fs.existsSync(path.join(__dirname, '../frontend/dist/.build-hash'))
-        ? fs.readFileSync(path.join(__dirname, '../frontend/dist/.build-hash'), 'utf-8').trim()
-        : '',
-      region: this.region,
-
-      // 機能フラグ
-      features: {
-        enableS3Upload: true,
-        enableAdvancedFilters: this.node.tryGetContext('enableAdvancedFilters') === 'true',
-        enable3ImageComposition: true,
-        enableDebugMode: enableDebugMode,
-        enableAnalytics: enableAnalytics,
-        enableCaching: environment === 'production',
-        enableErrorReporting: environment === 'production',
-      },
-
-      // API設定
-      api: {
-        keyId: apiKey.keyId,
-        throttling: {
-          rateLimit: environment === 'production' ? 100 : 50,
-          burstLimit: environment === 'production' ? 200 : 100,
-          dailyQuota: environment === 'production' ? 10000 : 1000,
-        },
-        timeout: 30000, // 30秒
-        retryAttempts: 3,
-      },
-
-      // UI設定
-      ui: {
-        theme: this.node.tryGetContext('uiTheme') || 'light',
-        language: this.node.tryGetContext('uiLanguage') || 'ja',
-        showAdvancedOptions: enableDebugMode,
-        maxImageSize: 10 * 1024 * 1024, // 10MB
-        supportedFormats: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
-      },
-
-      // 監視・ログ設定
-      monitoring: {
-        enableCloudWatchLogs: environment === 'production',
-        logLevel: enableDebugMode ? 'debug' : 'info',
-        enablePerformanceMetrics: true,
-        enableErrorTracking: environment === 'production',
-      },
-
-      // セキュリティ設定
-      security: {
-        enableCSP: environment === 'production',
-        enableSRI: environment === 'production',
-        corsOrigins: environment === 'production' ? [customDomain || this.distribution.distributionDomainName] : ['*'],
-      },
-
-      // 開発者向け設定
-      development: {
-        enableHotReload: environment === 'development',
-        enableSourceMaps: enableDebugMode,
-        enableConsoleLogging: enableDebugMode,
-        mockApiResponses: environment === 'development' && this.node.tryGetContext('mockApi') === 'true',
-      }
-    };
-
-    // 環境別設定ファイルの生成
-    const developmentConfig = {
-      ...configContent,
-      environment: 'development',
-      features: {
-        ...configContent.features,
-        enableDebugMode: true,
-        enableCaching: false,
-        enableErrorReporting: false,
-      },
-      api: {
-        ...configContent.api,
-        throttling: {
-          rateLimit: 50,
-          burstLimit: 100,
-          dailyQuota: 1000,
-        },
-      },
-      development: {
-        ...configContent.development,
-        enableHotReload: true,
-        enableSourceMaps: true,
-        enableConsoleLogging: true,
-      }
-    };
-
-    const stagingConfig = {
-      ...configContent,
-      environment: 'staging',
-      features: {
-        ...configContent.features,
-        enableDebugMode: true,
-        enableCaching: true,
-        enableErrorReporting: true,
-      },
-      api: {
-        ...configContent.api,
-        throttling: {
-          rateLimit: 75,
-          burstLimit: 150,
-          dailyQuota: 5000,
-        },
-      }
-    };
-
-    // フロントエンドと設定ファイルを同時にデプロイ（環境別設定対応）
-    // 注意: frontend/distディレクトリが存在する場合のみ有効
-    if (fs.existsSync(path.join(__dirname, '../frontend/dist'))) {
-      // デプロイ毎にハッシュを変更してBucketDeploymentの再実行を保証
-      const deployTimestamp = new Date().toISOString();
-      new s3deploy.BucketDeployment(this, 'DeployFrontendWithConfig', {
-        sources: [
-          s3deploy.Source.asset(path.join(__dirname, '../frontend/dist')),
-          s3deploy.Source.jsonData('config.json', configContent), // メイン設定
-          s3deploy.Source.jsonData('config.development.json', developmentConfig), // 開発環境設定
-          s3deploy.Source.jsonData('config.staging.json', stagingConfig), // ステージング環境設定
-          s3deploy.Source.jsonData('config.production.json', configContent), // 本番環境設定（メインと同じ）
-          s3deploy.Source.jsonData('.deploy-meta.json', { deployedAt: deployTimestamp, version: VERSION }), // デプロイ毎にハッシュ変更を強制
-        ],
-        destinationBucket: this.frontendBucket,
-        distribution: this.distribution,
-        distributionPaths: ['/*', '/index.html', '/config*.json'], // 設定ファイルのキャッシュ無効化
-        retainOnDelete: false,
-        prune: false, // 既存ファイルを削除しない（generated-images/generated-videos保護）
-        // メモリ最適化
-        memoryLimit: 512,
-        // ログ保持期間
-        logRetention: logs.RetentionDays.ONE_WEEK,
-      });
-    } else {
-      // 設定ファイルのみをデプロイ
-      new s3deploy.BucketDeployment(this, 'DeployConfigOnly', {
-        sources: [
-          s3deploy.Source.jsonData('config.json', configContent), // メイン設定
-          s3deploy.Source.jsonData('config.development.json', developmentConfig), // 開発環境設定
-          s3deploy.Source.jsonData('config.staging.json', stagingConfig), // ステージング環境設定
-          s3deploy.Source.jsonData('config.production.json', configContent), // 本番環境設定（メインと同じ）
-        ],
-        destinationBucket: this.frontendBucket,
-        distribution: this.distribution,
-        distributionPaths: ['/config*.json'], // 設定ファイルのキャッシュ無効化
-        retainOnDelete: false,
-        // メモリ最適化
-        memoryLimit: 512,
-        // ログ保持期間
-        logRetention: logs.RetentionDays.ONE_WEEK,
-      });
-    }
 
     // 出力値の設定
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: this.apiEndpoint,
       description: 'URL for the Image Processor API',
       exportName: 'ImageProcessorApiEndpoint',
-    });
-
-    new cdk.CfnOutput(this, 'FrontendUrl', {
-      value: `https://${this.distribution.distributionDomainName}`,
-      description: 'URL for the frontend application'
-    });
-
-    new cdk.CfnOutput(this, 'CloudFrontDistributionId', {
-      value: this.distribution.distributionId,
-      description: 'CloudFront Distribution ID for cache invalidation'
-    });
-
-    new cdk.CfnOutput(this, 'CloudFrontDomainName', {
-      value: this.distribution.distributionDomainName,
-      description: 'CloudFront Distribution Domain Name'
     });
 
     new cdk.CfnOutput(this, 'TestImagesBucketName', {
@@ -1518,11 +1063,6 @@ else:
       value: this.resourcesBucket.bucketArn,
       description: 'ARN of the resources bucket',
       exportName: 'ImageProcessorResourcesBucketArn',
-    });
-
-    new cdk.CfnOutput(this, 'FrontendBucketName', {
-      value: this.frontendBucket.bucketName,
-      description: 'Name of the frontend bucket'
     });
 
     new cdk.CfnOutput(this, 'UploadBucketName', {
