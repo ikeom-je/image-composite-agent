@@ -1,9 +1,18 @@
 <template>
   <div class="flex flex-col h-[calc(100vh-3.5rem)] bg-gray-50">
     <!-- ヘッダー -->
-    <div class="px-4 py-3 bg-white border-b border-gray-200 shadow-sm">
-      <h1 class="text-lg font-semibold text-gray-800">Chat Agent - 画像合成アシスタント</h1>
-      <p class="text-xs text-gray-500">コマンドで画像合成・動画生成を実行できます</p>
+    <div class="px-4 py-3 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between">
+      <div>
+        <h1 class="text-lg font-semibold text-gray-800">Chat Agent - 画像合成アシスタント</h1>
+        <p class="text-xs text-gray-500">コマンドで画像合成・動画生成を実行できます</p>
+      </div>
+      <button
+        @click="onClear"
+        :disabled="isBusy || chatStore.messages.length === 0"
+        class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        履歴クリア
+      </button>
     </div>
 
     <!-- メッセージ一覧 -->
@@ -24,7 +33,7 @@ import ChatInput from '@/components/chat/ChatInput.vue'
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()
-const { showWelcome, handleUserInput, loadHistory } = useChatAgent()
+const { showWelcome, handleUserInput, loadHistory, clearHistory } = useChatAgent()
 
 const isBusy = ref(false)
 
@@ -35,6 +44,12 @@ async function onSend(text: string) {
   } finally {
     isBusy.value = false
   }
+}
+
+async function onClear() {
+  await clearHistory()
+  chatStore.newSession()
+  showWelcome()
 }
 
 onMounted(async () => {
