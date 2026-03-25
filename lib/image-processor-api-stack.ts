@@ -1490,6 +1490,24 @@ else:
       description: 'Name of the test images bucket'
     });
 
+    // FrontendStack用: リソースバケットへのCloudFront OAI（FrontendStack側でimportして使用）
+    const frontendResourcesOAI = new cloudfront.OriginAccessIdentity(this, 'FrontendResourcesOAI', {
+      comment: 'OAI for FrontendStack to access resources bucket',
+    });
+    this.resourcesBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        resources: [this.resourcesBucket.arnForObjects('*')],
+        principals: [new iam.CanonicalUserPrincipal(frontendResourcesOAI.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
+      })
+    );
+
+    new cdk.CfnOutput(this, 'FrontendResourcesOAIId', {
+      value: frontendResourcesOAI.originAccessIdentityId,
+      description: 'OAI ID for FrontendStack resources bucket access',
+      exportName: 'FrontendResourcesOAIId',
+    });
+
     new cdk.CfnOutput(this, 'ResourcesBucketName', {
       value: this.resourcesBucket.bucketName,
       description: 'Name of the resources bucket',

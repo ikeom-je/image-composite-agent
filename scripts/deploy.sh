@@ -35,6 +35,9 @@ generate_config() {
     return 1
   fi
 
+  local BUILD_HASH
+  BUILD_HASH=$(cat frontend/dist/.build-hash 2>/dev/null || echo "unknown")
+
   cat > frontend/dist/config.json <<CONF
 {
   "apiUrl": "${API_URL}",
@@ -42,6 +45,7 @@ generate_config() {
   "chatApiUrl": "${CHAT_URL}",
   "cloudfrontUrl": "https://${CF_DOMAIN}",
   "version": "$(node -p "require('./package.json').version")",
+  "buildHash": "${BUILD_HASH}",
   "environment": "production",
   "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
   "region": "$(aws configure get region 2>/dev/null || echo 'ap-northeast-1')",

@@ -43,17 +43,16 @@ export class FrontendStack extends cdk.Stack {
       principals: [new iam.CanonicalUserPrincipal(frontendOAI.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
     }));
 
-    const resourcesOAI = new cloudfront.OriginAccessIdentity(this, 'ResourcesOAI');
-    resourcesBucket.addToResourcePolicy(new iam.PolicyStatement({
-      actions: ['s3:GetObject'],
-      resources: [resourcesBucket.arnForObjects('*')],
-      principals: [new iam.CanonicalUserPrincipal(resourcesOAI.cloudFrontOriginAccessIdentityS3CanonicalUserId)],
-    }));
+    // リソースバケット用OAI: ApiStack側で作成・権限付与済み、IDをimportして使用
+    const resourcesOAIId = cdk.Fn.importValue('FrontendResourcesOAIId');
+    const resourcesOAI = cloudfront.OriginAccessIdentity.fromOriginAccessIdentityId(
+      this, 'ResourcesOAI', resourcesOAIId
+    );
 
     // --- ResponseHeadersPolicy ---
     // index.html / config用: no-cache
     const noCachePolicy = new cloudfront.ResponseHeadersPolicy(this, 'NoCacheHeaders', {
-      responseHeadersPolicyName: `frontend-no-cache-v${VERSION.replace(/\./g, '-')}`,
+      responseHeadersPolicyName: 'frontend-no-cache',
       corsBehavior: {
         accessControlAllowOrigins: ['*'],
         accessControlAllowHeaders: ['*'],
@@ -73,7 +72,7 @@ export class FrontendStack extends cdk.Stack {
     // --- CloudFront CachePolicy ---
     // 開発用: 全パス60秒キャッシュ
     const shortCachePolicy = new cloudfront.CachePolicy(this, 'ShortCachePolicy', {
-      cachePolicyName: `frontend-short-cache-v${VERSION.replace(/\./g, '-')}`,
+      cachePolicyName: 'frontend-short-cache',
       defaultTtl: cdk.Duration.seconds(0),
       maxTtl: cdk.Duration.seconds(60),
       minTtl: cdk.Duration.seconds(0),
@@ -121,7 +120,7 @@ export class FrontendStack extends cdk.Stack {
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: new cloudfront.CachePolicy(this, 'VideoCachePolicy', {
-            cachePolicyName: `frontend-video-cache-v${VERSION.replace(/\./g, '-')}`,
+            cachePolicyName: 'frontend-video-cache',
             defaultTtl: cdk.Duration.seconds(0),
             maxTtl: cdk.Duration.seconds(60),
             minTtl: cdk.Duration.seconds(0),
@@ -156,7 +155,7 @@ export class FrontendStack extends cdk.Stack {
         destinationBucket: this.frontendBucket,
         distribution: this.distribution,
         distributionPaths: ['/*'],
-        prune: false,
+        prune: true,
         memoryLimit: 512,
         logRetention: logs.RetentionDays.ONE_WEEK,
       });
