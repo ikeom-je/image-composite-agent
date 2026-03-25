@@ -693,25 +693,37 @@ else:
       actions: ['aws-marketplace:ViewSubscriptions'],
       resources: ['*'],
     }));
-    // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス
-    // region_name="us-east-1"でBedrock呼び出しするため、us-east-1のARNが必要
+    // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス（マルチモデル対応）
+    const inferenceProfiles = [
+      'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      'us.amazon.nova-lite-v1:0',
+      'us.amazon.nova-micro-v1:0',
+    ];
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: [
-        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
-      ],
+      resources: inferenceProfiles.map(
+        profile => `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/${profile}`
+      ),
     }));
     // Bedrock US Cross-Region Inference: 基盤モデルへのアクセス（推論プロファイル経由）
+    const foundationModels = [
+      'anthropic.claude-sonnet-4-5-20250929-v1:0',
+      'anthropic.claude-haiku-4-5-20251001-v1:0',
+      'amazon.nova-lite-v1:0',
+      'amazon.nova-micro-v1:0',
+    ];
+    const bedrockRegions = ['us-east-1', 'us-east-2', 'us-west-2'];
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
       actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-      resources: [
-        'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
-        'arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
-        'arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0',
-      ],
+      resources: foundationModels.flatMap(model =>
+        bedrockRegions.map(region => `arn:aws:bedrock:${region}::foundation-model/${model}`)
+      ),
       conditions: {
         StringLike: {
-          'bedrock:InferenceProfileArn': `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-4-5-20250929-v1:0`,
+          'bedrock:InferenceProfileArn': inferenceProfiles.map(
+            profile => `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/${profile}`
+          ),
         },
       },
     }));
@@ -753,6 +765,27 @@ else:
         },
         {
           statusCode: '500',
+          responseParameters: {
+            'method.response.header.Access-Control-Allow-Origin': true,
+          },
+        },
+      ],
+    });
+
+    // GET /chat/models
+    const chatModelsResource = chatResource.addResource('models', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    chatModelsResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        {
+          statusCode: '200',
           responseParameters: {
             'method.response.header.Access-Control-Allow-Origin': true,
           },
