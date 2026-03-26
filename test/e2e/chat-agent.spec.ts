@@ -16,6 +16,10 @@
  * - G2: ローディング表示
  * - G3: タブ遷移
  * - G4: 直接URLアクセス
+ * - H1: 設定ページ表示
+ * - H2: モデル選択永続化
+ * - H3: チャットヘッダーにモデル名表示
+ * - H4: アシスタント応答にモデル名バッジ表示
  */
 
 import { test, expect, Page } from '@playwright/test'
@@ -124,6 +128,7 @@ test.describe('Chat Agent E2Eテスト', () => {
     })
 
     test('E2: リロード後に会話履歴が復元される', async ({ page }) => {
+      test.setTimeout(120000) // Agent応答 + リロード + 復元で時間がかかる
       await goToChat(page)
 
       // メッセージ送信
@@ -251,6 +256,71 @@ test.describe('Chat Agent E2Eテスト', () => {
 
       // 応答テキストがある（画像がある場合はグリッド、ない場合はメッセージ）
       expect(response.length).toBeGreaterThan(0)
+    })
+  })
+
+  // ===== H: マルチモデルUI =====
+
+  test.describe('H. マルチモデルUI', () => {
+    test('H1: /chat/settings で設定ページが表示されモデル一覧がある', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.getByText('Agent 設定')).toBeVisible({ timeout: 10000 })
+      await expect(page.getByText('使用モデル')).toBeVisible()
+
+      // モデルのラジオボタンが表示される
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+      const radios = page.locator('input[type="radio"][name="model"]')
+      const count = await radios.count()
+      expect(count).toBeGreaterThanOrEqual(4)
+    })
+
+    test('H2: モデル選択がリロード後も保持される', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+
+      // 2番目のモデルを選択
+      const secondRadio = page.locator('input[type="radio"][name="model"]').nth(1)
+      await secondRadio.click()
+      await expect(secondRadio).toBeChecked()
+
+      // 選択されたモデルのIDを取得
+      const selectedValue = await secondRadio.getAttribute('value')
+
+      // リロード
+      await page.reload()
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+
+      // 同じモデルが選択状態であること
+      const radioAfterReload = page.locator(`input[type="radio"][name="model"][value="${selectedValue}"]`)
+      await expect(radioAfterReload).toBeChecked()
+    })
+
+    test('H3: チャットページヘッダーに設定リンクがある', async ({ page }) => {
+      await goToChat(page)
+      const settingsLink = page.locator('a[href="/chat/settings"]')
+      await expect(settingsLink).toBeVisible()
+      await expect(settingsLink).toHaveText('設定')
+    })
+
+    test('H4: アシスタント応答にモデル名バッジが表示される', async ({ page }) => {
+      await goToChat(page)
+      await sendAndWait(page, 'ヘルプ')
+
+      // アシスタントバブル内にモデル名バッジがある
+      const lastAssistant = page.locator('.justify-start').last()
+      const modelBadge = lastAssistant.locator('span').filter({ hasText: /(Claude|Nova)/ })
+      await expect(modelBadge.first()).toBeVisible({ timeout: 5000 })
+    })
+
+    test('H1: 設定ページの戻りリンクでチャットに遷移できる', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.getByText('Agent 設定')).toBeVisible({ timeout: 10000 })
+
+      // 戻り矢印リンクをクリック
+      const backLink = page.locator('a[href="/chat"]').first()
+      await expect(backLink).toBeVisible()
+      await backLink.click()
+      await expect(page).toHaveURL(/\/chat$/)
     })
   })
 

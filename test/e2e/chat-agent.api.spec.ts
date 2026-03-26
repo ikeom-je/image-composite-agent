@@ -18,6 +18,11 @@
  * - F1: 空メッセージ
  * - F2: 長文メッセージ
  * - F3: 不正JSON
+ * - H1: GET /chat/models（モデル一覧取得）
+ * - H2: POST /chat + modelId（モデル指定送信）
+ * - H3: 不正modelIdで400エラー
+ * - H4: レスポンスにmodelId/modelName含む
+ * - H5: 会話履歴にmodelId含む
  */
 
 import { test, expect } from '@playwright/test'
@@ -274,6 +279,79 @@ test.describe('Chat Agent API テスト', () => {
       const body = await sendMessage(api, '', 'ヘルプ')
       // sessionIdが空の場合、サーバー側で自動生成
       expect(body.sessionId).toBeTruthy()
+    })
+  })
+
+  // ===== H: マルチモデル =====
+
+  test.describe('H. マルチモデル', () => {
+    test('H1: GET /chat/models でモデル一覧が取得できること', async () => {
+      const res = await api.get(`${TEST_CONFIG.chatApiUrl}/models`)
+      expect(res.status()).toBe(200)
+
+      const body = await res.json()
+      expect(Array.isArray(body.models)).toBe(true)
+      expect(body.models.length).toBeGreaterThanOrEqual(4)
+      expect(body.default).toBeTruthy()
+
+      for (const model of body.models) {
+        expect(model).toHaveProperty('id')
+        expect(model).toHaveProperty('name')
+        expect(model).toHaveProperty('provider')
+        expect(model).toHaveProperty('description')
+      }
+    })
+
+    test('H2: modelId指定でAgent応答が返ること', async () => {
+      const modelsRes = await api.get(`${TEST_CONFIG.chatApiUrl}/models`)
+      const { models } = await modelsRes.json()
+      const targetModel = models[0]
+
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: { sessionId: randomUUID(), message: 'ヘルプ', modelId: targetModel.id },
+        timeout: TEST_CONFIG.timeout,
+      })
+      expect(res.status()).toBe(200)
+
+      const body = await res.json()
+      expect(body.response.content).toBeTruthy()
+      expect(body.response.modelId).toBe(targetModel.id)
+      expect(body.response.modelName).toBe(targetModel.name)
+    })
+
+    test('H3: 不正なmodelIdで400エラーが返ること', async () => {
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: { sessionId: randomUUID(), message: 'テスト', modelId: 'invalid-model-id' },
+      })
+      expect(res.status()).toBe(400)
+      const body = await res.json()
+      expect(body).toHaveProperty('error')
+    })
+
+    test('H4: modelId省略時にデフォルトモデルが使用されること', async () => {
+      const body = await sendMessage(api, randomUUID(), 'ヘルプ')
+      expect(body.response.modelId).toBeTruthy()
+      expect(body.response.modelName).toBeTruthy()
+    })
+
+    test('H5: 会話履歴にmodelIdが含まれること', async () => {
+      const testSession = randomUUID()
+      await sendMessage(api, testSession, 'ヘルプ')
+
+      const histRes = await api.get(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`)
+      const histBody = await histRes.json()
+      expect(histBody.messages.length).toBeGreaterThan(0)
+
+      // アシスタントメッセージにmodelIdが含まれる
+      const assistantMsgs = histBody.messages.filter((m: any) => m.role === 'assistant')
+      expect(assistantMsgs.length).toBeGreaterThan(0)
+      for (const msg of assistantMsgs) {
+        expect(msg.modelId).toBeTruthy()
+        expect(msg.modelName).toBeTruthy()
+      }
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
     })
   })
 
