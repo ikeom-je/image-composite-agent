@@ -36,6 +36,7 @@ export function useChatAgent() {
         {
           sessionId: chatStore.sessionId,
           message: trimmed,
+          modelId: chatStore.effectiveModelId || undefined,
         },
         {
           headers: { 'Content-Type': 'application/json' },
@@ -43,7 +44,7 @@ export function useChatAgent() {
         }
       )
 
-      const { content, media } = response.data.response
+      const { content, media, modelId: respModelId, modelName: respModelName } = response.data.response
 
       let mediaUrl: string | undefined
       let mediaType: 'image' | 'video' | 'image_list' | undefined
@@ -67,6 +68,8 @@ export function useChatAgent() {
         mediaUrl,
         mediaType,
         imageList,
+        modelId: respModelId,
+        modelName: respModelName,
       })
     } catch (err: any) {
       let errMsg = 'エラーが発生しました'
@@ -103,8 +106,8 @@ export function useChatAgent() {
           }
           if (msg.mediaUrl) addMsg.mediaUrl = msg.mediaUrl
           if (msg.mediaType) addMsg.mediaType = msg.mediaType
-          // image_listは履歴に保存されないため、mediaTypeのみ保持
-          // （サムネイルURLは有効期限があるため再取得が必要）
+          if (msg.modelId) addMsg.modelId = msg.modelId
+          if (msg.modelName) addMsg.modelName = msg.modelName
           chatStore.addMessage(addMsg)
         }
       }
@@ -141,5 +144,16 @@ export function useChatAgent() {
     return `${window.location.origin}/api/chat`
   }
 
-  return { showWelcome, handleUserInput, loadHistory, clearHistory }
+  async function loadModels() {
+    try {
+      const endpoint = getChatApiEndpoint()
+      const response = await axios.get(`${endpoint}/models`, { timeout: 10000 })
+      const { models, default: defaultId } = response.data
+      chatStore.setModels(models, defaultId)
+    } catch (err) {
+      console.warn('Failed to load models:', err)
+    }
+  }
+
+  return { showWelcome, handleUserInput, loadHistory, clearHistory, loadModels }
 }

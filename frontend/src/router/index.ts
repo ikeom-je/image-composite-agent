@@ -21,6 +21,12 @@ const router = createRouter({
       component: () => import('../pages/ChatPage.vue'),
       meta: { title: 'チャットエージェント - Image Compositor' }
     },
+    {
+      path: '/chat/settings',
+      name: 'ChatSettings',
+      component: () => import('../pages/SettingsPage.vue'),
+      meta: { title: 'Agent設定 - Image Compositor' }
+    },
   ]
 })
 

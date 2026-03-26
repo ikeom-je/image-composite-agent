@@ -14,6 +14,13 @@
       <!-- テキスト内容 -->
       <div v-else v-html="renderedContent" class="chat-content"></div>
 
+      <!-- モデル名バッジ（アシスタント応答のみ） -->
+      <div v-if="message.role === 'assistant' && message.modelName && !message.isLoading" class="mt-1.5 flex items-center">
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+          {{ message.modelName }}
+        </span>
+      </div>
+
       <!-- メディア結果 -->
       <ChatMediaResult
         v-if="(message.mediaUrl && message.mediaType) || (message.mediaType === 'image_list' && message.imageList?.length)"
