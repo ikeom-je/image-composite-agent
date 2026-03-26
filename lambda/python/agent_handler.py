@@ -236,6 +236,18 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         import traceback
         logger.error(f"Chat error: {type(e).__name__}: {e} [Request ID: {request_id}]")
         logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # AccessDeniedException: モデルアクセスが未有効化
+        error_name = type(e).__name__
+        error_msg_str = str(e)
+        if 'AccessDenied' in error_name or 'AccessDenied' in error_msg_str:
+            model_name = ALLOWED_MODELS.get(model_id, {}).get('name', model_id)
+            return format_response(403, {
+                'error': f'モデル「{model_name}」へのアクセスが許可されていません。Bedrockコンソールでモデルアクセスを有効化してください。',
+                'requestId': request_id,
+                'modelId': model_id,
+            })
+
         return format_response(500, {
             'error': 'エージェントの処理中にエラーが発生しました。しばらくお待ちください。',
             'requestId': request_id,

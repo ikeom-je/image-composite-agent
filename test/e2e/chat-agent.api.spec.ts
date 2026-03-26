@@ -22,7 +22,9 @@
  * - H2: POST /chat + modelId（モデル指定送信）
  * - H3: 不正modelIdで400エラー
  * - H4: レスポンスにmodelId/modelName含む
- * - H5: 会話履歴にmodelId含む
+ * - H5: アクセス未許可モデルで403エラー
+ * - H6: 会話履歴にmodelId含む
+ * - I1: 合成後に位置変更で再合成されメディアURL更新
  */
 
 import { test, expect } from '@playwright/test'
@@ -334,7 +336,29 @@ test.describe('Chat Agent API テスト', () => {
       expect(body.response.modelName).toBeTruthy()
     })
 
-    test('H5: 会話履歴にmodelIdが含まれること', async () => {
+    test('H5: アクセス未許可モデルで403エラーと分かりやすいメッセージが返ること', async () => {
+      // Claude Haiku 4.5がBedrockコンソールで未有効化の場合
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: randomUUID(),
+          message: 'ヘルプ',
+          modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+
+      // 403（モデル未有効化）or 200（有効化済み）のどちらか
+      if (res.status() === 403) {
+        const body = await res.json()
+        expect(body.error).toContain('アクセスが許可されていません')
+        expect(body.modelId).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0')
+      } else {
+        // モデルが有効化済みなら200が返る
+        expect(res.status()).toBe(200)
+      }
+    })
+
+    test('H6: 会話履歴にmodelIdが含まれること', async () => {
       const testSession = randomUUID()
       await sendMessage(api, testSession, 'ヘルプ')
 
@@ -349,6 +373,32 @@ test.describe('Chat Agent API テスト', () => {
         expect(msg.modelId).toBeTruthy()
         expect(msg.modelName).toBeTruthy()
       }
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
+    })
+  })
+
+  // ===== I: 位置変更・再合成 =====
+
+  test.describe('I. 位置変更・再合成', () => {
+    test('I1: 合成後に位置変更を指示すると再合成されメディアURLが返ること', async () => {
+      const testSession = randomUUID()
+
+      // 初回合成
+      const body1 = await sendMessage(api, testSession, 'テスト画像を左上に配置して合成して')
+      expect(body1.response.content).toBeTruthy()
+      expect(body1.response.media).toBeTruthy()
+      expect(body1.response.media.url).toBeTruthy()
+      const firstUrl = body1.response.media.url
+
+      // 位置変更依頼
+      const body2 = await sendMessage(api, testSession, '画像1を右下に移動して')
+      expect(body2.response.content).toBeTruthy()
+      expect(body2.response.media).toBeTruthy()
+      expect(body2.response.media.url).toBeTruthy()
+      // 新しいURLが生成されていること
+      expect(body2.response.media.url).not.toBe(firstUrl)
 
       // クリーンアップ
       await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
