@@ -64,8 +64,6 @@ async function onSend(text: string) {
 
 async function onClear() {
   await clearHistory()
-  chatStore.newSession()
-  showWelcome()
 }
 
 onMounted(async () => {
