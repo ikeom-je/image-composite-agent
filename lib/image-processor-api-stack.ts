@@ -688,9 +688,13 @@ else:
     // Agent Lambda IAM権限
     chatHistoryTable.grantReadWriteData(agentFunction);
     // Bedrock InvokeModel 権限
-    // Bedrock Marketplace: モデルサブスクリプション確認に必要
+    // Bedrock Marketplace: モデル自動サブスクリプションに必要（初回呼び出し時に自動有効化）
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['aws-marketplace:ViewSubscriptions'],
+      actions: [
+        'aws-marketplace:ViewSubscriptions',
+        'aws-marketplace:Subscribe',
+        'aws-marketplace:Unsubscribe',
+      ],
       resources: ['*'],
     }));
     // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス（マルチモデル対応）
