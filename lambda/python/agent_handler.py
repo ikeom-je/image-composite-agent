@@ -2,6 +2,7 @@
 Strands Agent Lambda ハンドラー
 
 POST /chat                      - エージェントにメッセージ送信
+GET /chat/models                - 利用可能モデル一覧取得
 GET /chat/history/{sessionId}   - 会話履歴取得
 DELETE /chat/history/{sessionId} - 会話履歴削除
 """
@@ -75,7 +76,12 @@ ALLOWED_MODELS = {
     },
 }
 
-DEFAULT_MODEL_ID = os.environ.get('AGENT_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
+_FALLBACK_MODEL_ID = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+_env_model_id = os.environ.get('AGENT_MODEL_ID', _FALLBACK_MODEL_ID)
+if _env_model_id not in ALLOWED_MODELS:
+    logger.warning(f"AGENT_MODEL_ID '{_env_model_id}' not in ALLOWED_MODELS, falling back to {_FALLBACK_MODEL_ID}")
+    _env_model_id = _FALLBACK_MODEL_ID
+DEFAULT_MODEL_ID = _env_model_id
 
 
 
@@ -136,7 +142,7 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         # モデルIDバリデーション（許可リスト方式）
         if model_id not in ALLOWED_MODELS:
             return format_response(400, {
-                'error': f'Invalid modelId. Allowed models: {", ".join(ALLOWED_MODELS.keys())}',
+                'error': 'Invalid modelId. Use GET /chat/models to see available models.',
                 'requestId': request_id,
             })
 
