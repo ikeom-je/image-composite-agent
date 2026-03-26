@@ -46,6 +46,7 @@ class ChatHistoryManager:
         content: str,
         media_url: Optional[str] = None,
         media_type: Optional[str] = None,
+        model_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """メッセージを保存する"""
         timestamp_ms = int(time.time() * 1000)
@@ -63,6 +64,8 @@ class ChatHistoryManager:
             item['media_url'] = media_url
         if media_type:
             item['media_type'] = media_type
+        if model_id:
+            item['model_id'] = model_id
 
         try:
             self.table.put_item(Item=item)
