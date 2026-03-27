@@ -134,14 +134,17 @@ test.describe('Chat Agent E2Eテスト', () => {
       // メッセージ送信
       await sendAndWait(page, '履歴復元テスト用メッセージ')
 
+      // DynamoDB書き込みの伝播を待機
+      await page.waitForTimeout(2000)
+
       // リロード
       await page.reload()
       await page.waitForLoadState('networkidle')
 
-      // 過去のユーザーメッセージが復元されていること
+      // 過去のユーザーメッセージが復元されていること（履歴API完了待ち含む）
       await expect(
         page.locator('.justify-end').getByText('履歴復元テスト用メッセージ', { exact: true })
-      ).toBeVisible({ timeout: 15000 })
+      ).toBeVisible({ timeout: 30000 })
     })
   })
 
