@@ -64,10 +64,10 @@ ALLOWED_MODELS = {
         'provider': 'Anthropic',
         'description': '高速・低コスト',
     },
-    'us.amazon.nova-lite-v1:0': {
-        'name': 'Nova Lite',
+    'us.amazon.nova-2-lite-v1:0': {
+        'name': 'Nova 2 Lite',
         'provider': 'Amazon',
-        'description': 'AWS製・低コスト',
+        'description': 'AWS製・低コスト・マルチモーダル',
     },
     'us.amazon.nova-micro-v1:0': {
         'name': 'Nova Micro',
