@@ -29,6 +29,10 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# メディアデータの一時保存（Agentのコンテキストウィンドウ超過を防ぐため）
+# compose_images/generate_videoの結果をここに保存し、agent_handlerで取得する
+_last_media_result = None
+
 
 def _get_s3_client():
     """S3クライアントを取得"""
@@ -65,7 +69,7 @@ def compose_images(
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
     Args:
-        image1: 画像1のソース。"test"でテスト画像、S3キー、HTTP URLを指定可能。必須。
+        image1: 画像1のソース。"test"でテスト画像、アップロード済み画像のファイル名（例: "338b77e1-xxx.jpeg"）、HTTP URLを指定可能。必須。アップロード済み画像を使う場合はlist_uploaded_imagesで取得したfilenameをそのまま指定してください。
         image1_position: 画像1の配置位置。"左上","中央","右下"等の名前、または"x,y"座標。
         image1_size: 画像1のサイズ。"幅x高さ"形式（例: "400x400"）。
         image2: 画像2のソース。空文字で省略。
@@ -116,10 +120,36 @@ def compose_images(
     # 合成実行
     composite = create_composite_image(base_img, img1, img2, img3, params)
 
-    # Base64エンコード
+    # S3に保存してCloudFront URLを生成
+    from datetime import datetime
     buffer = io.BytesIO()
     composite.save(buffer, format='PNG', optimize=True)
-    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    png_data = buffer.getvalue()
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"composite-agent-{timestamp}.png"
+    s3_key = f"generated-images/{filename}"
+
+    s3_client = _get_s3_client()
+    resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', '')
+
+    s3_client.put_object(
+        Bucket=resources_bucket,
+        Key=s3_key,
+        Body=png_data,
+        ContentType='image/png',
+        CacheControl='public, max-age=3600',
+    )
+
+    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
+    if cloudfront_domain:
+        image_url = f"https://{cloudfront_domain}/{s3_key}"
+    else:
+        image_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': resources_bucket, 'Key': s3_key},
+            ExpiresIn=3600,
+        )
 
     # 使用パラメータのサマリ
     image_count = 1 + (1 if image2 else 0) + (1 if image3 else 0)
@@ -135,12 +165,20 @@ def compose_images(
             f"画像3: source={image3}, 位置=({params['image3']['x']}, {params['image3']['y']}), サイズ={params['image3']['width']}x{params['image3']['height']}"
         )
 
+    # URLはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
+    global _last_media_result
+    _last_media_result = {
+        'type': 'image',
+        'url': image_url,
+    }
+
     return {
         'success': True,
-        'image_base64': img_base64,
+        'image_generated': True,
         'image_count': image_count,
         'canvas_size': '1920x1080',
         'base_image': base_image,
+        'filename': filename,
         'parameters_summary': '\n'.join(summary_lines),
     }
 
@@ -176,11 +214,6 @@ def generate_video(
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。
     """
-    from image_fetcher import fetch_image
-    from image_compositor import create_composite_image
-    from video_generator import generate_video_from_image, get_video_mime_type, get_video_extension
-    from datetime import datetime
-
     logger.info(f"generate_video: duration={duration}, format={video_format}")
 
     # バリデーション
@@ -190,82 +223,95 @@ def generate_video(
         video_format = 'MP4'
     video_format = video_format.upper()
 
-    # 画像合成（compose_imagesと同じロジック）
+    # 位置・サイズを解決
     pos1 = _resolve_position(image1_position)
     sz1 = _resolve_size(image1_size)
-    params = {
-        'image1': {'x': pos1[0], 'y': pos1[1], 'width': sz1[0], 'height': sz1[1]},
-        'image2': {'x': 0, 'y': 0, 'width': 400, 'height': 400},
-        'image3': {'x': 0, 'y': 0, 'width': 400, 'height': 400},
+
+    # ImageProcessor Lambdaにパラメータを組み立て
+    invoke_params = {
+        'image1': image1,
+        'image1_x': str(pos1[0]),
+        'image1_y': str(pos1[1]),
+        'image1_width': str(sz1[0]),
+        'image1_height': str(sz1[1]),
+        'base_image': base_image,
+        'format': 'png',
+        'generate_video': 'true',
+        'video_duration': str(duration),
+        'video_format': video_format,
     }
 
-    img1 = fetch_image(image1, 'image1')
-    img2 = None
     if image2:
         pos2 = _resolve_position(image2_position)
         sz2 = _resolve_size(image2_size)
-        params['image2'] = {'x': pos2[0], 'y': pos2[1], 'width': sz2[0], 'height': sz2[1]}
-        img2 = fetch_image(image2, 'image2')
-    img3 = None
+        invoke_params.update({
+            'image2': image2,
+            'image2_x': str(pos2[0]),
+            'image2_y': str(pos2[1]),
+            'image2_width': str(sz2[0]),
+            'image2_height': str(sz2[1]),
+        })
+
     if image3:
         pos3 = _resolve_position(image3_position)
         sz3 = _resolve_size(image3_size)
-        params['image3'] = {'x': pos3[0], 'y': pos3[1], 'width': sz3[0], 'height': sz3[1]}
-        img3 = fetch_image(image3, 'image3')
+        invoke_params.update({
+            'image3': image3,
+            'image3_x': str(pos3[0]),
+            'image3_y': str(pos3[1]),
+            'image3_width': str(sz3[0]),
+            'image3_height': str(sz3[1]),
+        })
 
-    base_img = None
-    if base_image and base_image != 'transparent':
-        base_img = fetch_image(base_image, 'base')
+    # ImageProcessor Lambda を呼び出し（ffmpegはそちらに搭載）
+    function_name = os.environ.get('IMAGE_PROCESSOR_FUNCTION', '')
+    if not function_name:
+        return {'success': False, 'error': '動画生成サービスが設定されていません'}
 
-    composite = create_composite_image(base_img, img1, img2, img3, params)
+    lambda_client = boto3.client('lambda')
+    lambda_payload = {
+        'httpMethod': 'GET',
+        'path': '/images/composite',
+        'queryStringParameters': invoke_params,
+    }
 
-    # 動画生成
-    video_data = generate_video_from_image(
-        composite, duration=duration, format_name=video_format
+    response = lambda_client.invoke(
+        FunctionName=function_name,
+        InvocationType='RequestResponse',
+        Payload=json.dumps(lambda_payload),
     )
 
-    # S3にアップロード
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    video_ext = get_video_extension(video_format)
-    filename = f"composite-video-agent-{timestamp}.{video_ext}"
-    s3_key = f"generated-videos/{filename}"
+    result_payload = json.loads(response['Payload'].read())
+    status_code = result_payload.get('statusCode', 0)
+    result_body = json.loads(result_payload.get('body', '{}'))
 
-    s3_client = _get_s3_client()
-    resources_bucket = os.environ.get('S3_RESOURCES_BUCKET', '')
+    if status_code != 200:
+        error_msg = result_body.get('error', '動画生成に失敗しました')
+        return {'success': False, 'error': error_msg}
 
-    s3_client.put_object(
-        Bucket=resources_bucket,
-        Key=s3_key,
-        Body=video_data,
-        ContentType=get_video_mime_type(video_format),
-        ContentDisposition=f'attachment; filename="{filename}"',
-        CacheControl='public, max-age=3600',
-    )
+    video_url = result_body.get('url', '')
+    if not video_url:
+        return {'success': False, 'error': '動画URLが返却されませんでした'}
 
-    # CloudFront URLを生成
-    cloudfront_domain = os.environ.get('CLOUDFRONT_DOMAIN', '')
-    if cloudfront_domain:
-        video_url = f"https://{cloudfront_domain}/{s3_key}"
-    else:
-        video_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': resources_bucket, 'Key': s3_key},
-            ExpiresIn=3600,
-        )
+    # video_urlはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
+    global _last_media_result
+    _last_media_result = {
+        'type': 'video',
+        'url': video_url,
+    }
 
     return {
         'success': True,
-        'video_url': video_url,
-        'filename': filename,
+        'video_generated': True,
+        'filename': result_body.get('filename', ''),
         'format': video_format,
         'duration': duration,
-        'size_bytes': len(video_data),
     }
 
 
 @tool
 def list_uploaded_images() -> dict:
-    """アップロード済み画像の一覧を取得します。S3にアップロードされた画像のファイル名・サイズ・日時を返します。"""
+    """アップロード済み画像の一覧を取得します。ファイル名・サイズ・日時を返します。サムネイルURLは応答テキストに含めないでください。"""
     s3_client = _get_s3_client()
     upload_bucket = os.environ.get('S3_UPLOAD_BUCKET', os.environ.get('UPLOAD_BUCKET', ''))
 
@@ -293,10 +339,19 @@ def list_uploaded_images() -> dict:
                     'last_modified': obj['LastModified'].isoformat(),
                 })
 
-        return {
-            'success': True,
+        # 画像一覧データはグローバル変数に保存（agent_handlerで署名付きURL付与）
+        global _last_media_result
+        _last_media_result = {
+            'type': 'image_list',
             'images': images,
             'count': len(images),
+        }
+
+        return {
+            'success': True,
+            'count': len(images),
+            'type': 'image_list',
+            'images': [{'filename': img['filename'], 'size_display': img['size_display'], 'last_modified': img['last_modified']} for img in images],
         }
     except Exception as e:
         logger.error(f"Failed to list images: {e}")

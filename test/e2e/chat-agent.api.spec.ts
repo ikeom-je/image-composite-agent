@@ -80,10 +80,62 @@ test.describe('Chat Agent API テスト', () => {
       expect(body.response).toHaveProperty('content')
       expect(body.response.content).toBeTruthy()
 
-      // 画像メディアが返される場合
+      // 画像メディアが返される場合（S3保存+CloudFront URL）
       if (body.response.media) {
         expect(body.response.media.type).toBe('image')
-        expect(body.response.media.data).toBeTruthy()
+        expect(body.response.media.url).toBeTruthy()
+        expect(body.response.media.url).toMatch(/^https:\/\//)
+      }
+    })
+
+    test('動画生成の指示でCloudFront URLを返すこと', async () => {
+      const response = await apiContext.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: testSessionId,
+          message: 'テスト画像でMP4の3秒動画を作って',
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+
+      expect(response.status()).toBe(200)
+
+      const body = await response.json()
+      expect(body.response).toHaveProperty('content')
+      expect(body.response.content).toBeTruthy()
+
+      // 動画メディアが返される場合
+      if (body.response.media) {
+        expect(body.response.media.type).toBe('video')
+        expect(body.response.media.url).toBeTruthy()
+        expect(body.response.media.url).toMatch(/^https:\/\/.*\.(mp4|mxf|webm|avi)$/)
+      }
+    })
+
+    test('アップロード画像一覧でサムネイル付きリストを返すこと', async () => {
+      const response = await apiContext.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: testSessionId,
+          message: 'アップロードした画像を見せて',
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+
+      expect(response.status()).toBe(200)
+
+      const body = await response.json()
+      expect(body.response).toHaveProperty('content')
+
+      // 画像一覧メディアが返される場合
+      if (body.response.media && body.response.media.type === 'image_list') {
+        expect(body.response.media.images).toBeTruthy()
+        expect(Array.isArray(body.response.media.images)).toBe(true)
+        if (body.response.media.images.length > 0) {
+          const img = body.response.media.images[0]
+          expect(img).toHaveProperty('filename')
+          expect(img).toHaveProperty('size_display')
+          expect(img).toHaveProperty('thumbnail_url')
+          expect(img.thumbnail_url).toMatch(/^https:\/\//)
+        }
       }
     })
 

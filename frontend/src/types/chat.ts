@@ -1,10 +1,18 @@
+export interface AssetImage {
+  key: string
+  filename: string
+  size_display: string
+  thumbnail_url?: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
   mediaUrl?: string
-  mediaType?: 'image' | 'video'
+  mediaType?: 'image' | 'video' | 'image_list'
+  imageList?: AssetImage[]
   isLoading?: boolean
 }
 
