@@ -25,7 +25,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # バージョン情報
-VERSION = os.environ.get('VERSION', '2.5.4')
+VERSION = os.environ.get('VERSION', '3.1.1')
 
 # S3クライアント
 s3_client = boto3.client('s3')

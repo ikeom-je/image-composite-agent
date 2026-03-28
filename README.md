@@ -5,7 +5,8 @@
 ## ✨ 主な特徴
 
 - **🎨 3画像同時合成**: 最大3つの画像を同時に合成（後方互換性完全保持）
-- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock Claude Sonnet 4.5）
+- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応）
+- **🔄 マルチモデル対応**: Claude Sonnet 4.5、Haiku等の利用可能モデルを動的に切り替え
 - **📁 画像アップロード機能**: ドラッグ&ドロップによる直接S3アップロード
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
 - **⚡ 並列処理**: 最大3画像の同時取得による高速化
@@ -399,7 +400,7 @@ curl "${API_URL}?baseImage=s3://${UPLOAD_BUCKET}/uploads/images/base.png&image1=
 - **Pillow**: 高性能画像処理
 - **boto3**: AWS SDK
 - **Strands Agents SDK**: AIエージェントフレームワーク
-- **AWS Bedrock**: Claude Sonnet 4.5 LLM推論
+- **AWS Bedrock**: LLM推論（Claude Sonnet 4.5、Haiku等マルチモデル対応）
 
 ### 出力仕様
 

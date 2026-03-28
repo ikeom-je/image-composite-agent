@@ -50,7 +50,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-VERSION = os.environ.get('VERSION', '2.9.0')
+VERSION = os.environ.get('VERSION', '3.1.1')
 
 # 許可モデル一覧（許可リスト方式でインジェクション防止）
 ALLOWED_MODELS = {

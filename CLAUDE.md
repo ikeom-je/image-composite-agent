@@ -47,7 +47,8 @@
 │       ├── pages/                # ページコンポーネント
 │       │   ├── PortalPage.vue        # ポータル
 │       │   ├── ApiPage.vue           # API Demo
-│       │   └── ChatPage.vue          # Chat Agent
+│       │   ├── ChatPage.vue          # Chat Agent
+│       │   └── SettingsPage.vue      # Agent設定（モデル選択）
 │       ├── components/           # Vueコンポーネント
 │       │   ├── ImageConfigTable.vue  # パラメータ設定テーブル
 │       │   ├── ImageSelector.vue     # 画像選択
@@ -72,7 +73,7 @@
 ## 技術スタック
 
 - **バックエンド**: AWS CDK (TypeScript), Lambda (Python 3.12), Pillow, boto3
-- **チャットエージェント**: Strands Agents SDK, AWS Bedrock (Claude Sonnet 4.5), DynamoDB
+- **チャットエージェント**: Strands Agents SDK, AWS Bedrock (Claude Sonnet 4.5等マルチモデル対応), DynamoDB
 - **フロントエンド**: Vue.js 3, Vite 5, Pinia 3, Tailwind CSS 4.1, Axios
 - **テスト**: Playwright (E2E/API統合), Python unittest
 - **インフラ**: API Gateway, S3, CloudFront, CloudWatch, DynamoDB, Bedrock
@@ -99,7 +100,7 @@
 - **画像処理**: Pillow (PIL)、RGBAモード、LANCZOS補間
 - **並列処理**: ThreadPoolExecutor による画像取得
 - **レスポンス形式**: HTML（デフォルト）またはPNG
-- **Agent**: Strands Agents SDK + BedrockModel、環境変数`AGENT_MODEL_ID`でモデル指定
+- **Agent**: Strands Agents SDK + BedrockModel、環境変数`AGENT_MODEL_ID`でデフォルトモデル指定、リクエスト時にモデル切り替え可能（マルチモデル対応）
 
 ### テスト
 

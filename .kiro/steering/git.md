@@ -24,7 +24,7 @@ inclusion: auto
 
 ### ホットフィックスブランチ
 - 形式: `hotfix/バージョン-説明`
-- 例: `hotfix/2.6.1-lambda-timeout`
+- 例: `hotfix/3.1.2-lambda-timeout`
 - 分岐元: `main`
 - マージ先: `main` と `develop` の両方
 
@@ -215,15 +215,15 @@ Thumbs.db
 
 ### タグ形式
 - セマンティックバージョニング: `v{MAJOR}.{MINOR}.{PATCH}`
-- 例: `v2.7.0`
+- 例: `v3.1.1`
 
 ### タグ作成
 ```bash
 # アノテーション付きタグ
-git tag -a v2.7.0 -m "Release v2.7.0: 動画生成機能追加"
+git tag -a v3.1.1 -m "Release v3.1.1: マルチモデル対応"
 
 # タグをプッシュ
-git push origin v2.7.0
+git push origin v3.1.1
 
 # すべてのタグをプッシュ
 git push origin --tags

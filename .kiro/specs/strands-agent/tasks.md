@@ -55,7 +55,7 @@ _要件: 8.1-8.6_
 
 - [x] 6.1 DynamoDB ChatHistoryテーブル定義
 - [x] 6.2 Secrets Manager参照設定
-- [x] 6.3 Agent Lambda関数定義（Python 3.11, 512MB, 90s, ARM64）
+- [x] 6.3 Agent Lambda関数定義（Python 3.12, 2048MB, 90s, ARM64）
 - [x] 6.4 Lambda Layer定義（Agent依存パッケージ）
 - [x] 6.5 API Gateway `/chat` リソース追加（POST/GET/DELETE）
 - [x] 6.6 IAMポリシー設定（最小権限）

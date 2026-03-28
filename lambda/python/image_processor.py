@@ -1,5 +1,5 @@
 """
-画像合成REST API メインハンドラー - v2.6.0
+画像合成REST API メインハンドラー - v3.1.1
 
 2つまたは3つの画像を合成してPNG形式で出力するLambda関数。
 HTML表示とPNG直接ダウンロードの両方に対応。
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # バージョン情報
-VERSION = os.environ.get('VERSION', '2.6.0')
+VERSION = os.environ.get('VERSION', '3.1.1')
 
 
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:

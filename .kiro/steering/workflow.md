@@ -207,8 +207,8 @@ npm run deploy
 3. リリースブランチを作成
 4. 最終テスト
 5. mainにマージ
-6. リリースにタグ付け: `git tag -a v2.7.0 -m "Release v2.7.0"`
-7. タグをプッシュ: `git push origin v2.7.0`
+6. リリースにタグ付け: `git tag -a v3.2.0 -m "Release v3.2.0"`
+7. タグをプッシュ: `git push origin v3.2.0`
 8. 本番環境にデプロイ
 9. リリースノート付きでGitHubリリースを作成
 
