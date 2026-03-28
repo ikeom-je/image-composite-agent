@@ -16,6 +16,10 @@
  * - G2: ローディング表示
  * - G3: タブ遷移
  * - G4: 直接URLアクセス
+ * - H1: 設定ページ表示
+ * - H2: モデル選択永続化
+ * - H3: チャットヘッダーにモデル名表示
+ * - H4: アシスタント応答にモデル名バッジ表示
  */
 
 import { test, expect, Page } from '@playwright/test'
@@ -124,10 +128,23 @@ test.describe('Chat Agent E2Eテスト', () => {
     })
 
     test('E2: リロード後に会話履歴が復元される', async ({ page }) => {
-      await goToChat(page)
+      test.setTimeout(120000)
+
+      // 固定セッションIDをlocalStorageにセットして履歴管理を確実にする
+      const testSessionId = crypto.randomUUID()
+      await page.goto(`${FRONTEND_URL}/chat`)
+      await page.evaluate((sid) => localStorage.setItem('chat-session-id', sid), testSessionId)
+      await page.reload()
+      await expect(
+        page.getByText('こんにちは！画像合成アシスタントです')
+      ).toBeVisible({ timeout: 15000 })
 
       // メッセージ送信
       await sendAndWait(page, '履歴復元テスト用メッセージ')
+
+      // セッションIDが変わっていないことを確認
+      const sidAfterSend = await page.evaluate(() => localStorage.getItem('chat-session-id'))
+      expect(sidAfterSend).toBe(testSessionId)
 
       // リロード
       await page.reload()
@@ -136,7 +153,7 @@ test.describe('Chat Agent E2Eテスト', () => {
       // 過去のユーザーメッセージが復元されていること
       await expect(
         page.locator('.justify-end').getByText('履歴復元テスト用メッセージ', { exact: true })
-      ).toBeVisible({ timeout: 15000 })
+      ).toBeVisible({ timeout: 30000 })
     })
   })
 
@@ -251,6 +268,74 @@ test.describe('Chat Agent E2Eテスト', () => {
 
       // 応答テキストがある（画像がある場合はグリッド、ない場合はメッセージ）
       expect(response.length).toBeGreaterThan(0)
+    })
+  })
+
+  // ===== H: マルチモデルUI =====
+
+  test.describe('H. マルチモデルUI', () => {
+    test('H1: /chat/settings で設定ページが表示されモデル一覧がある', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.getByText('Agent 設定')).toBeVisible({ timeout: 10000 })
+      await expect(page.getByText('使用モデル')).toBeVisible()
+
+      // モデルのラジオボタンが表示される
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+      const radios = page.locator('input[type="radio"][name="model"]')
+      const count = await radios.count()
+      expect(count).toBeGreaterThanOrEqual(4)
+    })
+
+    test('H2: モデル選択がリロード後も保持される', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+
+      // 2番目のモデルを選択
+      const secondRadio = page.locator('input[type="radio"][name="model"]').nth(1)
+      await secondRadio.click()
+      await expect(secondRadio).toBeChecked()
+
+      // 選択されたモデルのIDを取得
+      const selectedValue = await secondRadio.getAttribute('value')
+
+      // リロード
+      await page.reload()
+      await expect(page.locator('input[type="radio"][name="model"]').first()).toBeVisible({ timeout: 15000 })
+
+      // 同じモデルが選択状態であること
+      const radioAfterReload = page.locator(`input[type="radio"][name="model"][value="${selectedValue}"]`)
+      await expect(radioAfterReload).toBeChecked()
+    })
+
+    test('H3: チャットページヘッダーにモデル選択ドロップダウンがある', async ({ page }) => {
+      await goToChat(page)
+      const select = page.locator('select')
+      await expect(select).toBeVisible({ timeout: 15000 })
+      // 4つ以上のoption（モデル）がある
+      const options = select.locator('option')
+      const count = await options.count()
+      expect(count).toBeGreaterThanOrEqual(4)
+    })
+
+    test('H4: アシスタント応答にモデル名バッジが表示される', async ({ page }) => {
+      await goToChat(page)
+      await sendAndWait(page, 'ヘルプ')
+
+      // アシスタントバブル内にモデル名バッジがある
+      const lastAssistant = page.locator('.justify-start').last()
+      const modelBadge = lastAssistant.locator('span').filter({ hasText: /(Claude|Nova)/ })
+      await expect(modelBadge.first()).toBeVisible({ timeout: 5000 })
+    })
+
+    test('H1: 設定ページの戻りリンクでチャットに遷移できる', async ({ page }) => {
+      await page.goto(`${FRONTEND_URL}/chat/settings`)
+      await expect(page.getByText('Agent 設定')).toBeVisible({ timeout: 10000 })
+
+      // 戻り矢印リンクをクリック
+      const backLink = page.locator('a[href="/chat"]').first()
+      await expect(backLink).toBeVisible()
+      await backLink.click()
+      await expect(page).toHaveURL(/\/chat$/)
     })
   })
 

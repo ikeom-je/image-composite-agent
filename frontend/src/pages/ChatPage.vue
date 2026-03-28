@@ -6,13 +6,30 @@
         <h1 class="text-lg font-semibold text-gray-800">Chat Agent - 画像合成アシスタント</h1>
         <p class="text-xs text-gray-500">コマンドで画像合成・動画生成を実行できます</p>
       </div>
-      <button
-        @click="onClear"
-        :disabled="isBusy || chatStore.messages.length === 0"
-        class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-      >
-        履歴クリア
-      </button>
+      <div class="flex items-center gap-2">
+        <select
+          v-if="chatStore.availableModels.length > 0"
+          :value="chatStore.effectiveModelId"
+          @change="chatStore.selectModel(($event.target as HTMLSelectElement).value)"
+          :disabled="isBusy"
+          class="text-xs px-2 py-1.5 rounded border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 cursor-pointer"
+        >
+          <option
+            v-for="model in chatStore.availableModels"
+            :key="model.id"
+            :value="model.id"
+          >
+            {{ model.name }}
+          </option>
+        </select>
+        <button
+          @click="onClear"
+          :disabled="isBusy || chatStore.messages.length === 0"
+          class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          履歴クリア
+        </button>
+      </div>
     </div>
 
     <!-- メッセージ一覧 -->
@@ -33,7 +50,7 @@ import ChatInput from '@/components/chat/ChatInput.vue'
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()
-const { showWelcome, handleUserInput, loadHistory, clearHistory } = useChatAgent()
+const { showWelcome, handleUserInput, loadHistory, clearHistory, loadModels } = useChatAgent()
 
 const isBusy = ref(false)
 
@@ -48,16 +65,14 @@ async function onSend(text: string) {
 
 async function onClear() {
   await clearHistory()
-  chatStore.newSession()
-  showWelcome()
 }
 
 onMounted(async () => {
   if (!configStore.isLoaded) {
     await configStore.loadConfig()
   }
-  // サーバーから会話履歴を復元（media情報含む）
-  await loadHistory()
+  // モデル一覧取得と会話履歴復元を並列実行
+  await Promise.all([loadModels(), loadHistory()])
   if (chatStore.messages.length === 0) {
     showWelcome()
   }
