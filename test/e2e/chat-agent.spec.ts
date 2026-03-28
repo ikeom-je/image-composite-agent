@@ -135,7 +135,7 @@ test.describe('Chat Agent E2Eテスト', () => {
       await sendAndWait(page, '履歴復元テスト用メッセージ')
 
       // DynamoDB書き込みの伝播を待機
-      await page.waitForTimeout(2000)
+      await page.waitForTimeout(3000)
 
       // リロード
       await page.reload()
@@ -298,11 +298,14 @@ test.describe('Chat Agent E2Eテスト', () => {
       await expect(radioAfterReload).toBeChecked()
     })
 
-    test('H3: チャットページヘッダーに設定リンクがある', async ({ page }) => {
+    test('H3: チャットページヘッダーにモデル選択ドロップダウンがある', async ({ page }) => {
       await goToChat(page)
-      const settingsLink = page.locator('a[href="/chat/settings"]')
-      await expect(settingsLink).toBeVisible()
-      await expect(settingsLink).toHaveText('設定')
+      const select = page.locator('select')
+      await expect(select).toBeVisible({ timeout: 15000 })
+      // 4つ以上のoption（モデル）がある
+      const options = select.locator('option')
+      const count = await options.count()
+      expect(count).toBeGreaterThanOrEqual(4)
     })
 
     test('H4: アシスタント応答にモデル名バッジが表示される', async ({ page }) => {

@@ -7,15 +7,21 @@
         <p class="text-xs text-gray-500">コマンドで画像合成・動画生成を実行できます</p>
       </div>
       <div class="flex items-center gap-2">
-        <span v-if="chatStore.effectiveModelId" class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">
-          {{ currentModelName }}
-        </span>
-        <router-link
-          to="/chat/settings"
-          class="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200 transition-colors"
+        <select
+          v-if="chatStore.availableModels.length > 0"
+          :value="chatStore.effectiveModelId"
+          @change="chatStore.selectModel(($event.target as HTMLSelectElement).value)"
+          :disabled="isBusy"
+          class="text-xs px-2 py-1.5 rounded border border-gray-200 bg-gray-50 text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 cursor-pointer"
         >
-          設定
-        </router-link>
+          <option
+            v-for="model in chatStore.availableModels"
+            :key="model.id"
+            :value="model.id"
+          >
+            {{ model.name }}
+          </option>
+        </select>
         <button
           @click="onClear"
           :disabled="isBusy || chatStore.messages.length === 0"
@@ -35,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useChatAgent } from '@/composables/useChatAgent'
@@ -47,11 +53,6 @@ const configStore = useConfigStore()
 const { showWelcome, handleUserInput, loadHistory, clearHistory, loadModels } = useChatAgent()
 
 const isBusy = ref(false)
-
-const currentModelName = computed(() => {
-  const model = chatStore.availableModels.find(m => m.id === chatStore.effectiveModelId)
-  return model?.name || ''
-})
 
 async function onSend(text: string) {
   isBusy.value = true
