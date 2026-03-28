@@ -3,12 +3,17 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
 
-import crypto from 'node:crypto'
+import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// ビルドごとにユニークなハッシュを生成
-const buildHash = crypto.randomBytes(8).toString('hex')
+// gitコミットハッシュを取得（どのコミットがデプロイされたか特定するため）
+let buildHash = 'unknown'
+try {
+  buildHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+} catch {
+  // git未使用環境（CI等）のフォールバック
+}
 
 // ビルドハッシュをファイルに保存（CDKが読み込む）
 function writeBuildHashPlugin() {
