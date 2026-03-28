@@ -18,6 +18,14 @@
  * - F1: 空メッセージ
  * - F2: 長文メッセージ
  * - F3: 不正JSON
+ * - H1: GET /chat/models（モデル一覧取得）
+ * - H2: POST /chat + modelId（モデル指定送信）
+ * - H3: 不正modelIdで400エラー
+ * - H4: レスポンスにmodelId/modelName含む
+ * - H5: アクセス未許可モデルで403エラー
+ * - H6: 会話履歴にmodelId含む
+ * - I1: 合成後に位置変更で再合成されメディアURL更新
+ * - I2: 4連続操作（画像→動画→動画→画像）で全てメディアURL返却
  */
 
 import { test, expect } from '@playwright/test'
@@ -274,6 +282,166 @@ test.describe('Chat Agent API テスト', () => {
       const body = await sendMessage(api, '', 'ヘルプ')
       // sessionIdが空の場合、サーバー側で自動生成
       expect(body.sessionId).toBeTruthy()
+    })
+  })
+
+  // ===== H: マルチモデル =====
+
+  test.describe('H. マルチモデル', () => {
+    test('H1: GET /chat/models でモデル一覧が取得できること', async () => {
+      const res = await api.get(`${TEST_CONFIG.chatApiUrl}/models`)
+      expect(res.status()).toBe(200)
+
+      const body = await res.json()
+      expect(Array.isArray(body.models)).toBe(true)
+      expect(body.models.length).toBeGreaterThanOrEqual(4)
+      expect(body.default).toBeTruthy()
+
+      for (const model of body.models) {
+        expect(model).toHaveProperty('id')
+        expect(model).toHaveProperty('name')
+        expect(model).toHaveProperty('provider')
+        expect(model).toHaveProperty('description')
+      }
+    })
+
+    test('H2: modelId指定でAgent応答が返ること', async () => {
+      const modelsRes = await api.get(`${TEST_CONFIG.chatApiUrl}/models`)
+      const { models } = await modelsRes.json()
+      const targetModel = models[0]
+
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: { sessionId: randomUUID(), message: 'ヘルプ', modelId: targetModel.id },
+        timeout: TEST_CONFIG.timeout,
+      })
+      expect(res.status()).toBe(200)
+
+      const body = await res.json()
+      expect(body.response.content).toBeTruthy()
+      expect(body.response.modelId).toBe(targetModel.id)
+      expect(body.response.modelName).toBe(targetModel.name)
+    })
+
+    test('H3: 不正なmodelIdで400エラーが返ること', async () => {
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: { sessionId: randomUUID(), message: 'テスト', modelId: 'invalid-model-id' },
+      })
+      expect(res.status()).toBe(400)
+      const body = await res.json()
+      expect(body).toHaveProperty('error')
+    })
+
+    test('H4: modelId省略時にデフォルトモデルが使用されること', async () => {
+      const body = await sendMessage(api, randomUUID(), 'ヘルプ')
+      expect(body.response.modelId).toBeTruthy()
+      expect(body.response.modelName).toBeTruthy()
+    })
+
+    test('H5: アクセス未許可モデルで403エラーと分かりやすいメッセージが返ること', async () => {
+      // Claude Haiku 4.5がBedrockコンソールで未有効化の場合
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: randomUUID(),
+          message: 'ヘルプ',
+          modelId: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+
+      // 403（モデル未有効化）or 200（有効化済み）のどちらか
+      if (res.status() === 403) {
+        const body = await res.json()
+        expect(body.error).toContain('アクセスが許可されていません')
+        expect(body.modelId).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0')
+      } else {
+        // モデルが有効化済みなら200が返る
+        expect(res.status()).toBe(200)
+      }
+    })
+
+    test('H6: 会話履歴にmodelIdが含まれること', async () => {
+      const testSession = randomUUID()
+      await sendMessage(api, testSession, 'ヘルプ')
+
+      const histRes = await api.get(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`)
+      const histBody = await histRes.json()
+      expect(histBody.messages.length).toBeGreaterThan(0)
+
+      // アシスタントメッセージにmodelIdが含まれる
+      const assistantMsgs = histBody.messages.filter((m: any) => m.role === 'assistant')
+      expect(assistantMsgs.length).toBeGreaterThan(0)
+      for (const msg of assistantMsgs) {
+        expect(msg.modelId).toBeTruthy()
+        expect(msg.modelName).toBeTruthy()
+      }
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
+    })
+  })
+
+  // ===== I: 連続操作・再合成 =====
+
+  test.describe('I. 連続操作・再合成', () => {
+    test('I2: Nova 2 Liteで4連続操作（画像→動画→動画→画像）で全てメディアURLが返ること', async () => {
+      test.setTimeout(300000) // 4回のAgent呼び出し + リトライの可能性
+      const testSession = randomUUID()
+      const novaModelId = 'us.amazon.nova-2-lite-v1:0'
+
+      // modelId指定のsendMessage
+      const sendWithModel = async (msg: string) => {
+        const res = await api.post(TEST_CONFIG.chatApiUrl, {
+          data: { sessionId: testSession, message: msg, modelId: novaModelId },
+          timeout: TEST_CONFIG.timeout,
+        })
+        expect(res.status()).toBe(200)
+        return await res.json()
+      }
+
+      // 1. 画像合成
+      const body1 = await sendWithModel('テスト画像を左下に配置して合成して')
+      expect(body1.response.media).toBeTruthy()
+      expect(body1.response.media.type).toBe('image')
+
+      // 2. 動画生成
+      const body2 = await sendWithModel('テスト画像を左下に配置した動画を作って')
+      expect(body2.response.media).toBeTruthy()
+      expect(body2.response.media.type).toBe('video')
+
+      // 3. 動画生成（ここでハルシネーションが起きやすい）
+      const body3 = await sendWithModel('テスト画像を右下に配置した動画3秒を作って')
+      expect(body3.response.media).toBeTruthy()
+      expect(body3.response.media.type).toBe('video')
+
+      // 4. 画像合成
+      const body4 = await sendWithModel('テスト画像を左下に配置した合成画像を作って')
+      expect(body4.response.media).toBeTruthy()
+      expect(body4.response.media.type).toBe('image')
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
+    })
+
+    test('I1: 合成後に位置変更を指示すると再合成されメディアURLが返ること', async () => {
+      const testSession = randomUUID()
+
+      // 初回合成
+      const body1 = await sendMessage(api, testSession, 'テスト画像を左上に配置して合成して')
+      expect(body1.response.content).toBeTruthy()
+      expect(body1.response.media).toBeTruthy()
+      expect(body1.response.media.url).toBeTruthy()
+      const firstUrl = body1.response.media.url
+
+      // 位置変更依頼
+      const body2 = await sendMessage(api, testSession, '画像1を右下に移動して')
+      expect(body2.response.content).toBeTruthy()
+      expect(body2.response.media).toBeTruthy()
+      expect(body2.response.media.url).toBeTruthy()
+      // 新しいURLが生成されていること
+      expect(body2.response.media.url).not.toBe(firstUrl)
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
     })
   })
 

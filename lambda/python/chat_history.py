@@ -76,13 +76,14 @@ class ChatHistoryManager:
             raise
 
     def get_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """会話履歴を取得する（古い順）"""
+        """会話履歴を取得する（古い順、強い整合性読み取り）"""
         try:
             response = self.table.query(
                 KeyConditionExpression='sessionId = :sid',
                 ExpressionAttributeValues={':sid': session_id},
                 ScanIndexForward=True,
                 Limit=limit,
+                ConsistentRead=True,
             )
             messages = response.get('Items', [])
             logger.info(f"Retrieved {len(messages)} messages for session={session_id}")

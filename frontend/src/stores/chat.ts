@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import type { ChatMessage, CompositeCommand } from '@/types/chat'
+import type { ChatMessage, CompositeCommand, ModelInfo } from '@/types/chat'
 
 const SESSION_STORAGE_KEY = 'chat-session-id'
+const MODEL_STORAGE_KEY = 'chat-selected-model'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
@@ -11,6 +12,11 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.getItem(SESSION_STORAGE_KEY) || crypto.randomUUID()
   )
   const isProcessing = ref(false)
+  const availableModels = ref<ModelInfo[]>([])
+  const defaultModelId = ref<string>('')
+  const selectedModelId = ref<string>(
+    localStorage.getItem(MODEL_STORAGE_KEY) || ''
+  )
 
   const messageCount = computed(() => messages.value.length)
 
@@ -18,6 +24,18 @@ export const useChatStore = defineStore('chat', () => {
   watch(sessionId, (newId) => {
     localStorage.setItem(SESSION_STORAGE_KEY, newId)
   }, { immediate: true })
+
+  // selectedModelIdをlocalStorageに永続化
+  watch(selectedModelId, (newId) => {
+    if (newId) {
+      localStorage.setItem(MODEL_STORAGE_KEY, newId)
+    } else {
+      localStorage.removeItem(MODEL_STORAGE_KEY)
+    }
+  })
+
+  // 実効モデルID（選択値 → デフォルト値）
+  const effectiveModelId = computed(() => selectedModelId.value || defaultModelId.value)
 
   function createDefaultCommand(): CompositeCommand {
     return {
@@ -75,17 +93,36 @@ export const useChatStore = defineStore('chat', () => {
     messages.value = []
   }
 
+  function setModels(models: ModelInfo[], defaultId: string) {
+    availableModels.value = models
+    defaultModelId.value = defaultId
+    // 保存済みの選択が有効なモデルか確認
+    if (selectedModelId.value && !models.find(m => m.id === selectedModelId.value)) {
+      selectedModelId.value = ''
+    }
+  }
+
+  function selectModel(modelId: string) {
+    selectedModelId.value = modelId
+  }
+
   return {
     messages,
     command,
     sessionId,
     isProcessing,
     messageCount,
+    availableModels,
+    defaultModelId,
+    selectedModelId,
+    effectiveModelId,
     addMessage,
     addLoadingMessage,
     replaceMessage,
     resetCommand,
     clearMessages,
     newSession,
+    setModels,
+    selectModel,
   }
 })

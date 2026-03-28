@@ -688,16 +688,20 @@ else:
     // Agent Lambda IAM権限
     chatHistoryTable.grantReadWriteData(agentFunction);
     // Bedrock InvokeModel 権限
-    // Bedrock Marketplace: モデルサブスクリプション確認に必要
+    // Bedrock Marketplace: モデル自動サブスクリプションに必要（初回呼び出し時に自動有効化）
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['aws-marketplace:ViewSubscriptions'],
+      actions: [
+        'aws-marketplace:ViewSubscriptions',
+        'aws-marketplace:Subscribe',
+        'aws-marketplace:Unsubscribe',
+      ],
       resources: ['*'],
     }));
     // Bedrock US Cross-Region Inference: 推論プロファイルへのアクセス（マルチモデル対応）
     const inferenceProfiles = [
       'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
       'us.anthropic.claude-haiku-4-5-20251001-v1:0',
-      'us.amazon.nova-lite-v1:0',
+      'us.amazon.nova-2-lite-v1:0',
       'us.amazon.nova-micro-v1:0',
     ];
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
@@ -710,7 +714,7 @@ else:
     const foundationModels = [
       'anthropic.claude-sonnet-4-5-20250929-v1:0',
       'anthropic.claude-haiku-4-5-20251001-v1:0',
-      'amazon.nova-lite-v1:0',
+      'amazon.nova-2-lite-v1:0',
       'amazon.nova-micro-v1:0',
     ];
     const bedrockRegions = ['us-east-1', 'us-east-2', 'us-west-2'];

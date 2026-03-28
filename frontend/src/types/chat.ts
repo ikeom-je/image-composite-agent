@@ -14,6 +14,15 @@ export interface ChatMessage {
   mediaType?: 'image' | 'video' | 'image_list'
   imageList?: AssetImage[]
   isLoading?: boolean
+  modelId?: string
+  modelName?: string
+}
+
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: string
+  description: string
 }
 
 export interface ImageConfig {
