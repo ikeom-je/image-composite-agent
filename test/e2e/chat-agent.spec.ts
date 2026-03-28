@@ -128,20 +128,29 @@ test.describe('Chat Agent E2Eテスト', () => {
     })
 
     test('E2: リロード後に会話履歴が復元される', async ({ page }) => {
-      test.setTimeout(120000) // Agent応答 + リロード + 復元で時間がかかる
-      await goToChat(page)
+      test.setTimeout(120000)
+
+      // 固定セッションIDをlocalStorageにセットして履歴管理を確実にする
+      const testSessionId = crypto.randomUUID()
+      await page.goto(`${FRONTEND_URL}/chat`)
+      await page.evaluate((sid) => localStorage.setItem('chat-session-id', sid), testSessionId)
+      await page.reload()
+      await expect(
+        page.getByText('こんにちは！画像合成アシスタントです')
+      ).toBeVisible({ timeout: 15000 })
 
       // メッセージ送信
       await sendAndWait(page, '履歴復元テスト用メッセージ')
 
-      // DynamoDB書き込みの伝播を待機
-      await page.waitForTimeout(3000)
+      // セッションIDが変わっていないことを確認
+      const sidAfterSend = await page.evaluate(() => localStorage.getItem('chat-session-id'))
+      expect(sidAfterSend).toBe(testSessionId)
 
       // リロード
       await page.reload()
       await page.waitForLoadState('networkidle')
 
-      // 過去のユーザーメッセージが復元されていること（履歴API完了待ち含む）
+      // 過去のユーザーメッセージが復元されていること
       await expect(
         page.locator('.justify-end').getByText('履歴復元テスト用メッセージ', { exact: true })
       ).toBeVisible({ timeout: 30000 })
