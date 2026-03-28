@@ -25,6 +25,7 @@
  * - H5: アクセス未許可モデルで403エラー
  * - H6: 会話履歴にmodelId含む
  * - I1: 合成後に位置変更で再合成されメディアURL更新
+ * - I2: 4連続操作（画像→動画→動画→画像）で全てメディアURL返却
  */
 
 import { test, expect } from '@playwright/test'
@@ -379,9 +380,48 @@ test.describe('Chat Agent API テスト', () => {
     })
   })
 
-  // ===== I: 位置変更・再合成 =====
+  // ===== I: 連続操作・再合成 =====
 
-  test.describe('I. 位置変更・再合成', () => {
+  test.describe('I. 連続操作・再合成', () => {
+    test('I2: Nova 2 Liteで4連続操作（画像→動画→動画→画像）で全てメディアURLが返ること', async () => {
+      test.setTimeout(300000) // 4回のAgent呼び出し + リトライの可能性
+      const testSession = randomUUID()
+      const novaModelId = 'us.amazon.nova-2-lite-v1:0'
+
+      // modelId指定のsendMessage
+      const sendWithModel = async (msg: string) => {
+        const res = await api.post(TEST_CONFIG.chatApiUrl, {
+          data: { sessionId: testSession, message: msg, modelId: novaModelId },
+          timeout: TEST_CONFIG.timeout,
+        })
+        expect(res.status()).toBe(200)
+        return await res.json()
+      }
+
+      // 1. 画像合成
+      const body1 = await sendWithModel('テスト画像を左下に配置して合成して')
+      expect(body1.response.media).toBeTruthy()
+      expect(body1.response.media.type).toBe('image')
+
+      // 2. 動画生成
+      const body2 = await sendWithModel('テスト画像を左下に配置した動画を作って')
+      expect(body2.response.media).toBeTruthy()
+      expect(body2.response.media.type).toBe('video')
+
+      // 3. 動画生成（ここでハルシネーションが起きやすい）
+      const body3 = await sendWithModel('テスト画像を右下に配置した動画3秒を作って')
+      expect(body3.response.media).toBeTruthy()
+      expect(body3.response.media.type).toBe('video')
+
+      // 4. 画像合成
+      const body4 = await sendWithModel('テスト画像を左下に配置した合成画像を作って')
+      expect(body4.response.media).toBeTruthy()
+      expect(body4.response.media.type).toBe('image')
+
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
+    })
+
     test('I1: 合成後に位置変更を指示すると再合成されメディアURLが返ること', async () => {
       const testSession = randomUUID()
 

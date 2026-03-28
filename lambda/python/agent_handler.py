@@ -85,6 +85,20 @@ DEFAULT_MODEL_ID = _env_model_id
 
 
 
+def _looks_like_tool_output(text: str) -> bool:
+    """レスポンステキストがツール出力を模倣しているかを検出する"""
+    import re
+    # composite-agent-*.png or composite-video-*.mp4 などのファイル名パターン
+    file_patterns = [
+        r'composite-agent-\d{8}_\d{6}\.png',
+        r'composite-video-.*\.(mp4|mxf|webm|avi)',
+    ]
+    for pattern in file_patterns:
+        if re.search(pattern, text):
+            return True
+    return False
+
+
 def format_response(status_code: int, body: Any, headers: Dict[str, str] = None) -> Dict:
     """API Gateway用レスポンス"""
     default_headers = {
@@ -197,6 +211,15 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         # レスポンスからテキストとメディアを抽出
         response_text = str(result)
         media_data = _extract_media_from_result(result, agent)
+
+        # ツールハルシネーション検出: テキストにファイル名があるのにmediaがない場合リトライ
+        if media_data is None and _looks_like_tool_output(response_text):
+            logger.warning(f"Tool hallucination detected, retrying with explicit instruction [Request ID: {request_id}]")
+            agent_tools._last_media_result = None
+            retry_msg = f"前回のリクエストでツールを実行せずにテキストだけで回答しました。必ずツール関数を実際に呼び出してください。元のリクエスト: {message}"
+            result = agent(retry_msg)
+            response_text = str(result)
+            media_data = _extract_media_from_result(result, agent)
 
         # アシスタントメッセージを保存（best-effort）
         if history_manager:
