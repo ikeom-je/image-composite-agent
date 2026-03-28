@@ -356,5 +356,80 @@ class TestTextParameters(unittest.TestCase):
         self.assertGreater(len(errors), 0)
 
 
+class TestCompositeWithText(unittest.TestCase):
+    def setUp(self):
+        self.test_image1 = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        self.default_params = parse_image_parameters({})
+
+    def test_composite_with_text(self):
+        """画像+テキストの合成"""
+        text_params = {'text1': {
+            'text': 'Hello World', 'x': 100, 'y': 100,
+            'font_size': 48, 'font_color': '#FFFFFF',
+            'font_family': 'NotoSansJP', 'bg_color': None,
+            'bg_opacity': 0.7, 'wrap': False, 'max_width': None, 'padding': 10,
+        }}
+        result = create_composite_image(
+            None, self.test_image1, None, None,
+            self.default_params, text_params=text_params
+        )
+        self.assertEqual(result.size, (2000, 1000))
+        self.assertEqual(result.mode, 'RGBA')
+
+    def test_composite_text_only(self):
+        """テキストのみ（画像なし相当）の合成 - image1は1x1透明"""
+        text_params = {'text1': {
+            'text': 'テキストのみ', 'x': 100, 'y': 100,
+            'font_size': 48, 'font_color': '#FFFFFF',
+            'font_family': 'NotoSansJP', 'bg_color': '#000000',
+            'bg_opacity': 0.7, 'wrap': False, 'max_width': None, 'padding': 10,
+        }}
+        result = create_composite_image(
+            None, self.test_image1, None, None,
+            self.default_params, text_params=text_params
+        )
+        self.assertIsNotNone(result)
+
+    def test_composite_with_multiple_texts(self):
+        """複数テキストの合成"""
+        text_params = {
+            'text1': {'text': 'First', 'x': 50, 'y': 50,
+                      'font_size': 48, 'font_color': '#FFFFFF',
+                      'font_family': 'NotoSansJP', 'bg_color': None,
+                      'bg_opacity': 0.7, 'wrap': False, 'max_width': None, 'padding': 10},
+            'text2': {'text': 'Second', 'x': 50, 'y': 200,
+                      'font_size': 36, 'font_color': '#FF0000',
+                      'font_family': 'NotoSansJP', 'bg_color': '#000000',
+                      'bg_opacity': 0.5, 'wrap': False, 'max_width': None, 'padding': 10},
+        }
+        result = create_composite_image(
+            None, self.test_image1, None, None,
+            self.default_params, text_params=text_params
+        )
+        self.assertIsNotNone(result)
+
+    def test_composite_without_text_params_backward_compatible(self):
+        """text_params省略時に既存動作が変わらない"""
+        result = create_composite_image(
+            None, self.test_image1, None, None,
+            self.default_params
+        )
+        self.assertIsNotNone(result)
+
+    def test_composite_with_japanese_text(self):
+        """日本語テキスト+画像の合成"""
+        text_params = {'text1': {
+            'text': 'こんにちは世界', 'x': 100, 'y': 500,
+            'font_size': 64, 'font_color': '#FFFF00',
+            'font_family': 'NotoSansJP', 'bg_color': '#333333',
+            'bg_opacity': 0.8, 'wrap': False, 'max_width': None, 'padding': 15,
+        }}
+        result = create_composite_image(
+            None, self.test_image1, None, None,
+            self.default_params, text_params=text_params
+        )
+        self.assertEqual(result.mode, 'RGBA')
+
+
 if __name__ == '__main__':
     unittest.main()

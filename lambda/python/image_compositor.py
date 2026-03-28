@@ -205,11 +205,12 @@ def paste_image_with_alpha(base: Image.Image, overlay: Image.Image, position: Tu
     return base
 
 
-def create_composite_image(base_img: Optional[Image.Image], 
-                          image1: Image.Image, 
+def create_composite_image(base_img: Optional[Image.Image],
+                          image1: Image.Image,
                           image2: Optional[Image.Image],
                           image3: Optional[Image.Image],
-                          params: Dict[str, Dict[str, int]]) -> Image.Image:
+                          params: Dict[str, Dict[str, int]],
+                          text_params: Optional[Dict[str, Dict[str, Any]]] = None) -> Image.Image:
     """
     1つ、2つ、または3つの画像を合成する（image1のみ必須）
     
@@ -219,7 +220,8 @@ def create_composite_image(base_img: Optional[Image.Image],
         image2: 合成する2つ目の画像（オプション）
         image3: 合成する3つ目の画像（オプション）
         params: 各画像の配置パラメータ
-        
+        text_params: テキスト描画パラメータ（オプション）
+
     Returns:
         Image.Image: 合成された画像
         
@@ -280,6 +282,32 @@ def create_composite_image(base_img: Optional[Image.Image],
                 (params['image3']['x'], params['image3']['y'])
             )
         
+        # 画像合成後にテキストを描画（Z-order: 画像→テキスト）
+        if text_params:
+            from text_renderer import render_text_overlay
+            text_errors = validate_text_parameters(text_params)
+            if text_errors:
+                logger.warning(f"Text parameter validation warnings: {text_errors}")
+
+            for text_name in ['text1', 'text2', 'text3']:
+                if text_name not in text_params:
+                    continue
+                tp = text_params[text_name]
+                composite = render_text_overlay(
+                    composite,
+                    text=tp['text'],
+                    x=tp['x'], y=tp['y'],
+                    font_size=tp['font_size'],
+                    font_color=tp['font_color'],
+                    font_family=tp['font_family'],
+                    bg_color=tp.get('bg_color'),
+                    bg_opacity=tp.get('bg_opacity', 0.7),
+                    wrap=tp.get('wrap', False),
+                    max_width=tp.get('max_width'),
+                    padding=tp.get('padding', 10),
+                )
+                logger.info(f"Text '{text_name}' rendered at ({tp['x']}, {tp['y']})")
+
         logger.info(f"✅ Composite image created successfully: {composite.size} {composite.mode}")
         return composite
         
