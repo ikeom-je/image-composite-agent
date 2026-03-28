@@ -51,6 +51,56 @@ def parse_image_parameters(query_params: Dict[str, str]) -> Dict[str, Dict[str, 
     return params
 
 
+def parse_text_parameters(query_params: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+    """クエリパラメータからテキスト配置パラメータを解析する"""
+    def safe_int(value, default):
+        try:
+            return int(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    def safe_float(value, default):
+        try:
+            return float(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    params = {}
+    for text_name in ['text1', 'text2', 'text3']:
+        text_content = query_params.get(text_name)
+        if not text_content:
+            continue
+        params[text_name] = {
+            'text': text_content,
+            'x': safe_int(query_params.get(f'{text_name}X'), 0),
+            'y': safe_int(query_params.get(f'{text_name}Y'), 0),
+            'font_size': safe_int(query_params.get(f'{text_name}FontSize'), 48),
+            'font_color': query_params.get(f'{text_name}FontColor', '#FFFFFF'),
+            'font_family': query_params.get(f'{text_name}FontFamily', 'NotoSansJP'),
+            'bg_color': query_params.get(f'{text_name}BgColor') or None,
+            'bg_opacity': safe_float(query_params.get(f'{text_name}BgOpacity'), 0.7),
+            'wrap': query_params.get(f'{text_name}Wrap', 'false').lower() == 'true',
+            'max_width': safe_int(query_params.get(f'{text_name}MaxWidth'), None),
+            'padding': safe_int(query_params.get(f'{text_name}Padding'), 10),
+        }
+    return params
+
+
+def validate_text_parameters(params: Dict[str, Dict[str, Any]]) -> list:
+    """テキストパラメータの検証"""
+    errors = []
+    for text_name, tp in params.items():
+        if tp['x'] < 0 or tp['y'] < 0:
+            errors.append(f'{text_name}の位置座標は0以上である必要があります')
+        if tp['font_size'] <= 0:
+            errors.append(f'{text_name}のフォントサイズは1以上である必要があります')
+        if tp['font_size'] > 500:
+            errors.append(f'{text_name}のフォントサイズは500以下である必要があります')
+        if tp['wrap'] and tp.get('max_width') is not None and tp['max_width'] <= 0:
+            errors.append(f'{text_name}のMaxWidthは1以上である必要があります')
+    return errors
+
+
 def validate_image_parameters(params: Dict[str, Dict[str, int]]) -> list:
     """
     画像パラメータの検証

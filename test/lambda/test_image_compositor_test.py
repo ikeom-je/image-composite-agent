@@ -13,6 +13,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../lambda/python'))
 from image_compositor import (
     parse_image_parameters,
     validate_image_parameters,
+    parse_text_parameters,
+    validate_text_parameters,
     create_base_image,
     resize_and_convert_image,
     paste_image_with_alpha,
@@ -282,6 +284,76 @@ class TestImageCompositor(unittest.TestCase):
         # 最後に描画された画像（image3 = 青）が最前面に来るはず
         pixel = result.getpixel((150, 150))  # 重なった部分
         self.assertEqual(pixel[:3], (0, 0, 255))  # 青色
+
+
+class TestTextParameters(unittest.TestCase):
+    def test_parse_text_parameters_empty(self):
+        params = parse_text_parameters({})
+        self.assertEqual(params, {})
+
+    def test_parse_text_parameters_single(self):
+        params = parse_text_parameters({'text1': 'Hello'})
+        self.assertEqual(params['text1']['text'], 'Hello')
+        self.assertEqual(params['text1']['x'], 0)
+        self.assertEqual(params['text1']['y'], 0)
+        self.assertEqual(params['text1']['font_size'], 48)
+        self.assertEqual(params['text1']['font_color'], '#FFFFFF')
+        self.assertEqual(params['text1']['font_family'], 'NotoSansJP')
+        self.assertIsNone(params['text1']['bg_color'])
+        self.assertEqual(params['text1']['bg_opacity'], 0.7)
+        self.assertFalse(params['text1']['wrap'])
+        self.assertIsNone(params['text1']['max_width'])
+        self.assertEqual(params['text1']['padding'], 10)
+
+    def test_parse_text_parameters_custom(self):
+        params = parse_text_parameters({
+            'text1': 'テスト',
+            'text1X': '100', 'text1Y': '200',
+            'text1FontSize': '72', 'text1FontColor': '#FF0000',
+            'text1BgColor': '#000000', 'text1BgOpacity': '0.5',
+            'text1Wrap': 'true', 'text1MaxWidth': '500', 'text1Padding': '20',
+        })
+        self.assertEqual(params['text1']['x'], 100)
+        self.assertEqual(params['text1']['y'], 200)
+        self.assertEqual(params['text1']['font_size'], 72)
+        self.assertEqual(params['text1']['font_color'], '#FF0000')
+        self.assertEqual(params['text1']['bg_color'], '#000000')
+        self.assertAlmostEqual(params['text1']['bg_opacity'], 0.5)
+        self.assertTrue(params['text1']['wrap'])
+        self.assertEqual(params['text1']['max_width'], 500)
+        self.assertEqual(params['text1']['padding'], 20)
+
+    def test_parse_text_parameters_multiple(self):
+        params = parse_text_parameters({'text1': 'First', 'text2': 'Second', 'text3': 'Third'})
+        self.assertIn('text1', params)
+        self.assertIn('text2', params)
+        self.assertIn('text3', params)
+
+    def test_parse_text_parameters_skip_without_text(self):
+        params = parse_text_parameters({'text1X': '100', 'text2': 'Hello'})
+        self.assertNotIn('text1', params)
+        self.assertIn('text2', params)
+
+    def test_validate_text_parameters_valid(self):
+        params = parse_text_parameters({'text1': 'Hello'})
+        errors = validate_text_parameters(params)
+        self.assertEqual(errors, [])
+
+    def test_validate_text_parameters_negative_position(self):
+        params = {'text1': {'text': 'Hi', 'x': -10, 'y': 0, 'font_size': 48,
+                            'font_color': '#FFF', 'font_family': 'NotoSansJP',
+                            'bg_color': None, 'bg_opacity': 0.7, 'wrap': False,
+                            'max_width': None, 'padding': 10}}
+        errors = validate_text_parameters(params)
+        self.assertGreater(len(errors), 0)
+
+    def test_validate_text_parameters_invalid_font_size(self):
+        params = {'text1': {'text': 'Hi', 'x': 0, 'y': 0, 'font_size': 0,
+                            'font_color': '#FFF', 'font_family': 'NotoSansJP',
+                            'bg_color': None, 'bg_opacity': 0.7, 'wrap': False,
+                            'max_width': None, 'padding': 10}}
+        errors = validate_text_parameters(params)
+        self.assertGreater(len(errors), 0)
 
 
 if __name__ == '__main__':
