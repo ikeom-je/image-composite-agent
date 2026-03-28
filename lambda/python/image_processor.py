@@ -75,9 +75,10 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     """
     errors = []
     
-    # image1のみ必須（image2とimage3はオプション）
-    if not query_params.get('image1'):
-        errors.append('image1パラメータは必須です')
+    # image1またはテキストパラメータが必須
+    has_text = any(query_params.get(f'text{i}') for i in range(1, 4))
+    if not query_params.get('image1') and not has_text:
+        errors.append('image1パラメータまたはtext1〜text3パラメータは必須です')
     
     # フォーマットパラメータの検証
     format_param = query_params.get('format', 'png')
@@ -472,30 +473,50 @@ def handler(event, context):
                 }
             )
         
-        # 画像の並列取得（指定された画像のみ）
-        logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
-        image_paths = {
-            'base': base_image_param,
-            'image1': image1_param,  # 必須
-        }
-        
-        # オプション画像を追加
-        if image2_param:
-            image_paths['image2'] = image2_param
-        if image3_param:
-            image_paths['image3'] = image3_param
-        
-        try:
-            images = fetch_images_parallel(image_paths)
-            logger.info(f"✅ Images fetched: {list(images.keys())} [Request ID: {request_id}]")
-        except Exception as e:
-            raise ImageFetchError(
-                "画像の取得に失敗しました",
-                details={
-                    "image_paths": image_paths,
-                    "original_error": str(e)
-                }
-            )
+        # テキストパラメータの解析
+        from image_compositor import parse_text_parameters, validate_text_parameters
+        text_params = parse_text_parameters(query_params)
+        if text_params:
+            text_errors = validate_text_parameters(text_params)
+            if text_errors:
+                raise ParameterError(
+                    "テキストパラメータが無効です",
+                    details={"validation_errors": text_errors}
+                )
+            logger.info(f"📝 Text parameters: {list(text_params.keys())} [Request ID: {request_id}]")
+
+        # テキストのみリクエスト時のimage1省略対応
+        if not image1_param and text_params:
+            from PIL import Image as PILImage
+            images = {'image1': PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))}
+            img_params['image1'] = {'x': 0, 'y': 0, 'width': 1, 'height': 1}
+            logger.info(f"📝 Text-only mode: using transparent 1x1 image [Request ID: {request_id}]")
+
+        # 画像の並列取得（指定された画像のみ、テキストのみモード時はスキップ）
+        if image1_param:
+            logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
+            image_paths = {
+                'base': base_image_param,
+                'image1': image1_param,  # 必須
+            }
+
+            # オプション画像を追加
+            if image2_param:
+                image_paths['image2'] = image2_param
+            if image3_param:
+                image_paths['image3'] = image3_param
+
+            try:
+                images = fetch_images_parallel(image_paths)
+                logger.info(f"✅ Images fetched: {list(images.keys())} [Request ID: {request_id}]")
+            except Exception as e:
+                raise ImageFetchError(
+                    "画像の取得に失敗しました",
+                    details={
+                        "image_paths": image_paths,
+                        "original_error": str(e)
+                    }
+                )
         
         # 画像合成処理
         logger.info(f"🎨 Starting image composition... [Request ID: {request_id}]")
@@ -505,7 +526,8 @@ def handler(event, context):
                 images['image1'],  # 必須
                 images.get('image2'),  # オプション
                 images.get('image3'),  # オプション
-                img_params
+                img_params,
+                text_params=text_params if text_params else None
             )
         except Exception as e:
             raise ImageProcessingError(
