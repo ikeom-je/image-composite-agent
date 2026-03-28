@@ -27,6 +27,11 @@
     <main class="flex-1">
       <router-view />
     </main>
+
+    <!-- フッター -->
+    <footer class="bg-gray-100 border-t border-gray-200 px-4 py-2 text-center">
+      <small class="text-gray-400 text-xs">v{{ version }} ({{ buildHash }})</small>
+    </footer>
   </div>
 </template>
 
@@ -34,6 +39,10 @@
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+
+// package.jsonのバージョン（ビルド時に埋め込み）
+const version = __APP_VERSION__
+const buildHash = __BUILD_HASH__
 
 const tabs = [
   { to: '/', label: 'Portal' },

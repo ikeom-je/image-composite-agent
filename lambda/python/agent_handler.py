@@ -2,6 +2,7 @@
 Strands Agent Lambda ハンドラー
 
 POST /chat                      - エージェントにメッセージ送信
+GET /chat/models                - 利用可能モデル一覧取得
 GET /chat/history/{sessionId}   - 会話履歴取得
 DELETE /chat/history/{sessionId} - 会話履歴削除
 """
@@ -51,7 +52,36 @@ logger.setLevel(logging.INFO)
 
 VERSION = os.environ.get('VERSION', '2.9.0')
 
-# APIキーキャッシュ（コールドスタート間で再利用）
+# 許可モデル一覧（許可リスト方式でインジェクション防止）
+ALLOWED_MODELS = {
+    'us.anthropic.claude-sonnet-4-5-20250929-v1:0': {
+        'name': 'Claude Sonnet 4.5',
+        'provider': 'Anthropic',
+        'description': '高精度・バランス型',
+    },
+    'us.anthropic.claude-haiku-4-5-20251001-v1:0': {
+        'name': 'Claude Haiku 4.5',
+        'provider': 'Anthropic',
+        'description': '高速・低コスト',
+    },
+    'us.amazon.nova-lite-v1:0': {
+        'name': 'Nova Lite',
+        'provider': 'Amazon',
+        'description': 'AWS製・低コスト',
+    },
+    'us.amazon.nova-micro-v1:0': {
+        'name': 'Nova Micro',
+        'provider': 'Amazon',
+        'description': 'AWS製・最小コスト',
+    },
+}
+
+_FALLBACK_MODEL_ID = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0'
+_env_model_id = os.environ.get('AGENT_MODEL_ID', _FALLBACK_MODEL_ID)
+if _env_model_id not in ALLOWED_MODELS:
+    logger.warning(f"AGENT_MODEL_ID '{_env_model_id}' not in ALLOWED_MODELS, falling back to {_FALLBACK_MODEL_ID}")
+    _env_model_id = _FALLBACK_MODEL_ID
+DEFAULT_MODEL_ID = _env_model_id
 
 
 
@@ -74,14 +104,14 @@ def format_response(status_code: int, body: Any, headers: Dict[str, str] = None)
 
 
 
-def create_agent():
+def create_agent(model_id: str = None):
     """Strands Agentを初期化する（AWS Bedrock経由）"""
     from strands import Agent
     from strands.models.bedrock import BedrockModel
     from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help
     from agent_prompts import SYSTEM_PROMPT
 
-    agent_model_id = os.environ.get('AGENT_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
+    agent_model_id = model_id or DEFAULT_MODEL_ID
     model = BedrockModel(
         model_id=agent_model_id,
         max_tokens=4096,
@@ -107,6 +137,14 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         body = json.loads(event.get('body', '{}') or '{}')
         session_id = body.get('sessionId', str(uuid.uuid4()))
         message = body.get('message', '').strip()
+        model_id = body.get('modelId', '').strip() or DEFAULT_MODEL_ID
+
+        # モデルIDバリデーション（許可リスト方式）
+        if model_id not in ALLOWED_MODELS:
+            return format_response(400, {
+                'error': 'Invalid modelId. Use GET /chat/models to see available models.',
+                'requestId': request_id,
+            })
 
         if not message:
             return format_response(400, {
@@ -126,7 +164,7 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         if not uuid_pattern.match(session_id):
             session_id = str(uuid.uuid4())
 
-        logger.info(f"Chat request: session={session_id}, message_len={len(message)} [Request ID: {request_id}]")
+        logger.info(f"Chat request: session={session_id}, model={model_id}, message_len={len(message)} [Request ID: {request_id}]")
 
         # 会話履歴の取得（best-effort）
         history_manager = _get_history_manager()
@@ -141,14 +179,14 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         # ユーザーメッセージを保存（best-effort）
         if history_manager:
             try:
-                history_manager.save_message(session_id, 'user', message)
+                history_manager.save_message(session_id, 'user', message, model_id=model_id)
             except Exception as e:
                 logger.warning(f"Failed to save user message: {e}")
 
         # Agent実行（メディア結果をリセット）
         import agent_tools
         agent_tools._last_media_result = None
-        agent = create_agent()
+        agent = create_agent(model_id)
 
         # 会話履歴がある場合はメッセージに追加
         if conversation_history:
@@ -167,6 +205,7 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
                     session_id, 'assistant', response_text,
                     media_url=media_data.get('url') if media_data else None,
                     media_type=media_data.get('type') if media_data else None,
+                    model_id=model_id,
                 )
             except Exception as e:
                 logger.warning(f"Failed to save assistant message: {e}")
@@ -174,11 +213,14 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         processing_time = time.time() - start_time
         logger.info(f"Chat completed in {processing_time:.2f}s [Request ID: {request_id}]")
 
+        model_info = ALLOWED_MODELS.get(model_id, {})
         response_body = {
             'sessionId': session_id,
             'response': {
                 'content': response_text,
                 'media': media_data,
+                'modelId': model_id,
+                'modelName': model_info.get('name', model_id),
             },
             'requestId': request_id,
         }
@@ -198,6 +240,23 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
             'error': 'エージェントの処理中にエラーが発生しました。しばらくお待ちください。',
             'requestId': request_id,
         })
+
+
+def handle_get_models(event: Dict[str, Any], context: Any) -> Dict:
+    """GET /chat/models - 利用可能モデル一覧取得"""
+    models = []
+    for model_id, info in ALLOWED_MODELS.items():
+        models.append({
+            'id': model_id,
+            'name': info['name'],
+            'provider': info['provider'],
+            'description': info['description'],
+        })
+
+    return format_response(200, {
+        'models': models,
+        'default': DEFAULT_MODEL_ID,
+    })
 
 
 def handle_get_history(event: Dict[str, Any], context: Any) -> Dict:
@@ -224,6 +283,10 @@ def handle_get_history(event: Dict[str, Any], context: Any) -> Dict:
                 item['mediaUrl'] = msg['media_url']
             if msg.get('media_type'):
                 item['mediaType'] = msg['media_type']
+            if msg.get('model_id'):
+                item['modelId'] = msg['model_id']
+                model_info = ALLOWED_MODELS.get(msg['model_id'], {})
+                item['modelName'] = model_info.get('name', msg['model_id'])
             formatted.append(item)
 
         return format_response(200, {
@@ -321,8 +384,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict:
 
         logger.info(f"Agent handler: {http_method} {resource} ({path})")
 
-        if http_method == 'POST' and '/chat' in path and '/history' not in path:
+        if http_method == 'POST' and '/chat' in path and '/history' not in path and '/models' not in path:
             return handle_chat(event, context)
+        elif http_method == 'GET' and '/models' in path:
+            return handle_get_models(event, context)
         elif http_method == 'GET' and '/history/' in path:
             return handle_get_history(event, context)
         elif http_method == 'DELETE' and '/history/' in path:
