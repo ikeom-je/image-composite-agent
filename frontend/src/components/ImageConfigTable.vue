@@ -305,15 +305,25 @@
 
     <!-- テキストオーバーレイ設定 -->
     <div class="text-overlay-section mb-6">
-      <div class="text-overlay-header">
-        <label class="toggle-label">
-          <input
-            type="checkbox"
-            :checked="textConfigs.enabled"
-            @change="$emit('update-text-config', 'enabled', 'enabled', ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="toggle-text">テキストオーバーレイ</span>
-        </label>
+      <h3 class="section-title">📝 テキストオーバーレイ設定</h3>
+
+      <!-- テキストオーバーレイON/OFF切り替え -->
+      <div class="text-toggle-section">
+        <div class="toggle-container">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              :checked="textConfigs.enabled"
+              @change="$emit('update-text-config', 'enabled', 'enabled', ($event.target as HTMLInputElement).checked)"
+              class="toggle-checkbox"
+            />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">テキストオーバーレイを有効にする</span>
+          </label>
+        </div>
+        <div class="toggle-description">
+          <small>最大3つのテキストテロップを画像上に配置します。日本語・英語対応。</small>
+        </div>
       </div>
 
       <div v-if="textConfigs.enabled" class="text-config-content">
@@ -1537,21 +1547,13 @@ const getVideoExtension = (format: string): string => {
   background: #faf5ff;
 }
 
-.text-overlay-header {
-  margin-bottom: 12px;
+.text-toggle-section {
+  margin-bottom: 16px;
 }
 
-.text-overlay-header .toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  color: #7c3aed;
-}
-
-.text-overlay-header .toggle-text {
-  font-size: 14px;
+.text-toggle-section .toggle-description {
+  margin-top: 4px;
+  color: #6b7280;
 }
 
 .text-config-content {
