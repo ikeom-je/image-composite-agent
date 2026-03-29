@@ -488,11 +488,12 @@ def handler(event, context):
         # images初期化（テキストのみモード時のUnboundLocalError防止）
         images = {}
 
+        from PIL import Image as PILImage
+
         # ベース画像の特殊値処理（white / #RRGGBB / #RRGGBBAA）
         base_is_special = False
         if base_image_param:
             if base_image_param == 'white':
-                from PIL import Image as PILImage
                 images['base'] = PILImage.new('RGBA', (2000, 1000), (255, 255, 255, 255))
                 base_is_special = True
                 logger.info(f"🎨 White base image created [Request ID: {request_id}]")
@@ -501,7 +502,6 @@ def handler(event, context):
                 color = _parse_color(base_image_param)
                 if len(color) == 3:
                     color = (*color, 255)
-                from PIL import Image as PILImage
                 images['base'] = PILImage.new('RGBA', (2000, 1000), color)
                 base_is_special = True
                 logger.info(f"🎨 Custom color base image created: {base_image_param} [Request ID: {request_id}]")
@@ -511,7 +511,6 @@ def handler(event, context):
 
         # テキストのみリクエスト時のimage1省略対応
         if not image1_param and text_params:
-            from PIL import Image as PILImage
             images['image1'] = PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))
             img_params['image1'] = {'x': 0, 'y': 0, 'width': 1, 'height': 1}
             logger.info(f"📝 Text-only mode: using transparent 1x1 image [Request ID: {request_id}]")
@@ -534,7 +533,7 @@ def handler(event, context):
                 image_paths['image3'] = image3_param
 
             try:
-                images = fetch_images_parallel(image_paths)
+                images.update(fetch_images_parallel(image_paths))
                 logger.info(f"✅ Images fetched: {list(images.keys())} [Request ID: {request_id}]")
             except Exception as e:
                 raise ImageFetchError(
