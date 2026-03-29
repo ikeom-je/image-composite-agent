@@ -91,6 +91,7 @@ def _parse_color(color_str: str) -> Tuple[int, ...]:
         b = int(color_str[4:6], 16)
         a = int(color_str[6:8], 16)
         return (r, g, b, a)
+    logger.warning(f"Invalid color format '{color_str}', using white. Accepted: #RRGGBB or #RRGGBBAA")
     return (255, 255, 255)
 
 

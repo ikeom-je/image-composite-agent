@@ -485,6 +485,9 @@ def handler(event, context):
                 )
             logger.info(f"📝 Text parameters: {list(text_params.keys())} [Request ID: {request_id}]")
 
+        # images初期化（テキストのみモード時のUnboundLocalError防止）
+        images = {}
+
         # テキストのみリクエスト時のimage1省略対応
         if not image1_param and text_params:
             from PIL import Image as PILImage

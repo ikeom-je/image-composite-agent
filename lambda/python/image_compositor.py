@@ -287,7 +287,7 @@ def create_composite_image(base_img: Optional[Image.Image],
             from text_renderer import render_text_overlay
             text_errors = validate_text_parameters(text_params)
             if text_errors:
-                logger.warning(f"Text parameter validation warnings: {text_errors}")
+                raise ValueError(f"Invalid text parameters: {', '.join(text_errors)}")
 
             for text_name in ['text1', 'text2', 'text3']:
                 if text_name not in text_params:

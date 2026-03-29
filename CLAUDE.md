@@ -34,10 +34,12 @@
 ├── lambda/python/                # Lambda関数（Python 3.12）
 │   ├── image_processor.py        # メイン合成ハンドラー
 │   ├── image_compositor.py       # 合成エンジン
+│   ├── text_renderer.py          # テキスト描画エンジン（テロップオーバーレイ）
 │   ├── image_fetcher.py          # 画像取得（S3/HTTP/テスト画像）
 │   ├── upload_manager.py         # S3アップロード管理
 │   ├── video_generator.py        # 動画生成
 │   ├── error_handler.py          # エラー処理
+│   ├── fonts/                    # フォントファイル（Noto Sans JP）
 │   ├── agent_handler.py          # Chat Agent Lambdaハンドラー
 │   ├── agent_tools.py            # Strands @tool 定義
 │   ├── agent_prompts.py          # システムプロンプト・座標マッピング
@@ -91,13 +93,14 @@
 
 - **フレームワーク**: Vue.js 3 Composition API (`<script setup>`)
 - **状態管理**: Pinia ストア（config, app, notification, image, chat）
-- **スタイリング**: Tailwind CSS。カラーコーディング: 赤(Image1), 青(Image2), 緑(Image3)
+- **スタイリング**: Tailwind CSS。カラーコーディング: 赤(Image1), 青(Image2), 緑(Image3), 紫(Text)
 - **キャンバスサイズ**: 1920x1080固定。プレビューは1:5スケール（384x216）
 - **コンポーネント設計**: `design.md`のコンポーネントアーキテクチャに従う
 
 ### バックエンド（Lambda/Python）
 
 - **画像処理**: Pillow (PIL)、RGBAモード、LANCZOS補間
+- **テキスト描画**: Pillow ImageDraw + Noto Sans JP（`#RRGGBB`/`#RRGGBBAA`形式のみ対応）
 - **並列処理**: ThreadPoolExecutor による画像取得
 - **レスポンス形式**: HTML（デフォルト）またはPNG
 - **Agent**: Strands Agents SDK + BedrockModel、環境変数`AGENT_MODEL_ID`でデフォルトモデル指定、リクエスト時にモデル切り替え可能（マルチモデル対応）
@@ -127,6 +130,7 @@ npx cdk deploy ImageProcessorApiStack --require-approval never
 
 1. **後方互換性**: 既存の2画像合成APIパラメータ名を維持
 2. **アルファチャンネル完全対応**: 透過情報を保持
+3. **テキストオーバーレイ**: 最大3テキストレイヤー、Z-order=画像→テキスト、text_params省略時は既存動作
 3. **環境非依存**: 動的設定管理（config.json）によるURL自動設定
 4. **v2.3.0 UIデザイン復活**: テーブルベースのパラメータ設定UI
 5. **セキュリティ**: IAM最小権限、CORS適切設定、入力バリデーション
