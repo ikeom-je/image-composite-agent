@@ -10,7 +10,7 @@
     <PerformanceMonitor v-if="configStore.isDebugMode || configStore.isDevelopment" />
 
     <header>
-      <h1>🎨 画像合成REST API v2.6.0</h1>
+      <h1>🎨 画像合成REST API v3.2.0</h1>
       <p class="subtitle">S3画像アップロード機能付き | 3画像合成対応 | Vue.js 3 + AWS Lambda + S3</p>
       <div v-if="configStore.config" class="config-info">
         <small>Version: {{ configStore.version }} | Environment: {{ configStore.environment }}</small>
@@ -43,23 +43,25 @@
         </div>
 
         <!-- 画像設定テーブル -->
-        <ImageConfigTable 
-          :image-configs="imageConfigs" 
+        <ImageConfigTable
+          :image-configs="imageConfigs"
           :video-config="videoConfig"
+          :text-configs="textConfigs"
           :image-mode="imageMode"
           :is-generating-video="isGeneratingVideo"
           :video-generation-progress="videoGenerationProgress"
           :video-generation-step="videoGenerationStep"
-          @update-config="handleConfigUpdate" 
+          @update-config="handleConfigUpdate"
           @update-mode="handleModeUpdate"
           @update-video-config="handleVideoConfigUpdate"
+          @update-text-config="handleTextConfigUpdate"
         />
 
 
 
         <!-- 画像生成ボタン（目立つデザイン） -->
         <div class="generate-button-section">
-          <button @click="generateImage" :disabled="appStore.isLoading || !imageConfigs.image1.source"
+          <button @click="generateImage" :disabled="appStore.isLoading || (!imageConfigs.image1.source && !(textConfigs.enabled && (textConfigs.text1.text || textConfigs.text2.text || textConfigs.text3.text)))"
             class="generate-button">
             <span v-if="appStore.isLoading" class="loading-content">
               <svg class="spinner-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -172,6 +174,14 @@ const videoConfig = ref({
   format: 'XMF' // デフォルトXMF
 })
 
+// テキストオーバーレイ設定
+const textConfigs = ref({
+  enabled: false,
+  text1: { text: '', x: 100, y: 800, fontSize: 48, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+  text2: { text: '', x: 100, y: 900, fontSize: 36, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+  text3: { text: '', x: 100, y: 950, fontSize: 24, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+})
+
 // 動画生成状態
 const isGeneratingVideo = ref(false)
 const videoGenerationProgress = ref(0)
@@ -260,8 +270,9 @@ const getApiEndpoint = (): string => {
 
 // 合成パラメータオブジェクトを構築
 const buildCompositeParams = (enableVideoGeneration: boolean = videoConfig.value.enabled): Record<string, string | number | boolean> => {
-  if (!imageConfigs.value.image1.source) {
-    throw new Error('Image1 is required for image composition')
+  const hasText = textConfigs.value.enabled && (textConfigs.value.text1.text || textConfigs.value.text2.text || textConfigs.value.text3.text)
+  if (!imageConfigs.value.image1.source && !hasText) {
+    throw new Error('Image1 is required for image composition (or enable text overlay)')
   }
 
   const p: Record<string, string | number | boolean> = {
@@ -294,6 +305,30 @@ const buildCompositeParams = (enableVideoGeneration: boolean = videoConfig.value
     p.generate_video = 'true'
     p.video_duration = videoConfig.value.duration
     p.video_format = videoConfig.value.format
+  }
+
+  // テキストパラメータ
+  if (textConfigs.value.enabled) {
+    for (const [key, config] of Object.entries(textConfigs.value)) {
+      if (key === 'enabled') continue
+      const tc = config as { text: string; x: number; y: number; fontSize: number; fontColor: string; bgColor: string; bgOpacity: number; wrap: boolean; maxWidth: number; padding: number }
+      if (tc.text) {
+        p[key] = tc.text
+        p[`${key}X`] = tc.x
+        p[`${key}Y`] = tc.y
+        p[`${key}FontSize`] = tc.fontSize
+        p[`${key}FontColor`] = tc.fontColor
+        if (tc.bgColor) {
+          p[`${key}BgColor`] = tc.bgColor
+          p[`${key}BgOpacity`] = tc.bgOpacity
+        }
+        if (tc.wrap) {
+          p[`${key}Wrap`] = 'true'
+          p[`${key}MaxWidth`] = tc.maxWidth
+        }
+        p[`${key}Padding`] = tc.padding
+      }
+    }
   }
 
   console.log('[App] Composite params:', p)
@@ -565,6 +600,14 @@ const handleVideoConfigUpdate = (field: string, value: any) => {
   if (videoConfig.value.hasOwnProperty(field)) {
     (videoConfig.value as any)[field] = value
     console.log('[App] Video config updated:', { field, value, config: videoConfig.value })
+  }
+}
+
+const handleTextConfigUpdate = (textKey: string, field: string, value: any) => {
+  if (textKey === 'enabled') {
+    textConfigs.value.enabled = value
+  } else if (textConfigs.value[textKey as keyof typeof textConfigs.value]) {
+    (textConfigs.value[textKey as keyof typeof textConfigs.value] as any)[field] = value
   }
 }
 

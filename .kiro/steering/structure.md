@@ -34,7 +34,8 @@ image-processor-api/
 コアモジュール:
 - `image_processor.py` - メインハンドラー（画像合成 + 動画生成）
 - `upload_manager.py` - アップロード管理（署名付きURL、画像一覧）
-- `image_compositor.py` - 画像合成ロジック
+- `image_compositor.py` - 画像合成ロジック（テキストパラメータ解析含む）
+- `text_renderer.py` - テキスト描画エンジン（Pillow ImageDraw、Noto Sans JP対応）
 - `image_fetcher.py` - 並列画像取得
 - `video_generator.py` - 画像からの動画生成
 - `test_image_generator.py` - テスト画像生成
@@ -44,6 +45,9 @@ image-processor-api/
 - `agent_prompts.py` - システムプロンプト・座標マッピング
 - `chat_history.py` - DynamoDB会話履歴管理
 - `requirements.txt` - Python依存関係
+
+フォント:
+- `fonts/NotoSansJP-Regular.ttf` - 日本語フォント（テキストオーバーレイ用）
 
 テスト画像:
 - `images/default-base.png` - ベース画像（黒背景）
@@ -84,7 +88,7 @@ frontend/
 
 - `ImageUploader.vue` - ドラッグ&ドロップS3アップロード
 - `ImageSelector.vue` - 画像ソース選択（テスト/S3/URL）
-- `ImageConfigTable.vue` - 画像パラメータ設定
+- `ImageConfigTable.vue` - 画像・テキストパラメータ設定
 - `ResultDisplay.vue` - 結果プレビューとダウンロード
 - `NotificationSystem.vue` - トースト通知
 - `LoadingOverlay.vue` - ローディング状態
@@ -123,6 +127,7 @@ test/
 │   ├── test_image_processor.py
 │   ├── test_upload_manager.py
 │   ├── test_image_compositor_test.py
+│   ├── test_text_renderer.py
 │   ├── test_image_fetcher_test.py
 │   ├── test_agent_handler.py
 │   ├── test_agent_tools.py

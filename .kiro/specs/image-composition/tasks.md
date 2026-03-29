@@ -393,3 +393,43 @@
   - 動画生成失敗時のフォールバック動作テスト
   - 動画生成機能のパフォーマンステスト
   - _要件: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8_
+
+- [x] 19. テキストオーバーレイ機能の実装
+
+- [x] 19.1 テキスト描画エンジンの実装
+  - `text_renderer.py` — Pillow ImageDrawベースのテキスト描画エンジンを新規作成
+  - Noto Sans JPフォントをバンドル（`lambda/python/fonts/`）
+  - フォント読込、バウンディングボックス計算、折り返し計算、背景矩形描画、テキスト描画
+  - CDKバンドリング設定にfonts/ディレクトリコピーを追加（ImageProcessor + Agent両Lambda）
+  - text_renderer単体テスト（12テスト）を作成
+  - _要件: 19.3, 19.5, 19.6, 19.7_
+
+- [x] 19.2 テキストパラメータ解析・バリデーションの実装
+  - `image_compositor.py` に `parse_text_parameters()` と `validate_text_parameters()` を追加
+  - 画像パラメータと同じ命名規則（text1X, text1FontSize等）
+  - テキストパラメータ解析テスト（8テスト）を作成
+  - _要件: 19.1, 19.2_
+
+- [x] 19.3 合成エンジンへのテキスト描画統合
+  - `create_composite_image()` に `text_params=None` オプショナル引数を追加
+  - 画像合成後にテキストを描画（Z-order: 画像→テキスト）
+  - 後方互換性維持（text_params省略時は既存動作）
+  - テキスト付き合成テスト（5テスト）を作成
+  - _要件: 19.8, 19.9_
+
+- [x] 19.4 Lambdaハンドラーのテキスト対応
+  - `image_processor.py` でテキストパラメータを解析し `create_composite_image()` に転送
+  - `validate_required_parameters()` を修正しテキストのみリクエストに対応（image1省略可能）
+  - _要件: 19.1, 19.9_
+
+- [x] 19.5 Chat Agentツールのテキスト対応
+  - `compose_images()` と `generate_video()` にtext1〜text3パラメータを追加
+  - `agent_prompts.py` にテキストオーバーレイガイダンスを追加
+  - 自然言語位置指定（左上、中央等）でテロップ配置可能
+  - _要件: 19.2, 19.10_
+
+- [x] 19.6 フロントエンドUI
+  - `ImageConfigTable.vue` にテキスト設定セクションを追加（紫系アクセント）
+  - `App.vue` で `textConfigs` 状態管理、APIリクエストにテキストパラメータを含む
+  - テキスト入力、フォントサイズ、色選択、背景色、折り返し制御に対応
+  - _要件: 19.1, 19.2, 19.3, 19.5_

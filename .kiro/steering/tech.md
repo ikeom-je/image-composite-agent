@@ -8,7 +8,7 @@ inclusion: auto
 
 - ランタイム: AWS Lambda上のPython 3.12
 - アーキテクチャ: X86_64（ライブラリ互換性重視）
-- 画像処理: Pillow 10.0.0（LANCZOS補間）
+- 画像処理: Pillow 10.0.0（LANCZOS補間、ImageDraw/ImageFontによるテキスト描画）
 - 動画処理: ffmpeg（Lambda Layer経由）
 - AWS SDK: boto3 1.34.0、botocore 1.34.0
 - HTTP: requests 2.31.0
@@ -167,3 +167,4 @@ Agent Lambda固有:
 - フロントエンドは高速HMRと最適化された本番ビルドにViteを使用
 - ffmpegバイナリ用のLambdaレイヤー（動画生成）
 - 最適化を伴うアセットバンドリング（pycの削除、dist-infoのクリーンアップ）
+- フォントバンドリング（Noto Sans JP、`fonts/`ディレクトリ経由）

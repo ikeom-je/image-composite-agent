@@ -17,7 +17,7 @@ inclusion: auto
 ## Lambda設計
 
 ### 関数の責務
-- `ImageProcessorFunction`: 画像合成 + 動画生成（X86_64）
+- `ImageProcessorFunction`: 画像合成 + テキスト描画 + 動画生成（X86_64）
 - `UploadManagerFunction`: 署名付きURL + 画像一覧（X86_64）
 - `AgentFunction`: Chat Agent — Bedrock推論 + 会話管理（ARM_64）
 

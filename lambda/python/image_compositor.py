@@ -1,5 +1,5 @@
 """
-画像合成エンジン - v2.4.0
+画像合成エンジン - v3.2.0
 
 2つまたは3つの画像を高品質に合成するエンジン。
 アルファチャンネル対応、LANCZOS補間による高品質リサイズ。
@@ -49,6 +49,56 @@ def parse_image_parameters(query_params: Dict[str, str]) -> Dict[str, Dict[str, 
         }
     
     return params
+
+
+def parse_text_parameters(query_params: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+    """クエリパラメータからテキスト配置パラメータを解析する"""
+    def safe_int(value, default):
+        try:
+            return int(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    def safe_float(value, default):
+        try:
+            return float(value) if value else default
+        except (ValueError, TypeError):
+            return default
+
+    params = {}
+    for text_name in ['text1', 'text2', 'text3']:
+        text_content = query_params.get(text_name)
+        if not text_content:
+            continue
+        params[text_name] = {
+            'text': text_content,
+            'x': safe_int(query_params.get(f'{text_name}X'), 0),
+            'y': safe_int(query_params.get(f'{text_name}Y'), 0),
+            'font_size': safe_int(query_params.get(f'{text_name}FontSize'), 48),
+            'font_color': query_params.get(f'{text_name}FontColor', '#FFFFFF'),
+            'font_family': query_params.get(f'{text_name}FontFamily', 'NotoSansJP'),
+            'bg_color': query_params.get(f'{text_name}BgColor') or None,
+            'bg_opacity': safe_float(query_params.get(f'{text_name}BgOpacity'), 0.7),
+            'wrap': query_params.get(f'{text_name}Wrap', 'false').lower() == 'true',
+            'max_width': safe_int(query_params.get(f'{text_name}MaxWidth'), None),
+            'padding': safe_int(query_params.get(f'{text_name}Padding'), 10),
+        }
+    return params
+
+
+def validate_text_parameters(params: Dict[str, Dict[str, Any]]) -> list:
+    """テキストパラメータの検証"""
+    errors = []
+    for text_name, tp in params.items():
+        if tp['x'] < 0 or tp['y'] < 0:
+            errors.append(f'{text_name}の位置座標は0以上である必要があります')
+        if tp['font_size'] <= 0:
+            errors.append(f'{text_name}のフォントサイズは1以上である必要があります')
+        if tp['font_size'] > 500:
+            errors.append(f'{text_name}のフォントサイズは500以下である必要があります')
+        if tp['wrap'] and tp.get('max_width') is not None and tp['max_width'] <= 0:
+            errors.append(f'{text_name}のMaxWidthは1以上である必要があります')
+    return errors
 
 
 def validate_image_parameters(params: Dict[str, Dict[str, int]]) -> list:
@@ -155,11 +205,12 @@ def paste_image_with_alpha(base: Image.Image, overlay: Image.Image, position: Tu
     return base
 
 
-def create_composite_image(base_img: Optional[Image.Image], 
-                          image1: Image.Image, 
+def create_composite_image(base_img: Optional[Image.Image],
+                          image1: Image.Image,
                           image2: Optional[Image.Image],
                           image3: Optional[Image.Image],
-                          params: Dict[str, Dict[str, int]]) -> Image.Image:
+                          params: Dict[str, Dict[str, int]],
+                          text_params: Optional[Dict[str, Dict[str, Any]]] = None) -> Image.Image:
     """
     1つ、2つ、または3つの画像を合成する（image1のみ必須）
     
@@ -169,7 +220,8 @@ def create_composite_image(base_img: Optional[Image.Image],
         image2: 合成する2つ目の画像（オプション）
         image3: 合成する3つ目の画像（オプション）
         params: 各画像の配置パラメータ
-        
+        text_params: テキスト描画パラメータ（オプション）
+
     Returns:
         Image.Image: 合成された画像
         
@@ -230,6 +282,32 @@ def create_composite_image(base_img: Optional[Image.Image],
                 (params['image3']['x'], params['image3']['y'])
             )
         
+        # 画像合成後にテキストを描画（Z-order: 画像→テキスト）
+        if text_params:
+            from text_renderer import render_text_overlay
+            text_errors = validate_text_parameters(text_params)
+            if text_errors:
+                raise ValueError(f"Invalid text parameters: {', '.join(text_errors)}")
+
+            for text_name in ['text1', 'text2', 'text3']:
+                if text_name not in text_params:
+                    continue
+                tp = text_params[text_name]
+                composite = render_text_overlay(
+                    composite,
+                    text=tp['text'],
+                    x=tp['x'], y=tp['y'],
+                    font_size=tp['font_size'],
+                    font_color=tp['font_color'],
+                    font_family=tp['font_family'],
+                    bg_color=tp.get('bg_color'),
+                    bg_opacity=tp.get('bg_opacity', 0.7),
+                    wrap=tp.get('wrap', False),
+                    max_width=tp.get('max_width'),
+                    padding=tp.get('padding', 10),
+                )
+                logger.info(f"Text '{text_name}' rendered at ({tp['x']}, {tp['y']})")
+
         logger.info(f"✅ Composite image created successfully: {composite.size} {composite.mode}")
         return composite
         
