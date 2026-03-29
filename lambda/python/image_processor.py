@@ -488,10 +488,31 @@ def handler(event, context):
         # images初期化（テキストのみモード時のUnboundLocalError防止）
         images = {}
 
+        # ベース画像の特殊値処理（white / #RRGGBB / #RRGGBBAA）
+        base_is_special = False
+        if base_image_param:
+            if base_image_param == 'white':
+                from PIL import Image as PILImage
+                images['base'] = PILImage.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+                base_is_special = True
+                logger.info(f"🎨 White base image created [Request ID: {request_id}]")
+            elif base_image_param.startswith('#'):
+                from text_renderer import _parse_color
+                color = _parse_color(base_image_param)
+                if len(color) == 3:
+                    color = (*color, 255)
+                from PIL import Image as PILImage
+                images['base'] = PILImage.new('RGBA', (2000, 1000), color)
+                base_is_special = True
+                logger.info(f"🎨 Custom color base image created: {base_image_param} [Request ID: {request_id}]")
+            elif base_image_param == 'transparent':
+                base_is_special = True
+                logger.info(f"🎨 Transparent base image [Request ID: {request_id}]")
+
         # テキストのみリクエスト時のimage1省略対応
         if not image1_param and text_params:
             from PIL import Image as PILImage
-            images = {'image1': PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))}
+            images['image1'] = PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))
             img_params['image1'] = {'x': 0, 'y': 0, 'width': 1, 'height': 1}
             logger.info(f"📝 Text-only mode: using transparent 1x1 image [Request ID: {request_id}]")
 
@@ -499,9 +520,12 @@ def handler(event, context):
         if image1_param:
             logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
             image_paths = {
-                'base': base_image_param,
                 'image1': image1_param,  # 必須
             }
+
+            # ベース画像（特殊値でない場合のみ取得）
+            if base_image_param and not base_is_special:
+                image_paths['base'] = base_image_param
 
             # オプション画像を追加
             if image2_param:
