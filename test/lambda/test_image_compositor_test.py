@@ -431,5 +431,78 @@ class TestCompositeWithText(unittest.TestCase):
         self.assertEqual(result.mode, 'RGBA')
 
 
+class TestBaseImageColors(unittest.TestCase):
+    """白背景・カスタム色ベース画像のテスト"""
+
+    def test_create_white_base_image(self):
+        """白背景のベース画像が正しく作成される"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        result = create_base_image(white_base)
+        self.assertEqual(result.mode, 'RGBA')
+        # 中央ピクセルが白であることを確認
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (255, 255, 255, 255))
+
+    def test_create_custom_color_base_image(self):
+        """カスタム色（赤）のベース画像が正しく作成される"""
+        red_base = Image.new('RGBA', (2000, 1000), (255, 0, 0, 255))
+        result = create_base_image(red_base)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (255, 0, 0, 255))
+
+    def test_create_custom_color_with_alpha(self):
+        """半透明カスタム色のベース画像が正しく作成される"""
+        semi_transparent = Image.new('RGBA', (2000, 1000), (0, 255, 0, 128))
+        result = create_base_image(semi_transparent)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (0, 255, 0, 128))
+
+    def test_transparent_base_is_default(self):
+        """None指定で透明背景が作成される"""
+        result = create_base_image(None)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (0, 0, 0, 0))
+
+    def test_white_base_composite_with_image(self):
+        """白背景にimage1を合成できる"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params)
+        self.assertEqual(result.mode, 'RGBA')
+        # 画像が配置されていない領域は白であること
+        pixel = result.getpixel((0, 0))
+        self.assertEqual(pixel, (255, 255, 255, 255))
+        # 画像が配置された領域は赤であること
+        pixel = result.getpixel((100, 100))
+        self.assertEqual(pixel, (255, 0, 0, 255))
+
+
+class TestParseColorForBase(unittest.TestCase):
+    """_parse_colorのベース画像用テスト"""
+
+    def test_parse_hex_6digit(self):
+        """#RRGGBB形式のパース"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('#FF0000'), (255, 0, 0))
+        self.assertEqual(_parse_color('#00FF00'), (0, 255, 0))
+        self.assertEqual(_parse_color('#0000FF'), (0, 0, 255))
+
+    def test_parse_hex_8digit(self):
+        """#RRGGBBAA形式のパース"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('#FF000080'), (255, 0, 0, 128))
+        self.assertEqual(_parse_color('#00FF00FF'), (0, 255, 0, 255))
+
+    def test_parse_invalid_returns_white(self):
+        """無効なカラー文字列は白を返す"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('invalid'), (255, 255, 255))
+
+
 if __name__ == '__main__':
     unittest.main()

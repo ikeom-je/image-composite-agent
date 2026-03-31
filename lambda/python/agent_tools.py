@@ -105,7 +105,7 @@ def compose_images(
         image3: 画像3のソース。空文字で省略。
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
-        base_image: ベース画像のソース。"test","transparent",S3キー,HTTP URL。
+        base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。"左上","中央"等の名前、または"x,y"座標。
         text1_font_size: テキスト1のフォントサイズ(px)。
@@ -168,8 +168,17 @@ def compose_images(
 
     # ベース画像
     base_img = None
-    if base_image and base_image != 'transparent':
-        base_img = fetch_image(base_image, 'base')
+    if base_image and base_image not in ('transparent',):
+        if base_image == 'white':
+            base_img = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        elif base_image.startswith('#'):
+            from text_renderer import _parse_color
+            color = _parse_color(base_image)
+            if len(color) == 3:
+                color = (*color, 255)
+            base_img = Image.new('RGBA', (2000, 1000), color)
+        else:
+            base_img = fetch_image(base_image, 'base')
 
     # テキストパラメータの構築
     text_params = {}
@@ -323,7 +332,7 @@ def generate_video(
         image3: 画像3のソース。空文字で省略。
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
-        base_image: ベース画像のソース。
+        base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。
         text1_font_size: テキスト1のフォントサイズ(px)。
