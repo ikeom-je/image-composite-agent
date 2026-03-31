@@ -65,6 +65,7 @@ def compose_images(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    base_opacity: int = 100,
     text1: str = "",
     text1_position: str = "左下",
     text1_font_size: int = 48,
@@ -106,6 +107,7 @@ def compose_images(
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
+        base_opacity: ベース画像の透明度（0-100）。0=完全透明、100=不透明。デフォルト100。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。"左上","中央"等の名前、または"x,y"座標。
         text1_font_size: テキスト1のフォントサイズ(px)。
@@ -203,8 +205,10 @@ def compose_images(
             }
 
     # 合成実行
+    opacity = max(0, min(100, base_opacity))
     composite = create_composite_image(base_img, img1, img2, img3, params,
-                                       text_params=text_params if text_params else None)
+                                       text_params=text_params if text_params else None,
+                                       base_opacity=opacity)
 
     # S3に保存してCloudFront URLを生成
     from datetime import datetime
@@ -290,6 +294,7 @@ def generate_video(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    base_opacity: int = 100,
     text1: str = "",
     text1_position: str = "左下",
     text1_font_size: int = 48,
@@ -333,6 +338,7 @@ def generate_video(
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
+        base_opacity: ベース画像の透明度（0-100）。0=完全透明、100=不透明。デフォルト100。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。
         text1_font_size: テキスト1のフォントサイズ(px)。
@@ -382,6 +388,7 @@ def generate_video(
         'image1_width': str(sz1[0]),
         'image1_height': str(sz1[1]),
         'base_image': base_image,
+        'baseOpacity': str(max(0, min(100, base_opacity))),
         'format': 'png',
         'generate_video': 'true',
         'video_duration': str(duration),

@@ -450,8 +450,10 @@ def handler(event, context):
         image2_param = query_params.get('image2')
         image3_param = query_params.get('image3')  # オプション
         base_image_param = query_params.get('baseImage')
+        base_opacity_param = int(query_params.get('baseOpacity', '100'))
+        base_opacity_param = max(0, min(100, base_opacity_param))  # 0-100にクランプ
         format_param = query_params.get('format', 'png')
-        
+
         # 動画生成パラメータ
         generate_video = query_params.get('generate_video', 'false').lower() == 'true'
         video_duration = int(query_params.get('video_duration', '3'))
@@ -553,7 +555,8 @@ def handler(event, context):
                 images.get('image2'),  # オプション
                 images.get('image3'),  # オプション
                 img_params,
-                text_params=text_params if text_params else None
+                text_params=text_params if text_params else None,
+                base_opacity=base_opacity_param
             )
         except Exception as e:
             raise ImageProcessingError(

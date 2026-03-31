@@ -16,6 +16,7 @@ from image_compositor import (
     parse_text_parameters,
     validate_text_parameters,
     create_base_image,
+    apply_base_opacity,
     resize_and_convert_image,
     paste_image_with_alpha,
     create_composite_image,
@@ -502,6 +503,72 @@ class TestParseColorForBase(unittest.TestCase):
         """無効なカラー文字列は白を返す"""
         from text_renderer import _parse_color
         self.assertEqual(_parse_color('invalid'), (255, 255, 255))
+
+
+class TestBaseOpacity(unittest.TestCase):
+    """ベース画像透明度のテスト"""
+
+    def test_opacity_100_unchanged(self):
+        """opacity=100でベース画像が変更されない"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 100)
+        self.assertEqual(result.getpixel((50, 50)), (255, 255, 255, 255))
+
+    def test_opacity_0_fully_transparent(self):
+        """opacity=0で完全透明になる"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 0)
+        self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))
+
+    def test_opacity_50_half_transparent(self):
+        """opacity=50でアルファが約半分になる"""
+        base = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        result = apply_base_opacity(base, 50)
+        pixel = result.getpixel((50, 50))
+        self.assertEqual(pixel[0], 255)  # R保持
+        self.assertEqual(pixel[1], 0)    # G保持
+        self.assertEqual(pixel[2], 0)    # B保持
+        self.assertAlmostEqual(pixel[3], 127, delta=2)  # alpha ≈ 127
+
+    def test_opacity_clamp_over_100(self):
+        """100超の値でも画像が返される（create_composite_imageがクランプ）"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 150)
+        self.assertEqual(result.getpixel((50, 50)), (255, 255, 255, 255))
+
+    def test_opacity_clamp_negative(self):
+        """負の値で完全透明になる"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, -10)
+        self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))
+
+    def test_composite_with_opacity(self):
+        """create_composite_imageにbase_opacityを渡して動作する"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params, base_opacity=50)
+        self.assertEqual(result.mode, 'RGBA')
+        # 画像が配置されていない領域は半透明白
+        pixel = result.getpixel((0, 0))
+        self.assertAlmostEqual(pixel[3], 127, delta=2)
+
+    def test_composite_default_opacity(self):
+        """base_opacity省略時はデフォルト100（不透明）"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params)
+        pixel = result.getpixel((0, 0))
+        self.assertEqual(pixel, (255, 255, 255, 255))
 
 
 if __name__ == '__main__':

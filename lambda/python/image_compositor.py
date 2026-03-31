@@ -165,6 +165,30 @@ def create_base_image(base_img: Optional[Image.Image], canvas_size: Tuple[int, i
     return base_img
 
 
+def apply_base_opacity(base_img: Image.Image, opacity: int) -> Image.Image:
+    """
+    ベース画像にopacity（透明度）を適用する
+
+    Args:
+        base_img: ベース画像（RGBAモード）
+        opacity: 透明度（0=完全透明、100=不透明）
+
+    Returns:
+        Image.Image: opacity適用後のベース画像
+    """
+    if opacity >= 100:
+        return base_img
+    if opacity <= 0:
+        return Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+
+    # アルファチャンネルにopacityを乗算
+    r, g, b, a = base_img.split()
+    a = a.point(lambda x: int(x * opacity / 100))
+    base_img = Image.merge('RGBA', (r, g, b, a))
+    logger.info(f"Applied base opacity: {opacity}%")
+    return base_img
+
+
 def resize_and_convert_image(image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:
     """
     画像を高品質でリサイズし、RGBAモードに変換する
@@ -210,10 +234,11 @@ def create_composite_image(base_img: Optional[Image.Image],
                           image2: Optional[Image.Image],
                           image3: Optional[Image.Image],
                           params: Dict[str, Dict[str, int]],
-                          text_params: Optional[Dict[str, Dict[str, Any]]] = None) -> Image.Image:
+                          text_params: Optional[Dict[str, Dict[str, Any]]] = None,
+                          base_opacity: int = 100) -> Image.Image:
     """
     1つ、2つ、または3つの画像を合成する（image1のみ必須）
-    
+
     Args:
         base_img: ベース画像（Noneの場合は透明背景）
         image1: 合成する1つ目の画像（必須）
@@ -221,10 +246,11 @@ def create_composite_image(base_img: Optional[Image.Image],
         image3: 合成する3つ目の画像（オプション）
         params: 各画像の配置パラメータ
         text_params: テキスト描画パラメータ（オプション）
+        base_opacity: ベース画像の透明度（0-100、デフォルト100=不透明）
 
     Returns:
         Image.Image: 合成された画像
-        
+
     Raises:
         ValueError: パラメータが無効な場合
         Exception: 合成処理に失敗した場合
@@ -234,15 +260,18 @@ def create_composite_image(base_img: Optional[Image.Image],
         validation_errors = validate_image_parameters(params)
         if validation_errors:
             raise ValueError(f"Invalid parameters: {', '.join(validation_errors)}")
-        
+
         # 画像数をカウント
         image_count = 1  # image1は必須
         if image2: image_count += 1
         if image3: image_count += 1
         logger.info(f"Creating composite with {image_count} images")
-        
+
         # ベース画像の準備
         composite = create_base_image(base_img)
+
+        # ベース画像にopacityを適用
+        composite = apply_base_opacity(composite, base_opacity)
         
         # 画像1の合成（必須）
         logger.info(f"Compositing image1 at ({params['image1']['x']}, {params['image1']['y']})")
