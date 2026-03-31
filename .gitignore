@@ -14,9 +14,7 @@ cdk.out
 *.pyc
 
 # Test output files (temporary)
-test/test-results/*
-!test/test-results/.gitkeep
-!test/test-results/README.md
+test/test-results/
 
 # Claude Code
 .claude/
