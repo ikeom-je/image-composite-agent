@@ -1,5 +1,20 @@
 # 画像合成REST API 開発履歴
 
+## 2026-04-01: ベース画像の透明度（opacity）パラメータ追加 (Issue #7)
+
+### ベース画像透明度
+- **baseOpacityパラメータ追加**: 0〜100（0=完全透明、100=不透明、デフォルト100）
+- **image_compositor.py**: apply_base_opacity()関数追加（アルファチャンネル乗算）
+- **image_processor.py**: baseOpacityパラメータ取得・クランプ・create_composite_imageへ渡す
+- **agent_tools.py**: compose_images/generate_videoにbase_opacityパラメータ追加
+- **agent_prompts.py**: 透明度指定の説明追加
+- **App.vue**: ベース画像透明度スライダー（0-100%）追加
+- **後方互換性維持**: デフォルト100で既存動作に影響なし
+
+### テスト
+- apply_base_opacityユニットテスト7件追加
+- 全50テストパス
+
 ## 2026-03-29: ベース画像に白背景・カスタム背景色対応 (Issue #6)
 
 ### 白背景・カスタム背景色
