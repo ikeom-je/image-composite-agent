@@ -73,7 +73,7 @@ jobs:
       - name: Deploy ImageProcessorApiStack
         run: npx cdk deploy ImageProcessorApiStack --require-approval never
         env:
-          AGENTMODEL: ${{ vars.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0' }}
+          AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
 
   # -------------------------------------------------------
   # 3. フロントエンドデプロイ（CDK - S3 + CloudFront）
