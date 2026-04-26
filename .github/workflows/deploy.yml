@@ -249,3 +249,16 @@ jobs:
             done
             echo "CLOUDFRONT_DOMAIN updated to ${CF_DOMAIN}"
           fi
+
+  # -------------------------------------------------------
+  # 4. デプロイ後 E2Eテスト
+  # -------------------------------------------------------
+  e2e-test:
+    name: E2E Test (${{ needs.resolve-env.outputs.env_name }})
+    needs: [resolve-env, deploy-frontend]
+    if: always() && needs.deploy-frontend.result == 'success'
+    uses: ./.github/workflows/e2e-test.yml
+    with:
+      environment: ${{ needs.resolve-env.outputs.env_name }}
+      test_suite: api
+    secrets: inherit
