@@ -36,7 +36,9 @@ Resources:
               StringLike:
                 token.actions.githubusercontent.com:sub:
                   - !Sub "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main"
+                  - !Sub "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/dev"
                   - !Sub "repo:${GitHubOrg}/${GitHubRepo}:environment:production"
+                  - !Sub "repo:${GitHubOrg}/${GitHubRepo}:environment:staging"
       Policies:
         - PolicyName: cdk-deploy-policy
           PolicyDocument:

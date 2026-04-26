@@ -1,12 +1,22 @@
-# CD パイプライン - AWS デプロイ
-# mainブランチへのpush時に実行（手動トリガーも可能）
+# CD パイプライン - AWS デプロイ（3環境対応）
+# staging: devブランチへのpush時に自動デプロイ
+# production: mainブランチへのpush時に自動デプロイ
+# 手動トリガーで環境・対象を選択可能
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
     inputs:
+      environment:
+        description: "デプロイ先環境"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
       target:
         description: "デプロイ対象"
         required: true
@@ -21,6 +31,10 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
 env:
   NODE_VERSION: "20"
   PYTHON_VERSION: "3.12"
@@ -28,24 +42,59 @@ env:
 
 jobs:
   # -------------------------------------------------------
-  # 1. CI チェック（デプロイ前にビルド・テスト通過を確認）
+  # 0. 環境名の決定
+  # -------------------------------------------------------
+  resolve-env:
+    name: Resolve Environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.resolve.outputs.env_name }}
+      stack_suffix: ${{ steps.resolve.outputs.stack_suffix }}
+    steps:
+      - id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            ENV="production"
+          elif [ "${{ github.ref_name }}" = "dev" ]; then
+            ENV="staging"
+          else
+            ENV="dev"
+          fi
+
+          if [ "$ENV" = "production" ]; then
+            SUFFIX=""
+          elif [ "$ENV" = "staging" ]; then
+            SUFFIX="-Staging"
+          else
+            SUFFIX="-Dev"
+          fi
+
+          echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
+          echo "stack_suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "Environment: $ENV (suffix: ${SUFFIX:-none})"
+
+  # -------------------------------------------------------
+  # 1. CI チェック
   # -------------------------------------------------------
   ci-check:
     name: CI Check
     uses: ./.github/workflows/ci.yml
 
   # -------------------------------------------------------
-  # 2. バックエンドデプロイ（CDK - API Gateway, Lambda, S3等）
+  # 2. バックエンドデプロイ
   # -------------------------------------------------------
   deploy-backend:
-    name: Deploy Backend
-    needs: ci-check
+    name: Deploy Backend (${{ needs.resolve-env.outputs.env_name }})
+    needs: [resolve-env, ci-check]
     if: >-
       github.event_name == 'push' ||
       github.event.inputs.target == 'all' ||
       github.event.inputs.target == 'backend'
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 20
+    environment: ${{ needs.resolve-env.outputs.env_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -70,23 +119,40 @@ jobs:
       - name: TypeScript build
         run: npm run build
 
-      - name: Deploy ImageProcessorApiStack
-        run: npx cdk deploy ImageProcessorApiStack --require-approval never
+      - name: Create dummy ffmpeg layer
+        run: |
+          mkdir -p lambda-layers
+          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
+            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip -
+          fi
+
+      - name: Deploy ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}
+        run: |
+          STACK="ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}"
+          npx cdk deploy "$STACK" --require-approval never
         env:
           AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
+          ENVIRONMENT: ${{ needs.resolve-env.outputs.env_name }}
 
   # -------------------------------------------------------
-  # 3. フロントエンドデプロイ（CDK - S3 + CloudFront）
+  # 3. フロントエンドデプロイ
   # -------------------------------------------------------
   deploy-frontend:
-    name: Deploy Frontend
-    needs: [ci-check, deploy-backend]
+    name: Deploy Frontend (${{ needs.resolve-env.outputs.env_name }})
+    needs: [resolve-env, ci-check, deploy-backend]
     if: >-
-      github.event_name == 'push' ||
-      github.event.inputs.target == 'all' ||
-      github.event.inputs.target == 'frontend'
+      always() && !cancelled() &&
+      needs.ci-check.result == 'success' &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       github.event.inputs.target == 'all' ||
+       github.event.inputs.target == 'frontend')
     runs-on: ubuntu-latest
-    environment: production
+    timeout-minutes: 20
+    environment: ${{ needs.resolve-env.outputs.env_name }}
+    env:
+      STACK_SUFFIX: ${{ needs.resolve-env.outputs.stack_suffix }}
+      ENV_NAME: ${{ needs.resolve-env.outputs.env_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -94,6 +160,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -107,25 +177,39 @@ jobs:
       - name: TypeScript build
         run: npm run build
 
+      - name: Create dummy ffmpeg layer
+        run: |
+          mkdir -p lambda-layers
+          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
+            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip -
+          fi
+
       - name: Build frontend
         run: cd frontend && npm ci && npm run build
 
-      - name: Deploy FrontendStack
-        run: npx cdk deploy FrontendStack --require-approval never
-
-      - name: Generate config.json & sync to S3
+      - name: Deploy FrontendStack${{ env.STACK_SUFFIX }}
         run: |
-          # API Stack出力からconfig.jsonを生成
-          API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorApiEndpoint'].OutputValue" --output text)
-          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorUploadApiEndpoint'].OutputValue" --output text)
-          CHAT_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorChatApiEndpoint'].OutputValue" --output text)
-          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name FrontendStack \
-            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text)
+          STACK="FrontendStack${STACK_SUFFIX}"
+          npx cdk deploy "$STACK" --require-approval never
+        env:
+          ENVIRONMENT: ${{ env.ENV_NAME }}
+
+      - name: Generate config.json
+        run: |
+          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
+          FRONT_STACK="FrontendStack${STACK_SUFFIX}"
+
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorUploadApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorChatApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
           VERSION=$(node -p "require('./package.json').version")
           BUILD_HASH=${GITHUB_SHA::7}
+          DEBUG=$( [ "$ENV_NAME" = "production" ] && echo "false" || echo "true" )
 
           cat > frontend/dist/config.json <<EOF
           {
@@ -135,13 +219,13 @@ jobs:
             "cloudfrontUrl": "https://${CF_DOMAIN}",
             "version": "${VERSION}",
             "buildHash": "${BUILD_HASH}",
-            "environment": "production",
+            "environment": "${ENV_NAME}",
             "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
             "region": "${{ env.AWS_REGION }}",
             "features": {
               "enableS3Upload": true,
               "enable3ImageComposition": true,
-              "enableDebugMode": false,
+              "enableDebugMode": ${DEBUG},
               "enableAnalytics": true,
               "enableCaching": true,
               "enableErrorReporting": true
@@ -151,11 +235,13 @@ jobs:
 
       - name: Update Lambda CLOUDFRONT_DOMAIN
         run: |
-          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name FrontendStack \
-            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text)
+          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
+          FRONT_STACK="FrontendStack${STACK_SUFFIX}"
+          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
           if [ -n "$CF_DOMAIN" ]; then
             for FUNC_NAME in $(aws lambda list-functions \
-              --query "Functions[?starts_with(FunctionName, 'ImageProcessorApiStack-ImageProcessor') || starts_with(FunctionName, 'ImageProcessorApiStack-AgentFunction')].FunctionName" \
+              --query "Functions[?starts_with(FunctionName, '${API_STACK}-ImageProcessor') || starts_with(FunctionName, '${API_STACK}-AgentFunction')].FunctionName" \
               --output text); do
               CURRENT_ENV=$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query "Environment.Variables" --output json)
               UPDATED_ENV=$(echo "$CURRENT_ENV" | python3 -c "import sys,json; d=json.load(sys.stdin); d['CLOUDFRONT_DOMAIN']='${CF_DOMAIN}'; print(json.dumps({'Variables':d}))")

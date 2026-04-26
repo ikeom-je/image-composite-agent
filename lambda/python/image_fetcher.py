@@ -303,6 +303,10 @@ def validate_image_path(path: str) -> bool:
         url_pattern = r'^https?://[^\s/$.?#].[^\s]*$'
         return bool(re.match(url_pattern, path))
 
+    # 不明なスキームのURLは拒否
+    if '://' in path:
+        return False
+
     # アップロード済み画像（ファイル名またはS3キー）
     if path.startswith('uploads/') or '.' in path:
         return True
