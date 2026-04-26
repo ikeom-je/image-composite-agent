@@ -23,6 +23,18 @@
 4. **設計準拠**: コンポーネント構造、データモデル、API設計は`design.md`に従う
 5. **要件トレーサビリティ**: 各タスクの `_要件: X.X_` を参照し、対応する要件が満たされていることを確認する
 
+### 環境戦略
+
+単一AWSアカウント内で3環境を運用。スタック名サフィックスで分離。
+
+| 環境 | ブランチ | デプロイ | スタック名例 |
+|------|---------|---------|------------|
+| dev | feature/*, bugfix/* | 手動 | `ImageProcessorApiStack-Dev` |
+| staging | dev | CI/CD自動 | `ImageProcessorApiStack-Staging` |
+| production | main | CI/CD自動 | `ImageProcessorApiStack` |
+
+開発フロー: `feature/* → dev(staging) → main(production)`
+
 ### 環境変数
 
 デプロイ前に`.env.local`を読み込むこと（`source .env.local`）。設定項目は`.env.local.example`を参照。
@@ -123,7 +135,13 @@
 
 ```bash
 source .env.local  # 環境変数読み込み（AGENTMODEL等）
-npx cdk deploy ImageProcessorApiStack --require-approval never
+
+# dev環境（手動・作業ブランチの動作確認用）
+ENVIRONMENT=dev ./scripts/deploy.sh
+
+# staging/production環境はCI/CDで自動デプロイ
+# staging: devブランチへマージ時に自動実行
+# production: mainブランチへマージ時に自動実行
 ```
 
 ## 重要な設計原則
