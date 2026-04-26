@@ -34,7 +34,9 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/${GitHubRepo}:*"
+                token.actions.githubusercontent.com:sub:
+                  - !Sub "repo:${GitHubOrg}/${GitHubRepo}:ref:refs/heads/main"
+                  - !Sub "repo:${GitHubOrg}/${GitHubRepo}:environment:production"
       Policies:
         - PolicyName: cdk-deploy-policy
           PolicyDocument:
@@ -52,10 +54,41 @@ Resources:
                   - logs:*
                   - cloudwatch:*
                   - cloudfront:*
-                  - iam:*
                   - sts:AssumeRole
                   - ssm:GetParameter
                 Resource: "*"
+              - Sid: IAMScoped
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:CreateServiceLinkedRole
+                  - iam:CreatePolicy
+                  - iam:DeletePolicy
+                  - iam:GetPolicy
+                  - iam:GetPolicyVersion
+                  - iam:ListPolicyVersions
+                  - iam:CreatePolicyVersion
+                  - iam:DeletePolicyVersion
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/ImageProcessorApiStack-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/FrontendStack-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/ImageCompositeViewerStack-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/cdk-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/ImageProcessorApiStack-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/FrontendStack-*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/cdk-*"
               - Sid: BedrockInvoke
                 Effect: Allow
                 Action:

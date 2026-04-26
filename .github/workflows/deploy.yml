@@ -24,7 +24,7 @@ permissions:
 env:
   NODE_VERSION: "20"
   PYTHON_VERSION: "3.12"
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-northeast-1
 
 jobs:
   # -------------------------------------------------------

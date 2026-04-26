@@ -47,7 +47,7 @@ jobs:
         run: npx cdk synth --quiet
         env:
           CDK_DEFAULT_ACCOUNT: "000000000000"
-          CDK_DEFAULT_REGION: us-east-1
+          CDK_DEFAULT_REGION: ap-northeast-1
 
   # -------------------------------------------------------
   # 2. フロントエンド ビルド & Lint
@@ -102,7 +102,6 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s test/lambda -v
-        continue-on-error: true
         env:
           PYTHONPATH: lambda/python
 
@@ -129,4 +128,3 @@ jobs:
 
       - name: Run Vitest
         run: npx vitest run --reporter=verbose
-        continue-on-error: true
