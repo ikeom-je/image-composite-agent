@@ -26,7 +26,7 @@ inclusion: auto
 
 - IaC: AWS CDK 2.110.0 (TypeScript)
 - 言語: TypeScript 5.6.3
-- Node.js: 18以上
+- Node.js: 22以上
 - パッケージマネージャー: npm
 
 ## AIエージェント

@@ -247,7 +247,7 @@ aws configure set region ap-northeast-1
 
 ### 必要なツール
 
-- Node.js 20以上
+- Node.js 22以上
 - AWS CLI（設定済み）
 - Docker（CDKバンドリング用）
 

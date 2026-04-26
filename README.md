@@ -103,7 +103,7 @@ curl "${API_URL}?image1=test&image2=test&img1_x=100&img1_y=100&img2_x=300&img2_y
 ### 前提条件
 
 - AWS CLI設定済み（defaultプロファイル使用）
-- Node.js 18以上
+- Node.js 22以上
 - Docker（CDKバンドリング用）
 
 ### AWS設定
