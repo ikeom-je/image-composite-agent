@@ -63,13 +63,9 @@ jobs:
             ENV="dev"
           fi
 
-          if [ "$ENV" = "production" ]; then
-            SUFFIX=""
-          elif [ "$ENV" = "staging" ]; then
-            SUFFIX="-Staging"
-          else
-            SUFFIX="-Dev"
-          fi
+          # TODO: CDK側の3環境対応後にサフィックスを有効化
+          # 現時点では全環境で同一スタック名を使用
+          SUFFIX=""
 
           echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
           echo "stack_suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
