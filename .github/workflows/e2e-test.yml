@@ -1,0 +1,239 @@
+# E2Eテスト - デプロイ済み環境に対してPlaywright実行
+# dev環境: 手動トリガー（作業ブランチからの動作確認用）
+# staging環境: devブランチへのpush時に自動実行
+# production環境: mainブランチへのpush時に自動実行
+name: E2E Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "テスト対象環境"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      test_suite:
+        description: "テストスイート"
+        required: true
+        default: "api"
+        type: choice
+        options:
+          - api
+          - frontend
+          - chat-agent
+          - all
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      test_suite:
+        required: false
+        type: string
+        default: "api"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  # -------------------------------------------------------
+  # 1. 環境名の決定・URL取得
+  # -------------------------------------------------------
+  resolve-env:
+    name: Resolve Environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.resolve.outputs.env_name }}
+      stack_suffix: ${{ steps.resolve.outputs.stack_suffix }}
+      api_url: ${{ steps.urls.outputs.api_url }}
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
+      chat_api_url: ${{ steps.urls.outputs.chat_api_url }}
+    steps:
+      - id: resolve
+        run: |
+          ENV="${{ inputs.environment }}"
+          if [ "$ENV" = "production" ]; then
+            SUFFIX=""
+          elif [ "$ENV" = "staging" ]; then
+            SUFFIX="-Staging"
+          else
+            SUFFIX="-Dev"
+          fi
+          echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
+          echo "stack_suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: urls
+        name: Get stack outputs
+        run: |
+          API_STACK="ImageProcessorApiStack${{ steps.resolve.outputs.stack_suffix }}"
+          FRONT_STACK="FrontendStack${{ steps.resolve.outputs.stack_suffix }}"
+
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorApiEndpoint'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorChatApiEndpoint'].OutputValue" \
+            --output text 2>/dev/null || echo "")
+
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
+          echo "chat_api_url=$CHAT_URL" >> "$GITHUB_OUTPUT"
+
+          echo "API_URL: $API_URL"
+          echo "FRONTEND_URL: $FRONTEND_URL"
+          echo "CHAT_API_URL: $CHAT_URL"
+
+  # -------------------------------------------------------
+  # 2. API統合テスト（Playwright）
+  # -------------------------------------------------------
+  api-tests:
+    name: API Tests (${{ needs.resolve-env.outputs.env_name }})
+    needs: resolve-env
+    if: >-
+      inputs.test_suite == 'api' ||
+      inputs.test_suite == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API tests
+        run: npx playwright test --config=test/playwright-api.config.ts --project=api-tests --reporter=list
+        env:
+          API_URL: ${{ needs.resolve-env.outputs.api_url }}
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results-${{ needs.resolve-env.outputs.env_name }}
+          path: test/test-results/
+          retention-days: 7
+
+  # -------------------------------------------------------
+  # 3. フロントエンドE2Eテスト（Playwright）
+  # -------------------------------------------------------
+  frontend-tests:
+    name: Frontend E2E Tests (${{ needs.resolve-env.outputs.env_name }})
+    needs: resolve-env
+    if: >-
+      inputs.test_suite == 'frontend' ||
+      inputs.test_suite == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend E2E tests
+        run: |
+          npx playwright test --config=test/playwright.config.ts \
+            --project=upload-tests \
+            --project=selection-tests \
+            --project=integration-tests \
+            --reporter=list
+        env:
+          API_URL: ${{ needs.resolve-env.outputs.api_url }}
+          FRONTEND_URL: ${{ needs.resolve-env.outputs.frontend_url }}
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results-${{ needs.resolve-env.outputs.env_name }}
+          path: test/test-results/
+          retention-days: 7
+
+  # -------------------------------------------------------
+  # 4. Chat Agent テスト（API + E2E）
+  # -------------------------------------------------------
+  chat-agent-tests:
+    name: Chat Agent Tests (${{ needs.resolve-env.outputs.env_name }})
+    needs: resolve-env
+    if: >-
+      inputs.test_suite == 'chat-agent' ||
+      inputs.test_suite == 'all'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Chat Agent API tests
+        run: |
+          npx playwright test --config=test/playwright-api.config.ts \
+            test/e2e/chat-agent.api.spec.ts \
+            --reporter=list
+        env:
+          API_URL: ${{ needs.resolve-env.outputs.api_url }}
+          CHAT_API_URL: ${{ needs.resolve-env.outputs.chat_api_url }}
+          CI: true
+
+      - name: Run Chat Agent E2E tests
+        run: |
+          npx playwright test --config=test/playwright.config.ts \
+            --project=chat-agent-tests \
+            --reporter=list
+        env:
+          FRONTEND_URL: ${{ needs.resolve-env.outputs.frontend_url }}
+          CHAT_API_URL: ${{ needs.resolve-env.outputs.chat_api_url }}
+          CI: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-agent-test-results-${{ needs.resolve-env.outputs.env_name }}
+          path: test/test-results/
+          retention-days: 7

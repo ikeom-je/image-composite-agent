@@ -37,6 +37,44 @@ inclusion: auto
 - カバレッジ: 完全なユーザーワークフロー、UI操作
 - 実環境: 完全なデプロイ済みスタック
 
+## デプロイ後の検証フロー
+
+バックエンドとフロントエンドを段階的にデプロイし、各段階でe2eテストを実施する。
+
+```
+1. バックエンドデプロイ  →  2. APIテスト(e2e)
+       ↓ (API_URL取得)
+3. フロントエンドビルド  →  4. フロントエンドデプロイ  →  5. フロントエンドE2Eテスト
+```
+
+### ローカル実行手順
+
+```bash
+# 1. バックエンドデプロイ
+source .env.local
+npm run build
+npx cdk deploy ImageProcessorApiStack --require-approval never
+
+# 2. API e2eテスト（バックエンド単体の動作確認）
+export API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+npm run test:api
+
+# 3. フロントエンドビルド + デプロイ
+cd frontend && npm run build && cd ..
+npx cdk deploy FrontendStack --require-approval never
+
+# 4. フロントエンドE2Eテスト
+export FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name FrontendStack \
+  --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" --output text)
+npm run test:all-e2e
+```
+
+### GitHub Actions
+
+- CI/CDパイプライン（`deploy.yml`）がデプロイ後に `e2e-test.yml` を自動呼び出し
+- 手動トリガー: Actions → E2E Test → Run workflow → 環境・テストスイート選択
+
 ## テストコマンド
 
 ```bash
@@ -82,8 +120,19 @@ test.describe('機能', () => {
 
 ## テストデータ
 
-- テスト画像: `lambda/python/images/`
-- 期待される出力: `test/test-assets/expected-*.png`
+### テスト用画像の分類
+
+| 種類 | 場所 | 用途 |
+|------|------|------|
+| 基本テスト画像 | `lambda/python/images/` | `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`, `default-base.png` |
+| 期待値画像 | `test/test-assets/expected-*.png` | APIテストのレスポンス比較用。正しいPNG形式で管理 |
+| テスト出力 | `test/test-results/` | テスト実行時の一時ファイル。.gitignoreで除外済み |
+
+### 期待値画像の管理
+
+- 必ず正しいPNG画像形式で保存（base64テキストファイルは不可）
+- 確認: `file test/test-assets/expected-*.png` → "PNG image data" と表示されること
+- 修正: `npm run fix-test-assets`
 - 再生成: `npm run regenerate-expected-images`
 
 ## ベストプラクティス

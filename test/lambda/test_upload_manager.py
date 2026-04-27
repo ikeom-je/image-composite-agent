@@ -12,6 +12,7 @@ import unittest
 import json
 import os
 import sys
+from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
 from io import BytesIO
 
@@ -148,12 +149,12 @@ class TestUploadManager(unittest.TestCase):
                 {
                     'Key': 'uploads/images/test1.png',
                     'Size': 1024000,
-                    'LastModified': '2024-01-01T00:00:00Z'
+                    'LastModified': datetime(2024, 1, 1, 0, 0, 0)
                 },
                 {
                     'Key': 'uploads/images/test2.jpg',
                     'Size': 2048000,
-                    'LastModified': '2024-01-02T00:00:00Z'
+                    'LastModified': datetime(2024, 1, 2, 0, 0, 0)
                 }
             ]
         }
