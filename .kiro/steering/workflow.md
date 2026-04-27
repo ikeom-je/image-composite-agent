@@ -37,22 +37,29 @@ npm run build
 npm run synth
 ```
 
-### 4. dev環境へのデプロイ（作業ブランチ確認用）
+### 4. dev環境へのデプロイ + e2eテスト（段階的検証）
+
+バックエンド→APIテスト→フロントエンド→E2Eテストの順に段階的に検証する。
+
 ```bash
-# 初回のみ
-cdk bootstrap
+source .env.local
 
-# dev環境にデプロイ（作業ブランチから）
-ENVIRONMENT=dev ./scripts/deploy.sh
+# 4-1. バックエンドデプロイ
+npm run build
+npx cdk deploy ImageProcessorApiStack --require-approval never
 
-# テスト画像をアップロード
-cd scripts && ./upload-test-images.sh auto
-```
-
-### 5. e2eテストの実行（dev環境）
-```bash
-# デプロイ後にe2eテストで動作確認
+# 4-2. API e2eテスト（バックエンド単体の動作確認）
+export API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
+  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
 npm run test:api
+
+# 4-3. フロントエンドビルド + デプロイ
+cd frontend && npm run build && cd ..
+npx cdk deploy FrontendStack --require-approval never
+
+# 4-4. フロントエンドE2Eテスト
+export FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name FrontendStack \
+  --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" --output text)
 npm run test:all-e2e
 ```
 
