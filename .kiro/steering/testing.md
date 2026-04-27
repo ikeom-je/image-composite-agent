@@ -120,8 +120,19 @@ test.describe('機能', () => {
 
 ## テストデータ
 
-- テスト画像: `lambda/python/images/`
-- 期待される出力: `test/test-assets/expected-*.png`
+### テスト用画像の分類
+
+| 種類 | 場所 | 用途 |
+|------|------|------|
+| 基本テスト画像 | `lambda/python/images/` | `circle_red.png`, `rectangle_blue.png`, `triangle_green.png`, `default-base.png` |
+| 期待値画像 | `test/test-assets/expected-*.png` | APIテストのレスポンス比較用。正しいPNG形式で管理 |
+| テスト出力 | `test/test-results/` | テスト実行時の一時ファイル。.gitignoreで除外済み |
+
+### 期待値画像の管理
+
+- 必ず正しいPNG画像形式で保存（base64テキストファイルは不可）
+- 確認: `file test/test-assets/expected-*.png` → "PNG image data" と表示されること
+- 修正: `npm run fix-test-assets`
 - 再生成: `npm run regenerate-expected-images`
 
 ## ベストプラクティス

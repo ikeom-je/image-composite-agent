@@ -46,6 +46,14 @@ inclusion: auto
 - DynamoDB（会話履歴管理）
 - Bedrock（AI推論）
 - SQS（デッドレターキュー）
+- IAM OIDC（GitHub Actions連携）
+
+## CI/CD
+
+- GitHub Actions: CI（ビルド・テスト）+ CD（3環境デプロイ）+ E2Eテスト
+- ワークフロー: `.github/workflows/ci.yml`, `deploy.yml`, `e2e-test.yml`
+- AWS認証: OIDC（`aws-actions/configure-aws-credentials@v4`）
+- デプロイロール: `github-actions-image-compositor-deploy`
 
 ## よく使うコマンド
 

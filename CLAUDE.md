@@ -79,6 +79,10 @@
 │   ├── lambda/                   # Python単体テスト
 │   └── test-assets/              # テスト用画像
 ├── scripts/                      # ビルド/デプロイ/ユーティリティスクリプト
+├── .github/workflows/            # GitHub Actions CI/CD
+│   ├── ci.yml                    # CI: ビルド検証 + テスト（4並列ジョブ）
+│   ├── deploy.yml                # CD: 3環境自動デプロイ（dev/staging/production）
+│   └── e2e-test.yml              # デプロイ後e2eテスト（Playwright）
 └── .kiro/specs/                  # 仕様書（要件・設計・タスク）
     ├── image-composition/        # 画像合成機能仕様
     └── strands-agent/            # チャットエージェント仕様
@@ -119,12 +123,13 @@
 
 ### テスト
 
-- **E2Eテスト**: `npx playwright test`（設定: `test/playwright.config.ts`）
-- **APIテスト**: `test/run-api-tests.sh`（設定: `test/playwright-api.config.ts`）
+- **Lambda単体テスト**: `PYTHONPATH=lambda/python python3 -m unittest discover -s test/lambda`
+- **APIテスト**: `API_URL=... npm run test:api`（設定: `test/playwright-api.config.ts`）
+- **フロントエンドE2E**: `FRONTEND_URL=... npm run test:all-e2e`（設定: `test/playwright.config.ts`）
 - **Agent APIテスト**: `CHAT_API_URL=... npx playwright test --config=test/playwright-api.config.ts --grep "Chat Agent"`
 - **Agent E2Eテスト**: `FRONTEND_URL=... npx playwright test --project=chat-agent-tests`
-- **Lambda単体テスト**: `python3 -m unittest discover -s test/lambda`
 - **テスト画像**: `test/test-assets/`（期待値画像は正しいPNG形式で管理）
+- **CI/CD**: `.github/workflows/ci.yml`（ビルド+テスト）、`deploy.yml`（デプロイ）、`e2e-test.yml`（デプロイ後e2e）
 
 ### コミット
 
