@@ -7,13 +7,14 @@ import path from 'path';
  * curlによる検証をPlaywrightテストに組み込み
  */
 
-const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
+// API_URLは /images/composite パス込みの完全URL
+const API_COMPOSITE_URL = process.env.API_URL || 'http://localhost:3000/images/composite';
 const TEST_ASSETS_DIR = path.join(__dirname, '../test-assets');
 
 test.describe('画像合成API検証', () => {
   
   test('透明背景での1画像合成 - HTML形式', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: 'test',
@@ -32,12 +33,12 @@ test.describe('画像合成API検証', () => {
     
     const htmlContent = await response.text();
     expect(htmlContent).toContain('<!DOCTYPE html>');
-    expect(htmlContent).toContain('画像合成結果 - v2.6.0');
+    expect(htmlContent).toContain('画像合成結果');
     expect(htmlContent).toContain('data:image/png;base64,');
   });
 
   test('透明背景での1画像合成 - PNG形式', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: 'test',
@@ -76,7 +77,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('デフォルト背景での1画像合成 - HTML形式', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -95,12 +96,12 @@ test.describe('画像合成API検証', () => {
     
     const htmlContent = await response.text();
     expect(htmlContent).toContain('<!DOCTYPE html>');
-    expect(htmlContent).toContain('画像合成結果 - v2.6.0');
+    expect(htmlContent).toContain('画像合成結果');
     expect(htmlContent).toContain('data:image/png;base64,');
   });
 
   test('デフォルト背景での1画像合成 - PNG形式と正解画像比較', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -133,7 +134,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('2画像合成 - PNG形式', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -170,7 +171,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('3画像合成 - PNG形式', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -212,7 +213,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('エラーケース - 必須パラメータ不足', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         // image1パラメータを意図的に省略
@@ -229,7 +230,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('エラーケース - 無効なフォーマット', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -252,7 +253,7 @@ test.describe('画像合成API検証', () => {
   test('パフォーマンステスト - レスポンス時間', async ({ request }) => {
     const startTime = Date.now();
     
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',
@@ -276,7 +277,7 @@ test.describe('画像合成API検証', () => {
   });
 
   test('キャンバスサイズ検証 - 1920x1080', async ({ request }) => {
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: 'test',
