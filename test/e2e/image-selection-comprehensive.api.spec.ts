@@ -135,7 +135,7 @@ test.describe('画像選択機能包括テスト', () => {
       }
     });
 
-    expect([200, 403, 404]).toContain(response3.status());
+    expect(response3.status()).toBe(200);
     console.log('✓ 3画像モード: 正常');
   });
 
@@ -389,7 +389,7 @@ test.describe('画像選択機能包括テスト', () => {
     };
 
     const response2 = await request.get(`${API_COMPOSITE_URL}`, { params: params2 });
-    expect([200, 403, 404]).toContain(response2.status());
+    expect(response2.status()).toBe(200);
     console.log('✓ 2画像選択時のパラメータ構造: 正常');
 
     // 3画像選択時のパラメータ確認
@@ -403,7 +403,7 @@ test.describe('画像選択機能包括テスト', () => {
     };
 
     const response3 = await request.get(`${API_COMPOSITE_URL}`, { params: params3 });
-    expect([200, 403, 404]).toContain(response3.status());
+    expect(response3.status()).toBe(200);
     console.log('✓ 3画像選択時のパラメータ構造: 正常');
   });
 
