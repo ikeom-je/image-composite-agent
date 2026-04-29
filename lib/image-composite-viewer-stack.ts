@@ -9,6 +9,10 @@ import * as path from 'path';
 import { Construct } from 'constructs';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { EnvironmentConfig, envExport } from './environment';
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
+const VERSION = packageJson.version;
 
 export interface ImageCompositeViewerStackProps extends cdk.StackProps {
   /**
@@ -20,14 +24,18 @@ export interface ImageCompositeViewerStackProps extends cdk.StackProps {
    * Upload API エンドポイントのURL（オプション）
    */
   uploadApiEndpoint?: string;
+  envConfig: EnvironmentConfig;
 }
 
 export class ImageCompositeViewerStack extends cdk.Stack {
   public readonly frontendBucket: s3.Bucket;
   public readonly distribution: cloudfront.Distribution;
+  private readonly envConfig: EnvironmentConfig;
 
-  constructor(scope: Construct, id: string, props?: ImageCompositeViewerStackProps) {
+  constructor(scope: Construct, id: string, props: ImageCompositeViewerStackProps) {
     super(scope, id, props);
+    this.envConfig = props.envConfig;
+    const envConfig = this.envConfig;
 
     // S3バケットの作成（フロントエンド用 - プライベートアクセス）
     this.frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
@@ -143,14 +151,14 @@ export class ImageCompositeViewerStack extends cdk.Stack {
 
   private deployConfig() {
     // API URLをFn.importValueで取得（デプロイ時に解決される）
-    const apiUrl = cdk.Fn.importValue('ImageProcessorApiEndpoint');
-    const uploadApiUrl = cdk.Fn.importValue('ImageProcessorUploadApiEndpoint');
+    const apiUrl = cdk.Fn.importValue(envExport('ImageProcessorApiEndpoint', this.envConfig));
+    const uploadApiUrl = cdk.Fn.importValue(envExport('ImageProcessorUploadApiEndpoint', this.envConfig));
 
     // config.jsonの内容をFn.joinで構築（CDKトークンを含む文字列を正しく連結）
     const configBody = cdk.Fn.join('', [
       '{"apiUrl":"', apiUrl,
       '","uploadApiUrl":"', uploadApiUrl,
-      '","version":"2.6.0","environment":"production"}',
+      '","version":"', VERSION, '","environment":"', this.envConfig.name, '"}',
     ]);
 
     // AwsCustomResourceでS3 PutObjectを実行

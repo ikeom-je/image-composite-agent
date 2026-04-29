@@ -84,13 +84,13 @@ jobs:
           FRONT_STACK="FrontendStack${{ steps.resolve.outputs.stack_suffix }}"
 
           API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorApiEndpoint'].OutputValue" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
             --output text 2>/dev/null || echo "")
           FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" \
             --output text 2>/dev/null || echo "")
           CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorChatApiEndpoint'].OutputValue" \
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" \
             --output text 2>/dev/null || echo "")
 
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"

@@ -8,6 +8,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
 import * as fs from 'fs';
+import { EnvironmentConfig, envName, envExport } from './environment';
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
 const VERSION = packageJson.version;
@@ -16,8 +17,9 @@ export class FrontendStack extends cdk.Stack {
   public readonly distribution: cloudfront.Distribution;
   public readonly frontendBucket: s3.Bucket;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: cdk.StackProps & { envConfig: EnvironmentConfig }) {
     super(scope, id, props);
+    const envConfig = props.envConfig;
 
     // --- S3バケット ---
     this.frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
@@ -26,8 +28,8 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- クロススタック参照 ---
-    const resourcesBucketName = cdk.Fn.importValue('ImageProcessorResourcesBucketName');
-    const resourcesBucketArn = cdk.Fn.importValue('ImageProcessorResourcesBucketArn');
+    const resourcesBucketName = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketName', envConfig));
+    const resourcesBucketArn = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketArn', envConfig));
 
     // リソースバケットの参照（generated-images/videos配信用）
     const resourcesBucket = s3.Bucket.fromBucketAttributes(this, 'ResourcesBucket', {
@@ -44,7 +46,7 @@ export class FrontendStack extends cdk.Stack {
     }));
 
     // リソースバケット用OAI: ApiStack側で作成・権限付与済み、IDをimportして使用
-    const resourcesOAIId = cdk.Fn.importValue('FrontendResourcesOAIId');
+    const resourcesOAIId = cdk.Fn.importValue(envExport('FrontendResourcesOAIId', envConfig));
     const resourcesOAI = cloudfront.OriginAccessIdentity.fromOriginAccessIdentityId(
       this, 'ResourcesOAI', resourcesOAIId
     );
@@ -52,7 +54,7 @@ export class FrontendStack extends cdk.Stack {
     // --- ResponseHeadersPolicy ---
     // index.html / config用: no-cache
     const noCachePolicy = new cloudfront.ResponseHeadersPolicy(this, 'NoCacheHeaders', {
-      responseHeadersPolicyName: 'frontend-no-cache',
+      responseHeadersPolicyName: envName('frontend-no-cache', envConfig),
       corsBehavior: {
         accessControlAllowOrigins: ['*'],
         accessControlAllowHeaders: ['*'],
@@ -70,10 +72,10 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- CloudFront CachePolicy ---
-    // 開発用: 全パス60秒キャッシュ
+    // 全パス最大60秒キャッシュ（デプロイ後60秒以内に最新版に切り替わる）
     const shortCachePolicy = new cloudfront.CachePolicy(this, 'ShortCachePolicy', {
-      cachePolicyName: 'frontend-short-cache',
-      defaultTtl: cdk.Duration.seconds(0),
+      cachePolicyName: envName('frontend-short-cache', envConfig),
+      defaultTtl: cdk.Duration.seconds(60),
       maxTtl: cdk.Duration.seconds(60),
       minTtl: cdk.Duration.seconds(0),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
@@ -120,7 +122,7 @@ export class FrontendStack extends cdk.Stack {
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: new cloudfront.CachePolicy(this, 'VideoCachePolicy', {
-            cachePolicyName: 'frontend-video-cache',
+            cachePolicyName: envName('frontend-video-cache', envConfig),
             defaultTtl: cdk.Duration.seconds(0),
             maxTtl: cdk.Duration.seconds(60),
             minTtl: cdk.Duration.seconds(0),
@@ -143,13 +145,13 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- BucketDeployment ---
-    // config.jsonはdeploy.shで生成してfrontend/dist/に配置する（Fn::ImportValue制約回避）
+    // config.jsonはdeploy.shがバックエンドデプロイ後にfrontend/dist/に生成してからFrontendStackをデプロイ。
+    // BucketDeploymentがfrontend/dist/ごとS3にアップロードするのでconfig.jsonも含まれる。
     const distDir = path.join(__dirname, '../frontend/dist');
     if (fs.existsSync(distDir)) {
       new s3deploy.BucketDeployment(this, 'DeployFrontend', {
         sources: [
           s3deploy.Source.asset(distDir),
-          // デプロイ毎にハッシュ変更を強制
           s3deploy.Source.jsonData('.deploy-meta.json', { deployedAt: new Date().toISOString(), version: VERSION }),
         ],
         destinationBucket: this.frontendBucket,
@@ -159,6 +161,7 @@ export class FrontendStack extends cdk.Stack {
         memoryLimit: 512,
         logRetention: logs.RetentionDays.ONE_WEEK,
       });
+      console.log('Frontend deployment configured successfully.');
     }
 
     // --- Outputs ---
@@ -175,7 +178,7 @@ export class FrontendStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DistributionDomain', {
       value: this.distribution.distributionDomainName,
       description: 'CloudFront Distribution Domain',
-      exportName: 'FrontendDistributionDomain',
+      exportName: envExport('FrontendDistributionDomain', envConfig),
     });
   }
 }
