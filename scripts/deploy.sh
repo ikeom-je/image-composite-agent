@@ -99,6 +99,35 @@ CONF
   echo "✅ config.json 生成完了"
 }
 
+# config.jsonをS3フロントエンドバケットに同期
+sync_config_to_s3() {
+  local BUCKET_NAME
+  BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+    --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" --output text 2>/dev/null || echo "")
+  if [ -z "$BUCKET_NAME" ]; then
+    # OutputKeyが異なる場合はリソースから直接取得
+    BUCKET_NAME=$(aws cloudformation list-stack-resources --stack-name "$FRONT_STACK" \
+      --query "StackResourceSummaries[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'FrontendBucket')].PhysicalResourceId" \
+      --output text 2>/dev/null || echo "")
+  fi
+  if [ -n "$BUCKET_NAME" ]; then
+    echo "📤 config.json → s3://${BUCKET_NAME}/"
+    aws s3 cp frontend/dist/config.json "s3://${BUCKET_NAME}/config.json" --content-type "application/json"
+    aws s3 cp frontend/dist/config.json "s3://${BUCKET_NAME}/config.${ENV}.json" --content-type "application/json"
+    # CloudFrontキャッシュ無効化
+    local DIST_ID
+    DIST_ID=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+      --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text 2>/dev/null || echo "")
+    if [ -n "$DIST_ID" ] && [ "$DIST_ID" != "None" ]; then
+      echo "🔄 CloudFrontキャッシュ無効化..."
+      aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/config.json" "/config.${ENV}.json" --no-cli-pager > /dev/null 2>&1 || true
+    fi
+    echo "✅ config.json S3同期完了"
+  else
+    echo "⚠️  フロントエンドバケット名取得失敗。config.json S3同期をスキップ"
+  fi
+}
+
 case "$STACK" in
   backend|api)
     echo "🚀 バックエンドのみデプロイ..."
@@ -108,8 +137,7 @@ case "$STACK" in
   frontend|front)
     echo "🔨 フロントエンドビルド..."
     cd frontend && npm run build && cd "$PROJECT_DIR"
-    generate_config
-    echo "🚀 フロントエンドデプロイ..."
+    echo "🚀 フロントエンドデプロイ（config.jsonはCDKで自動生成）..."
     npx cdk deploy "$FRONT_STACK" $CDK_CONTEXT --require-approval never
     update_lambda_cloudfront_domain
     ;;
@@ -118,8 +146,7 @@ case "$STACK" in
     cd frontend && npm run build && cd "$PROJECT_DIR"
     echo "🚀 バックエンドデプロイ..."
     npx cdk deploy "$API_STACK" $CDK_CONTEXT --require-approval never
-    generate_config
-    echo "🚀 フロントエンドデプロイ..."
+    echo "🚀 フロントエンドデプロイ（config.jsonはCDKで自動生成）..."
     npx cdk deploy "$FRONT_STACK" $CDK_CONTEXT --require-approval never
     update_lambda_cloudfront_domain
     ;;
