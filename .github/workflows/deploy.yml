@@ -63,9 +63,11 @@ jobs:
             ENV="dev"
           fi
 
-          # TODO: CDK側の3環境対応後にサフィックスを有効化
-          # 現時点では全環境で同一スタック名を使用
-          SUFFIX=""
+          case "$ENV" in
+            production) SUFFIX="" ;;
+            staging)    SUFFIX="-Staging" ;;
+            dev)        SUFFIX="-Dev" ;;
+          esac
 
           echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
           echo "stack_suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
@@ -125,7 +127,7 @@ jobs:
       - name: Deploy ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}
         run: |
           STACK="ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}"
-          npx cdk deploy "$STACK" --require-approval never
+          npx cdk deploy "$STACK" -c environment=${{ needs.resolve-env.outputs.env_name }} --require-approval never
         env:
           AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
           ENVIRONMENT: ${{ needs.resolve-env.outputs.env_name }}
@@ -186,7 +188,7 @@ jobs:
       - name: Deploy FrontendStack${{ env.STACK_SUFFIX }}
         run: |
           STACK="FrontendStack${STACK_SUFFIX}"
-          npx cdk deploy "$STACK" --require-approval never
+          npx cdk deploy "$STACK" -c environment=${{ needs.resolve-env.outputs.env_name }} --require-approval never
         env:
           ENVIRONMENT: ${{ env.ENV_NAME }}
 
@@ -196,11 +198,11 @@ jobs:
           FRONT_STACK="FrontendStack${STACK_SUFFIX}"
 
           API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
           UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorUploadApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+            --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
           CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?ExportName=='ImageProcessorChatApiEndpoint'].OutputValue" --output text 2>/dev/null || echo "")
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
           CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
           VERSION=$(node -p "require('./package.json').version")
