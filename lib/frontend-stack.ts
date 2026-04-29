@@ -72,10 +72,10 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- CloudFront CachePolicy ---
-    // 開発用: 全パス60秒キャッシュ
+    // 全パス最大60秒キャッシュ（デプロイ後60秒以内に最新版に切り替わる）
     const shortCachePolicy = new cloudfront.CachePolicy(this, 'ShortCachePolicy', {
       cachePolicyName: envName('frontend-short-cache', envConfig),
-      defaultTtl: cdk.Duration.seconds(0),
+      defaultTtl: cdk.Duration.seconds(60),
       maxTtl: cdk.Duration.seconds(60),
       minTtl: cdk.Duration.seconds(0),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
