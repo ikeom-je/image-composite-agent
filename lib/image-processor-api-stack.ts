@@ -12,10 +12,15 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Construct } from 'constructs';
+import { EnvironmentConfig, envName, envExport } from './environment';
 
 // package.jsonからバージョンを読み込み
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const VERSION = packageJson.version;
+
+export interface ImageProcessorApiStackProps extends cdk.StackProps {
+  envConfig: EnvironmentConfig;
+}
 
 export class ImageProcessorApiStack extends cdk.Stack {
   public readonly resourcesBucket: s3.Bucket;
@@ -25,8 +30,10 @@ export class ImageProcessorApiStack extends cdk.Stack {
   public readonly uploadApiEndpoint: string;
   public readonly chatApiEndpoint: string;
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: ImageProcessorApiStackProps) {
     super(scope, id, props);
+
+    const envConfig = props.envConfig;
 
     // S3バケットの作成（リソース用）
     this.resourcesBucket = new s3.Bucket(this, 'ImageResourcesBucket', {
@@ -64,21 +71,21 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // デッドレターキューの作成（Image Processor用）
     const imageProcessorDLQ = new sqs.Queue(this, 'ImageProcessorDLQ', {
-      queueName: 'image-processor-dlq',
+      queueName: envName('image-processor-dlq', envConfig),
       retentionPeriod: cdk.Duration.days(14),
       encryption: sqs.QueueEncryption.SQS_MANAGED,
     });
 
     // CloudWatch Log Group（Image Processor用）
     const imageProcessorLogGroup = new logs.LogGroup(this, 'ImageProcessorLogGroup', {
-      logGroupName: '/aws/lambda/image-processor-function',
+      logGroupName: envName('/aws/lambda/image-processor-function', envConfig),
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     // ffmpeg Lambda Layer（動画生成機能用） - v2.6.0
     const ffmpegLayer = new lambda.LayerVersion(this, 'FfmpegLayer', {
-      layerVersionName: `ffmpeg-layer-v${VERSION.replace(/\./g, '-')}`,
+      layerVersionName: envName(`ffmpeg-layer-v${VERSION.replace(/\./g, '-')}`, envConfig),
       description: `ffmpeg binaries for video generation - v${VERSION}`,
       code: lambda.Code.fromAsset(path.join(__dirname, '../lambda-layers/ffmpeg-layer.zip')),
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
@@ -140,14 +147,14 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // デッドレターキューの作成（Upload Manager用）
     const uploadManagerDLQ = new sqs.Queue(this, 'UploadManagerDLQ', {
-      queueName: 'upload-manager-dlq',
+      queueName: envName('upload-manager-dlq', envConfig),
       retentionPeriod: cdk.Duration.days(14),
       encryption: sqs.QueueEncryption.SQS_MANAGED,
     });
 
     // CloudWatch Log Group（Upload Manager用）
     const uploadManagerLogGroup = new logs.LogGroup(this, 'UploadManagerLogGroup', {
-      logGroupName: '/aws/lambda/upload-manager-function',
+      logGroupName: envName('/aws/lambda/upload-manager-function', envConfig),
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -201,7 +208,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Image Processor Lambda関数のエラーアラーム
     const imageProcessorErrorAlarm = new cloudwatch.Alarm(this, 'ImageProcessorErrorAlarm', {
-      alarmName: 'image-processor-errors',
+      alarmName: envName('image-processor-errors', envConfig),
       alarmDescription: 'Image Processor Lambda function errors',
       metric: imageProcessorFunction.metricErrors({
         period: cdk.Duration.minutes(5),
@@ -214,7 +221,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Image Processor Lambda関数の実行時間アラーム
     const imageProcessorDurationAlarm = new cloudwatch.Alarm(this, 'ImageProcessorDurationAlarm', {
-      alarmName: 'image-processor-duration',
+      alarmName: envName('image-processor-duration', envConfig),
       alarmDescription: 'Image Processor Lambda function duration',
       metric: imageProcessorFunction.metricDuration({
         period: cdk.Duration.minutes(5),
@@ -227,7 +234,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Upload Manager Lambda関数のエラーアラーム
     const uploadManagerErrorAlarm = new cloudwatch.Alarm(this, 'UploadManagerErrorAlarm', {
-      alarmName: 'upload-manager-errors',
+      alarmName: envName('upload-manager-errors', envConfig),
       alarmDescription: 'Upload Manager Lambda function errors',
       metric: uploadManagerFunction.metricErrors({
         period: cdk.Duration.minutes(5),
@@ -304,7 +311,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
       },
       // API Gateway のスロットリング設定
       deployOptions: {
-        stageName: 'prod',
+        stageName: envConfig.isProduction ? 'prod' : envConfig.name,
         // CloudWatch Logsロール設定が必要なため一時的に無効化
         // loggingLevel: apigateway.MethodLoggingLevel.INFO,
         // dataTraceEnabled: true,
@@ -580,7 +587,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // DynamoDB テーブル（会話履歴）
     const chatHistoryTable = new dynamodb.Table(this, 'ChatHistoryTable', {
-      tableName: 'ImageCompositor-ChatHistory',
+      tableName: envName('ImageCompositor-ChatHistory', envConfig),
       partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'timestamp', type: dynamodb.AttributeType.NUMBER },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -590,14 +597,14 @@ export class ImageProcessorApiStack extends cdk.Stack {
 
     // Agent Lambda用 DLQ
     const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
-      queueName: 'agent-handler-dlq',
+      queueName: envName('agent-handler-dlq', envConfig),
       retentionPeriod: cdk.Duration.days(14),
       encryption: sqs.QueueEncryption.SQS_MANAGED,
     });
 
     // Agent Lambda用 Log Group
     const agentLogGroup = new logs.LogGroup(this, 'AgentLogGroup', {
-      logGroupName: '/aws/lambda/agent-handler-function',
+      logGroupName: envName('/aws/lambda/agent-handler-function', envConfig),
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -860,7 +867,7 @@ else:
 
     // APIキーの作成
     const apiKey = api.addApiKey('ImageProcessorApiKey', {
-      apiKeyName: 'image-processor-api-key',
+      apiKeyName: envName('image-processor-api-key', envConfig),
       description: `API Key for Image Processor API - v${VERSION}`
     });
 
@@ -871,14 +878,14 @@ else:
 
     // API Gateway メトリクスアラーム - v2.4.1監視機能
     const apiGatewayErrorAlarm = new cloudwatch.Alarm(this, 'ApiGatewayErrorAlarm', {
-      alarmName: 'api-gateway-4xx-errors',
+      alarmName: envName('api-gateway-4xx-errors', envConfig),
       alarmDescription: 'API Gateway 4XX errors',
       metric: new cloudwatch.Metric({
         namespace: 'AWS/ApiGateway',
         metricName: '4XXError',
         dimensionsMap: {
           ApiName: api.restApiName,
-          Stage: 'prod',
+          Stage: envConfig.isProduction ? 'prod' : envConfig.name,
         },
         period: cdk.Duration.minutes(5),
         statistic: cloudwatch.Statistic.SUM,
@@ -889,14 +896,14 @@ else:
     });
 
     const apiGatewayLatencyAlarm = new cloudwatch.Alarm(this, 'ApiGatewayLatencyAlarm', {
-      alarmName: 'api-gateway-latency',
+      alarmName: envName('api-gateway-latency', envConfig),
       alarmDescription: 'API Gateway latency',
       metric: new cloudwatch.Metric({
         namespace: 'AWS/ApiGateway',
         metricName: 'Latency',
         dimensionsMap: {
           ApiName: api.restApiName,
-          Stage: 'prod',
+          Stage: envConfig.isProduction ? 'prod' : envConfig.name,
         },
         period: cdk.Duration.minutes(5),
         statistic: cloudwatch.Statistic.AVERAGE,
@@ -908,7 +915,7 @@ else:
 
     // CloudWatchダッシュボードの作成 - v2.4.1監視機能
     const dashboard = new cloudwatch.Dashboard(this, 'ImageProcessorDashboard', {
-      dashboardName: `image-processor-api-v${VERSION.replace(/\./g, '-')}`,
+      dashboardName: envName(`image-processor-api-v${VERSION.replace(/\./g, '-')}`, envConfig),
       widgets: [
         [
           // API Gateway メトリクス
@@ -920,7 +927,7 @@ else:
                 metricName: 'Count',
                 dimensionsMap: {
                   ApiName: api.restApiName,
-                  Stage: 'prod',
+                  Stage: envConfig.isProduction ? 'prod' : envConfig.name,
                 },
                 period: cdk.Duration.minutes(5),
                 statistic: cloudwatch.Statistic.SUM,
@@ -938,7 +945,7 @@ else:
                 metricName: '4XXError',
                 dimensionsMap: {
                   ApiName: api.restApiName,
-                  Stage: 'prod',
+                  Stage: envConfig.isProduction ? 'prod' : envConfig.name,
                 },
                 period: cdk.Duration.minutes(5),
                 statistic: cloudwatch.Statistic.SUM,
@@ -949,7 +956,7 @@ else:
                 metricName: '5XXError',
                 dimensionsMap: {
                   ApiName: api.restApiName,
-                  Stage: 'prod',
+                  Stage: envConfig.isProduction ? 'prod' : envConfig.name,
                 },
                 period: cdk.Duration.minutes(5),
                 statistic: cloudwatch.Statistic.SUM,
@@ -1022,7 +1029,7 @@ else:
                 metricName: 'Latency',
                 dimensionsMap: {
                   ApiName: api.restApiName,
-                  Stage: 'prod',
+                  Stage: envConfig.isProduction ? 'prod' : envConfig.name,
                 },
                 period: cdk.Duration.minutes(5),
                 statistic: cloudwatch.Statistic.AVERAGE,
@@ -1033,7 +1040,7 @@ else:
                 metricName: 'IntegrationLatency',
                 dimensionsMap: {
                   ApiName: api.restApiName,
-                  Stage: 'prod',
+                  Stage: envConfig.isProduction ? 'prod' : envConfig.name,
                 },
                 period: cdk.Duration.minutes(5),
                 statistic: cloudwatch.Statistic.AVERAGE,
@@ -1067,7 +1074,7 @@ else:
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: this.apiEndpoint,
       description: 'URL for the Image Processor API',
-      exportName: 'ImageProcessorApiEndpoint',
+      exportName: envExport('ImageProcessorApiEndpoint', envConfig),
     });
 
     new cdk.CfnOutput(this, 'TestImagesBucketName', {
@@ -1090,19 +1097,19 @@ else:
     new cdk.CfnOutput(this, 'FrontendResourcesOAIId', {
       value: frontendResourcesOAI.originAccessIdentityId,
       description: 'OAI ID for FrontendStack resources bucket access',
-      exportName: 'FrontendResourcesOAIId',
+      exportName: envExport('FrontendResourcesOAIId', envConfig),
     });
 
     new cdk.CfnOutput(this, 'ResourcesBucketName', {
       value: this.resourcesBucket.bucketName,
       description: 'Name of the resources bucket',
-      exportName: 'ImageProcessorResourcesBucketName',
+      exportName: envExport('ImageProcessorResourcesBucketName', envConfig),
     });
 
     new cdk.CfnOutput(this, 'ResourcesBucketArn', {
       value: this.resourcesBucket.bucketArn,
       description: 'ARN of the resources bucket',
-      exportName: 'ImageProcessorResourcesBucketArn',
+      exportName: envExport('ImageProcessorResourcesBucketArn', envConfig),
     });
 
     new cdk.CfnOutput(this, 'UploadBucketName', {
@@ -1113,7 +1120,7 @@ else:
     new cdk.CfnOutput(this, 'UploadApiUrl', {
       value: this.uploadApiEndpoint,
       description: 'URL for the Upload API',
-      exportName: 'ImageProcessorUploadApiEndpoint',
+      exportName: envExport('ImageProcessorUploadApiEndpoint', envConfig),
     });
 
     new cdk.CfnOutput(this, 'DashboardUrl', {
@@ -1124,7 +1131,7 @@ else:
     new cdk.CfnOutput(this, 'ChatApiUrl', {
       value: this.chatApiEndpoint,
       description: 'URL for the Chat Agent API',
-      exportName: 'ImageProcessorChatApiEndpoint',
+      exportName: envExport('ImageProcessorChatApiEndpoint', envConfig),
     });
   }
 }
