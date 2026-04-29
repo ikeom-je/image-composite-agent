@@ -4,7 +4,6 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as cr from 'aws-cdk-lib/custom-resources';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import * as path from 'path';
@@ -146,9 +145,11 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- BucketDeployment ---
+    // config.jsonはdeploy.shがバックエンドデプロイ後にfrontend/dist/に生成してからFrontendStackをデプロイ。
+    // BucketDeploymentがfrontend/dist/ごとS3にアップロードするのでconfig.jsonも含まれる。
     const distDir = path.join(__dirname, '../frontend/dist');
     if (fs.existsSync(distDir)) {
-      const deployment = new s3deploy.BucketDeployment(this, 'DeployFrontend', {
+      new s3deploy.BucketDeployment(this, 'DeployFrontend', {
         sources: [
           s3deploy.Source.asset(distDir),
           s3deploy.Source.jsonData('.deploy-meta.json', { deployedAt: new Date().toISOString(), version: VERSION }),
@@ -160,62 +161,6 @@ export class FrontendStack extends cdk.Stack {
         memoryLimit: 512,
         logRetention: logs.RetentionDays.ONE_WEEK,
       });
-
-      // --- config.json をクロススタック参照で生成・配置 ---
-      const apiUrl = cdk.Fn.importValue(envExport('ImageProcessorApiEndpoint', envConfig));
-      const uploadApiUrl = cdk.Fn.importValue(envExport('ImageProcessorUploadApiEndpoint', envConfig));
-      const chatApiUrl = cdk.Fn.importValue(envExport('ImageProcessorChatApiEndpoint', envConfig));
-      const cloudfrontUrl = `https://${this.distribution.distributionDomainName}`;
-
-      const configBody = cdk.Fn.join('', [
-        '{"apiUrl":"', apiUrl,
-        '","uploadApiUrl":"', uploadApiUrl,
-        '","chatApiUrl":"', chatApiUrl,
-        '","cloudfrontUrl":"', cloudfrontUrl,
-        '","version":"', VERSION,
-        '","buildHash":"', process.env.BUILD_HASH || 'local',
-        '","environment":"', envConfig.name,
-        '","buildTimestamp":"', new Date().toISOString(),
-        '","region":"', cdk.Stack.of(this).region,
-        '","features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":',
-        envConfig.isProduction ? 'false' : 'true',
-        ',"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}',
-      ]);
-
-      const configDeploy = new cr.AwsCustomResource(this, 'DeployConfigJson', {
-        onCreate: {
-          service: 'S3',
-          action: 'putObject',
-          parameters: {
-            Bucket: this.frontendBucket.bucketName,
-            Key: 'config.json',
-            Body: configBody,
-            ContentType: 'application/json',
-          },
-          physicalResourceId: cr.PhysicalResourceId.of(`config-json-${Date.now()}`),
-        },
-        onUpdate: {
-          service: 'S3',
-          action: 'putObject',
-          parameters: {
-            Bucket: this.frontendBucket.bucketName,
-            Key: 'config.json',
-            Body: configBody,
-            ContentType: 'application/json',
-          },
-          physicalResourceId: cr.PhysicalResourceId.of(`config-json-${Date.now()}`),
-        },
-        policy: cr.AwsCustomResourcePolicy.fromStatements([
-          new iam.PolicyStatement({
-            actions: ['s3:PutObject'],
-            resources: [this.frontendBucket.arnForObjects('config.json')],
-          }),
-        ]),
-        logRetention: logs.RetentionDays.ONE_DAY,
-      });
-      // BucketDeployment完了後にconfig.jsonを上書き配置
-      configDeploy.node.addDependency(deployment);
-
       console.log('Frontend deployment configured successfully.');
     }
 
