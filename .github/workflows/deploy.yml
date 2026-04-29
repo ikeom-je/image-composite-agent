@@ -182,6 +182,22 @@ jobs:
             echo "dummy" | zip lambda-layers/ffmpeg-layer.zip -
           fi
 
+      - name: Generate config.json
+        run: |
+          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          VERSION=$(node -p "require('./package.json').version")
+          BUILD_HASH=${GITHUB_SHA::7}
+          DEBUG=$( [ "$ENV_NAME" = "production" ] && echo "false" || echo "true" )
+          cat > frontend/public/config.json <<EOF
+          {"apiUrl":"${API_URL}","uploadApiUrl":"${UPLOAD_URL}","chatApiUrl":"${CHAT_URL}","cloudfrontUrl":"","version":"${VERSION}","buildHash":"${BUILD_HASH}","environment":"${ENV_NAME}","buildTimestamp":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)","region":"${{ env.AWS_REGION }}","features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":${DEBUG},"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}
+          EOF
+
       - name: Build frontend
         run: cd frontend && npm ci && npm run build
 
@@ -191,45 +207,6 @@ jobs:
           npx cdk deploy "$STACK" -c environment=${{ needs.resolve-env.outputs.env_name }} --require-approval never
         env:
           ENVIRONMENT: ${{ env.ENV_NAME }}
-
-      - name: Generate config.json
-        run: |
-          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
-          FRONT_STACK="FrontendStack${STACK_SUFFIX}"
-
-          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
-          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
-          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
-            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
-          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
-            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
-          VERSION=$(node -p "require('./package.json').version")
-          BUILD_HASH=${GITHUB_SHA::7}
-          DEBUG=$( [ "$ENV_NAME" = "production" ] && echo "false" || echo "true" )
-
-          cat > frontend/dist/config.json <<EOF
-          {
-            "apiUrl": "${API_URL}",
-            "uploadApiUrl": "${UPLOAD_URL}",
-            "chatApiUrl": "${CHAT_URL}",
-            "cloudfrontUrl": "https://${CF_DOMAIN}",
-            "version": "${VERSION}",
-            "buildHash": "${BUILD_HASH}",
-            "environment": "${ENV_NAME}",
-            "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
-            "region": "${{ env.AWS_REGION }}",
-            "features": {
-              "enableS3Upload": true,
-              "enable3ImageComposition": true,
-              "enableDebugMode": ${DEBUG},
-              "enableAnalytics": true,
-              "enableCaching": true,
-              "enableErrorReporting": true
-            }
-          }
-          EOF
 
       - name: Update Lambda CLOUDFRONT_DOMAIN
         run: |

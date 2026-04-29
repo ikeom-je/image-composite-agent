@@ -11,6 +11,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import { EnvironmentConfig, envExport } from './environment';
 
+const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
+const VERSION = packageJson.version;
+
 export interface ImageCompositeViewerStackProps extends cdk.StackProps {
   /**
    * API Gateway エンドポイントのURL（オプション）
@@ -155,7 +158,7 @@ export class ImageCompositeViewerStack extends cdk.Stack {
     const configBody = cdk.Fn.join('', [
       '{"apiUrl":"', apiUrl,
       '","uploadApiUrl":"', uploadApiUrl,
-      '","version":"2.6.0","environment":"production"}',
+      '","version":"', VERSION, '","environment":"', this.envConfig.name, '"}',
     ]);
 
     // AwsCustomResourceでS3 PutObjectを実行
