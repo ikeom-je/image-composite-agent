@@ -184,6 +184,7 @@ jobs:
 
       - name: Generate config.json
         run: |
+          mkdir -p frontend/public
           API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
           API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
