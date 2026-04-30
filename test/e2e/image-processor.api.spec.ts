@@ -51,4 +51,80 @@ test.describe('画像合成REST API', () => {
     // 数値パラメータに不正な値を指定した場合、デフォルト値を使用
     expect(response.status()).toBe(200);
   });
+
+  // フロントエンドが実際に使うのはPOSTメソッド（App.vue: axios.post）
+  test('POST: 基本的な画像合成 - PNG形式', async ({ request }) => {
+    const response = await request.post(apiUrl, {
+      data: {
+        baseImage: 'test',
+        format: 'png',
+        image1: 'test',
+        image1X: 100,
+        image1Y: 100,
+        image1Width: 400,
+        image1Height: 400,
+        image2: 'test',
+        image2X: 600,
+        image2Y: 100,
+        image2Width: 400,
+        image2Height: 400,
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'image/png, image/*',
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/png');
+
+    const body = await response.body();
+    expect(body.length).toBeGreaterThan(100);
+  });
+
+  test('POST: 3画像合成', async ({ request }) => {
+    const response = await request.post(apiUrl, {
+      data: {
+        baseImage: 'test',
+        format: 'png',
+        image1: 'test',
+        image1X: 100,
+        image1Y: 100,
+        image1Width: 400,
+        image1Height: 400,
+        image2: 'test',
+        image2X: 600,
+        image2Y: 100,
+        image2Width: 400,
+        image2Height: 400,
+        image3: 'test',
+        image3X: 350,
+        image3Y: 400,
+        image3Width: 400,
+        image3Height: 400,
+      },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'image/png, image/*',
+      },
+    });
+
+    expect(response.status()).toBe(200);
+    expect(response.headers()['content-type']).toContain('image/png');
+  });
+
+  test('POST: 必須パラメータ不足エラー', async ({ request }) => {
+    // image1 を含めない（必須）
+    const response = await request.post(apiUrl, {
+      data: {
+        baseImage: 'test',
+        format: 'png',
+      },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    expect(response.status()).toBe(400);
+  });
 });
