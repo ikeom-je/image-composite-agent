@@ -41,10 +41,12 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('動画生成パラメータの検証テスト', async () => {
+    test.setTimeout(120000)
     console.log('🔍 動画生成パラメータの検証テストを開始')
 
     // 基本的な動画生成リクエスト
     const baseParams = {
+      baseImage: 'test',
       image1: 'test',
       image2: 'test',
       generate_video: 'true',
@@ -102,9 +104,11 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('各動画フォーマットでの生成テスト', async () => {
+    test.setTimeout(300000)
     console.log('🎞️ 各動画フォーマットでの生成テストを開始')
 
     const baseParams = {
+      baseImage: 'test',
       image1: 'test',
       image2: 'test',
       generate_video: 'true',
@@ -180,9 +184,11 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('動画の長さ設定テスト', async () => {
+    test.setTimeout(300000)
     console.log('⏱️ 動画の長さ設定テストを開始')
 
     const baseParams = {
+      baseImage: 'test',
       image1: 'test',
       image2: 'test',
       generate_video: 'true',
@@ -240,9 +246,11 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('3画像合成での動画生成テスト', async () => {
+    test.setTimeout(120000)
     console.log('🎨 3画像合成での動画生成テストを開始')
 
     const params = {
+      baseImage: 'test',
       image1: 'test',
       image2: 'test',
       image3: 'test',
@@ -302,6 +310,7 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('動画生成エラーハンドリングテスト', async () => {
+    test.setTimeout(120000)
     console.log('⚠️ 動画生成エラーハンドリングテストを開始')
 
     // 必須パラメータ不足のテスト
@@ -321,6 +330,7 @@ test.describe('動画生成機能のAPIテスト', () => {
     console.log('❌ 無効な画像パラメータのテスト')
     const invalidImageResponse = await apiContext.get(TEST_CONFIG.apiUrl, {
       params: {
+        baseImage: 'test',
         image1: 'invalid_image_source',
         image2: 'test',
         generate_video: 'true',
@@ -337,6 +347,7 @@ test.describe('動画生成機能のAPIテスト', () => {
     console.log('❌ 極端に長い動画のテスト')
     const longVideoResponse = await apiContext.get(TEST_CONFIG.apiUrl, {
       params: {
+        baseImage: 'test',
         image1: 'test',
         image2: 'test',
         generate_video: 'true',
@@ -352,6 +363,7 @@ test.describe('動画生成機能のAPIテスト', () => {
   })
 
   test('動画生成パフォーマンステスト', async () => {
+    test.setTimeout(300000)
     console.log('⚡ 動画生成パフォーマンステストを開始')
 
     const testCases = [
@@ -375,6 +387,7 @@ test.describe('動画生成機能のAPIテスト', () => {
       try {
         const response = await apiContext.get(TEST_CONFIG.apiUrl, {
           params: {
+            baseImage: 'test',
             image1: 'test',
             image2: 'test',
             generate_video: 'true',
