@@ -381,13 +381,14 @@ def generate_video(
     sz1 = _resolve_size(image1_size)
 
     # ImageProcessor Lambdaにパラメータを組み立て
+    # キー名は image_processor.parse_image_parameters が期待する camelCase に揃える (Issue #41)
     invoke_params = {
         'image1': image1,
-        'image1_x': str(pos1[0]),
-        'image1_y': str(pos1[1]),
-        'image1_width': str(sz1[0]),
-        'image1_height': str(sz1[1]),
-        'base_image': base_image,
+        'image1X': str(pos1[0]),
+        'image1Y': str(pos1[1]),
+        'image1Width': str(sz1[0]),
+        'image1Height': str(sz1[1]),
+        'baseImage': base_image,
         'baseOpacity': str(max(0, min(100, base_opacity))),
         'format': 'png',
         'generate_video': 'true',
@@ -400,10 +401,10 @@ def generate_video(
         sz2 = _resolve_size(image2_size)
         invoke_params.update({
             'image2': image2,
-            'image2_x': str(pos2[0]),
-            'image2_y': str(pos2[1]),
-            'image2_width': str(sz2[0]),
-            'image2_height': str(sz2[1]),
+            'image2X': str(pos2[0]),
+            'image2Y': str(pos2[1]),
+            'image2Width': str(sz2[0]),
+            'image2Height': str(sz2[1]),
         })
 
     if image3:
@@ -411,10 +412,10 @@ def generate_video(
         sz3 = _resolve_size(image3_size)
         invoke_params.update({
             'image3': image3,
-            'image3_x': str(pos3[0]),
-            'image3_y': str(pos3[1]),
-            'image3_width': str(sz3[0]),
-            'image3_height': str(sz3[1]),
+            'image3X': str(pos3[0]),
+            'image3Y': str(pos3[1]),
+            'image3Width': str(sz3[0]),
+            'image3Height': str(sz3[1]),
         })
 
     # テキストパラメータをinvoke_paramsに追加
