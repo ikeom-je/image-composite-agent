@@ -179,12 +179,16 @@ jobs:
       - name: TypeScript build
         run: npm run build
 
-      - name: Create dummy ffmpeg layer
-        run: |
-          mkdir -p lambda-layers
-          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
-            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip -
-          fi
+      - name: Cache ffmpeg layer
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: lambda-layers/ffmpeg-layer.zip
+          key: ffmpeg-layer-amd64-static-v4.4.2
+
+      - name: Build ffmpeg Lambda layer
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash scripts/create-ffmpeg-layer.sh
 
       - name: Generate config.json
         run: |
