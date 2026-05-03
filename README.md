@@ -320,6 +320,7 @@ GET /images/composite
 | パラメータ | 説明 | デフォルト |
 |-----------|------|-----------|
 | `baseImage` | ベース画像（`test`, `transparent`, `white`, `#RRGGBB`, `#RRGGBBAA`） | 透明背景 |
+| `baseOpacity` | ベース画像の透明度（0〜100、0=完全透明、100=不透明） | `100` |
 | `format` | 出力形式 (`html` or `png`) | `html` |
 | `image1Width` | 1つ目の画像の幅 | 300 |
 | `image1Height` | 1つ目の画像の高さ | 200 |

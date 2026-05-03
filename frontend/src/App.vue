@@ -42,6 +42,23 @@
           />
         </div>
 
+        <!-- ベース画像透明度 -->
+        <div class="form-group opacity-group">
+          <label class="form-label">ベース画像透明度:</label>
+          <div class="opacity-control">
+            <input
+              type="range"
+              v-model.number="params.baseOpacity"
+              min="0"
+              max="100"
+              step="1"
+              class="opacity-slider"
+              :disabled="params.baseImage === 'transparent'"
+            />
+            <span class="opacity-value">{{ params.baseOpacity }}%</span>
+          </div>
+        </div>
+
         <!-- 画像設定テーブル -->
         <ImageConfigTable
           :image-configs="imageConfigs"
@@ -135,6 +152,7 @@ const notificationStore = useNotificationStore()
 // パラメータ（1920x1080固定キャンバス）
 const params = ref({
   baseImage: 'test',
+  baseOpacity: 100,
   canvas_width: 1920,
   canvas_height: 1080
 })
@@ -277,6 +295,7 @@ const buildCompositeParams = (enableVideoGeneration: boolean = videoConfig.value
 
   const p: Record<string, string | number | boolean> = {
     baseImage: params.value.baseImage,
+    baseOpacity: params.value.baseOpacity,
     format: 'png',
     image1: imageConfigs.value.image1.source,
     image1X: Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)),
@@ -517,6 +536,7 @@ const copyApiUrl = () => {
 const loadExample = (example: any) => {
   // ベース画像の設定
   params.value.baseImage = example.params.baseImage || 'test'
+  params.value.baseOpacity = example.params.baseOpacity ?? 100
 
   // 画像モードを設定
   let mode = 1
@@ -919,6 +939,32 @@ h2 {
 
 .form-group {
   margin-bottom: 15px;
+}
+
+.opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.opacity-slider {
+  flex: 1;
+  height: 6px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+.opacity-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.opacity-value {
+  min-width: 40px;
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
 }
 
 label {
