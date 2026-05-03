@@ -128,5 +128,31 @@ class TestImageProcessor(unittest.TestCase):
         body = json.loads(result['body'])
         self.assertIn('error', body)
 
+    @patch('image_processor.fetch_images_parallel')
+    @patch('image_processor.create_composite_image')
+    def test_handler_non_numeric_base_opacity_falls_back_to_default(
+        self, mock_create_composite, mock_fetch_parallel
+    ):
+        """baseOpacityに非数値が渡された場合、500にせずデフォルト100にフォールバックする (Issue #37)"""
+        mock_fetch_parallel.return_value = {'image1': self.test_image}
+        mock_create_composite.return_value = self.test_image
+
+        event = {
+            'queryStringParameters': {
+                'baseImage': 'test',
+                'image1': 'test',
+                'baseOpacity': 'abc',
+                'format': 'png',
+            }
+        }
+
+        result = image_processor.handler(event, {})
+
+        self.assertEqual(result['statusCode'], 200)
+        # create_composite_image が base_opacity=100（デフォルト）で呼ばれていること
+        _, kwargs = mock_create_composite.call_args
+        self.assertEqual(kwargs.get('base_opacity'), 100)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -450,7 +450,10 @@ def handler(event, context):
         image2_param = query_params.get('image2')
         image3_param = query_params.get('image3')  # オプション
         base_image_param = query_params.get('baseImage')
-        base_opacity_param = int(query_params.get('baseOpacity', '100'))
+        try:
+            base_opacity_param = int(query_params.get('baseOpacity', '100'))
+        except (ValueError, TypeError):
+            base_opacity_param = 100  # 非数値はデフォルトにフォールバック (Issue #37)
         base_opacity_param = max(0, min(100, base_opacity_param))  # 0-100にクランプ
         format_param = query_params.get('format', 'png')
 
