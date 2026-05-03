@@ -60,8 +60,11 @@ test.describe('統合機能E2Eテスト', () => {
     // Step 3: 画像一覧で確認
     console.log('📋 Step 3: 画像一覧確認');
     
+    // maxKeys=10 だとアップロード済み画像数 > 10 のとき新規ファイルが
+    // S3 key (UUID) のアルファベット順ページングで漏れて find が undefined → flaky
+    // 上限の 1000 まで取得して確実にヒットさせる
     const listResponse = await request.get(`${UPLOAD_API_URL}/images`, {
-      params: { maxKeys: '10' }
+      params: { maxKeys: '1000' }
     });
 
     expect(listResponse.status()).toBe(200);
