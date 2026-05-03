@@ -224,12 +224,15 @@ jobs:
           CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
           if [ -n "$CF_DOMAIN" ]; then
-            for FUNC_NAME in $(aws lambda list-functions \
-              --query "Functions[?starts_with(FunctionName, '${API_STACK}-ImageProcessor') || starts_with(FunctionName, '${API_STACK}-AgentFunction')].FunctionName" \
+            # Lambda 関数名は 64 字制限で切り捨てられるため (例: 'Staging' → 'Stagi')、
+            # CFN スタックリソースから物理 ID を直接取得する（名前切り捨て耐性）
+            for FUNC_NAME in $(aws cloudformation list-stack-resources --stack-name "$API_STACK" \
+              --query "StackResourceSummaries[?ResourceType=='AWS::Lambda::Function' && (contains(LogicalResourceId, 'ImageProcessor') || contains(LogicalResourceId, 'AgentFunction'))].PhysicalResourceId" \
               --output text); do
               CURRENT_ENV=$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query "Environment.Variables" --output json)
               UPDATED_ENV=$(echo "$CURRENT_ENV" | python3 -c "import sys,json; d=json.load(sys.stdin); d['CLOUDFRONT_DOMAIN']='${CF_DOMAIN}'; print(json.dumps({'Variables':d}))")
               aws lambda update-function-configuration --function-name "$FUNC_NAME" --environment "$UPDATED_ENV" --no-cli-pager > /dev/null
+              echo "Updated $FUNC_NAME"
             done
             echo "CLOUDFRONT_DOMAIN updated to ${CF_DOMAIN}"
           fi
