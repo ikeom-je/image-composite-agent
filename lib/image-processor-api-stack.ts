@@ -622,7 +622,10 @@ export class ImageProcessorApiStack extends cdk.Stack {
               'echo "Starting Agent Lambda bundling..."',
               'pip install --upgrade pip',
               // Agent専用依存のみインストール（opentelemetry-sdk含む、strands-agentsが依存）
-              'pip install strands-agents anthropic pillow boto3 opentelemetry-sdk opentelemetry-api opentelemetry-exporter-otlp-proto-http -t /asset-output --no-cache-dir 2>&1 | tail -5',
+              // Lambda は ARM_64 アーキで動作するため、aarch64 ホイールを明示指定
+              // （指定なしだと bundling Docker のホスト arch = x86_64 ホイールが入り、
+              //  Pillow 等の C 拡張が ImportError になる）
+              'pip install strands-agents anthropic pillow boto3 opentelemetry-sdk opentelemetry-api opentelemetry-exporter-otlp-proto-http -t /asset-output --no-cache-dir --platform manylinux2014_aarch64 --only-binary=:all: 2>&1 | tail -5',
               'cp *.py /asset-output/',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'if [ -d fonts ]; then cp -r fonts /asset-output/; fi',
