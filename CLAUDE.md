@@ -23,6 +23,18 @@
 4. **設計準拠**: コンポーネント構造、データモデル、API設計は`design.md`に従う
 5. **要件トレーサビリティ**: 各タスクの `_要件: X.X_` を参照し、対応する要件が満たされていることを確認する
 
+### 環境戦略
+
+単一AWSアカウント内で3環境を運用。スタック名サフィックスで分離。
+
+| 環境 | ブランチ | デプロイ | スタック名例 |
+|------|---------|---------|------------|
+| dev | feature/*, bugfix/* | 手動 | `ImageProcessorApiStack-Dev` |
+| staging | dev | CI/CD自動 | `ImageProcessorApiStack-Staging` |
+| production | main | CI/CD自動 | `ImageProcessorApiStack` |
+
+開発フロー: `feature/* → dev(staging) → main(production)`
+
 ### 環境変数
 
 デプロイ前に`.env.local`を読み込むこと（`source .env.local`）。設定項目は`.env.local.example`を参照。
@@ -67,6 +79,10 @@
 │   ├── lambda/                   # Python単体テスト
 │   └── test-assets/              # テスト用画像
 ├── scripts/                      # ビルド/デプロイ/ユーティリティスクリプト
+├── .github/workflows/            # GitHub Actions CI/CD
+│   ├── ci.yml                    # CI: ビルド検証 + テスト（4並列ジョブ）
+│   ├── deploy.yml                # CD: 3環境自動デプロイ（dev/staging/production）
+│   └── e2e-test.yml              # デプロイ後e2eテスト（Playwright）
 └── .kiro/specs/                  # 仕様書（要件・設計・タスク）
     ├── image-composition/        # 画像合成機能仕様
     └── strands-agent/            # チャットエージェント仕様
@@ -107,12 +123,13 @@
 
 ### テスト
 
-- **E2Eテスト**: `npx playwright test`（設定: `test/playwright.config.ts`）
-- **APIテスト**: `test/run-api-tests.sh`（設定: `test/playwright-api.config.ts`）
+- **Lambda単体テスト**: `PYTHONPATH=lambda/python python3 -m unittest discover -s test/lambda`
+- **APIテスト**: `API_URL=... npm run test:api`（設定: `test/playwright-api.config.ts`）
+- **フロントエンドE2E**: `FRONTEND_URL=... npm run test:all-e2e`（設定: `test/playwright.config.ts`）
 - **Agent APIテスト**: `CHAT_API_URL=... npx playwright test --config=test/playwright-api.config.ts --grep "Chat Agent"`
 - **Agent E2Eテスト**: `FRONTEND_URL=... npx playwright test --project=chat-agent-tests`
-- **Lambda単体テスト**: `python3 -m unittest discover -s test/lambda`
 - **テスト画像**: `test/test-assets/`（期待値画像は正しいPNG形式で管理）
+- **CI/CD**: `.github/workflows/ci.yml`（ビルド+テスト）、`deploy.yml`（デプロイ）、`e2e-test.yml`（デプロイ後e2e）
 
 ### コミット
 
@@ -123,7 +140,13 @@
 
 ```bash
 source .env.local  # 環境変数読み込み（AGENTMODEL等）
-npx cdk deploy ImageProcessorApiStack --require-approval never
+
+# dev環境（手動・作業ブランチの動作確認用）
+ENVIRONMENT=dev ./scripts/deploy.sh
+
+# staging/production環境はCI/CDで自動デプロイ
+# staging: devブランチへマージ時に自動実行
+# production: mainブランチへマージ時に自動実行
 ```
 
 ## 重要な設計原則

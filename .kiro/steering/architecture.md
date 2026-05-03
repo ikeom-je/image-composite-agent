@@ -4,6 +4,27 @@ inclusion: auto
 
 # アーキテクチャルール
 
+## 環境戦略
+
+単一AWSアカウント内で3環境（dev / staging / production）を運用する。
+
+| 環境 | スタック名サフィックス | ブランチ | デプロイ方式 |
+|------|---------------------|---------|------------|
+| dev | `-Dev` | feature/*, bugfix/* | 手動（ローカルから） |
+| staging | `-Staging` | dev | CI/CD自動 |
+| production | (なし) | main | CI/CD自動 |
+
+### 環境分離方式
+- CloudFormationスタック名にサフィックスを付与して同一アカウント内でリソースを分離
+- 例: `ImageProcessorApiStack-Dev`, `ImageProcessorApiStack-Staging`, `ImageProcessorApiStack`
+- 各環境のS3バケット、Lambda関数、API Gateway、CloudFront等はすべて独立
+- 環境変数 `ENVIRONMENT` で dev / staging / prod を切り替え
+
+### 環境ごとの設定差異
+- **dev**: デバッグモード有効、ログレベルDEBUG
+- **staging**: デバッグモード無効、ログレベルINFO、本番同等設定
+- **production**: デバッグモード無効、ログレベルINFO、最適化済み
+
 ## サーバーレス原則
 
 - コンピュートにはLambdaを使用（ステートレス関数）

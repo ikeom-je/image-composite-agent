@@ -26,7 +26,7 @@ inclusion: auto
 
 - IaC: AWS CDK 2.110.0 (TypeScript)
 - 言語: TypeScript 5.6.3
-- Node.js: 18以上
+- Node.js: 22以上
 - パッケージマネージャー: npm
 
 ## AIエージェント
@@ -46,6 +46,14 @@ inclusion: auto
 - DynamoDB（会話履歴管理）
 - Bedrock（AI推論）
 - SQS（デッドレターキュー）
+- IAM OIDC（GitHub Actions連携）
+
+## CI/CD
+
+- GitHub Actions: CI（ビルド・テスト）+ CD（3環境デプロイ）+ E2Eテスト
+- ワークフロー: `.github/workflows/ci.yml`, `deploy.yml`, `e2e-test.yml`
+- AWS認証: OIDC（`aws-actions/configure-aws-credentials@v4`）
+- デプロイロール: `github-actions-image-compositor-deploy`
 
 ## よく使うコマンド
 

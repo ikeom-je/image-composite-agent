@@ -7,26 +7,35 @@ inclusion: auto
 ## ブランチ戦略
 
 ### メインブランチ
-- `main` - 本番環境対応コードのみ
-- `develop` - 機能の統合ブランチ（GitFlowを使用する場合）
+- `main` - 本番環境（production）対応コード。安定稼働バージョンのみ
+- `dev` - 統合ブランチ。staging環境へデプロイして統合テストを実施
+
+### ブランチとデプロイ環境の対応
+
+| ブランチ | デプロイ先 | 用途 |
+|---------|----------|------|
+| `feature/*`, `bugfix/*` | dev環境 | 開発中の機能・修正のe2eテスト確認 |
+| `dev` | staging環境 | 統合テスト（feature→devマージ後） |
+| `main` | production環境 | 安定リリース（dev→mainマージ後） |
 
 ### 機能ブランチ
 - 形式: `feature/短い説明` または `feature/issue番号-説明`
 - 例: `feature/video-generation`、`feature/123-s3-upload`
-- 分岐元: `main` または `develop`
-- マージ先: `main` または `develop`（プルリクエスト経由）
+- 分岐元: `dev`
+- マージ先: `dev`（プルリクエスト経由）
+- dev環境にデプロイしてe2eテスト確認後にマージ
 
 ### バグ修正ブランチ
 - 形式: `bugfix/短い説明` または `bugfix/issue番号-説明`
 - 例: `bugfix/image-upload-error`、`bugfix/456-cors-issue`
-- 分岐元: `main` または `develop`
-- マージ先: `main` または `develop`（プルリクエスト経由）
+- 分岐元: `dev`
+- マージ先: `dev`（プルリクエスト経由）
 
 ### ホットフィックスブランチ
 - 形式: `hotfix/バージョン-説明`
 - 例: `hotfix/3.1.2-lambda-timeout`
 - 分岐元: `main`
-- マージ先: `main` と `develop` の両方
+- マージ先: `main` と `dev` の両方
 
 ## コミットメッセージ
 
@@ -267,8 +276,18 @@ npx husky add .husky/pre-commit "npm run build && npm run test:lambda"
 
 ### ブランチ保護
 - `main`ブランチへの直接プッシュを禁止
+- `dev`ブランチへの直接プッシュを禁止
 - PRレビュー必須（1名以上）
 - ステータスチェック必須（CI/CD）
+
+### 開発フロー
+```
+feature/* ──PR──▶ dev ──PR──▶ main
+    │               │              │
+    ▼               ▼              ▼
+  dev環境       staging環境   production環境
+  (e2eテスト)  (統合テスト)    (安定リリース)
+```
 
 ### コンフリクト解決
 ```bash

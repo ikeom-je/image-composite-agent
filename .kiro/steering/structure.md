@@ -178,11 +178,17 @@ test/
 - `playwright-report/` - Playwrightテストレポート
 - `.venv/` - Python仮想環境（ローカル使用時）
 
+## CI/CD（`.github/`）
+
+- `.github/workflows/ci.yml` - CI: ビルド検証 + テスト（4並列ジョブ）
+- `.github/workflows/deploy.yml` - CD: 3環境自動デプロイ + e2eテスト呼び出し
+- `.github/workflows/e2e-test.yml` - デプロイ後e2eテスト（Playwright）
+- `.github/oidc-deploy-role.yml` - OIDC + IAMロール作成用CloudFormationテンプレート
+
 ## ドキュメント
 
 - `README.md` - メインプロジェクトドキュメント（日本語）
+- `CLAUDE.md` - Claude Code開発ガイド
 - `docs/api-testing-guide.md` - APIテストガイド
 - `history.md` - 変更履歴
 - `prompts.md` - 開発プロンプト
-- `AmazonQ.md` - Amazon Q統合メモ
-- `CLAUDE.md` - Claude統合メモ
