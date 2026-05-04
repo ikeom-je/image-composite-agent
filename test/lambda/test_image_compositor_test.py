@@ -521,23 +521,26 @@ class TestBaseOpacity(unittest.TestCase):
         self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))
 
     def test_opacity_50_half_transparent(self):
-        """opacity=50でアルファが約半分になる"""
+        """opacity=50で複数座標(角・中央)のRGB保持・alpha変化を検証する"""
         base = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
         result = apply_base_opacity(base, 50)
-        pixel = result.getpixel((50, 50))
-        self.assertEqual(pixel[0], 255)  # R保持
-        self.assertEqual(pixel[1], 0)    # G保持
-        self.assertEqual(pixel[2], 0)    # B保持
-        self.assertAlmostEqual(pixel[3], 127, delta=2)  # alpha ≈ 127
+        # 4隅と中央の5座標で検証
+        for x, y in [(0, 0), (99, 0), (0, 99), (99, 99), (50, 50)]:
+            pixel = result.getpixel((x, y))
+            self.assertEqual(pixel[0], 255, f"R保持 at ({x},{y})")
+            self.assertEqual(pixel[1], 0, f"G保持 at ({x},{y})")
+            self.assertEqual(pixel[2], 0, f"B保持 at ({x},{y})")
+            self.assertAlmostEqual(pixel[3], 127, delta=2,
+                                   msg=f"alpha ≈ 127 at ({x},{y})")
 
-    def test_opacity_clamp_over_100(self):
-        """100超の値でも画像が返される（create_composite_imageがクランプ）"""
+    def test_opacity_at_or_above_100_returns_unchanged(self):
+        """opacity>=100は早期リターンしてベース画像をそのまま返す（apply_base_opacity内のクランプ経路）"""
         base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
         result = apply_base_opacity(base, 150)
         self.assertEqual(result.getpixel((50, 50)), (255, 255, 255, 255))
 
-    def test_opacity_clamp_negative(self):
-        """負の値で完全透明になる"""
+    def test_opacity_at_or_below_0_returns_fully_transparent(self):
+        """opacity<=0は早期リターンして完全透明画像を返す（apply_base_opacity内のクランプ経路）"""
         base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
         result = apply_base_opacity(base, -10)
         self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))

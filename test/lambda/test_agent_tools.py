@@ -21,7 +21,7 @@ from agent_prompts import resolve_position, resolve_size, POSITION_MAP, DEFAULT_
 # PILがない環境でもテスト可能にする
 with patch.dict('sys.modules', {'PIL': MagicMock(), 'PIL.Image': MagicMock()}):
     import agent_tools
-    from agent_tools import get_help, _format_size, generate_video
+    from agent_tools import get_help, _format_size, generate_video, compose_images
 
 # patch.dict はブロック終了時に sys.modules を復元してしまい、import した
 # agent_tools が消えるため、後段の mock.patch('agent_tools.X') が解決できない。
@@ -185,6 +185,41 @@ class TestGenerateVideoInvokeParams(unittest.TestCase):
         self.assertNotIn('image1_width', params)
         self.assertNotIn('image1_height', params)
         self.assertNotIn('base_image', params)
+
+
+class TestComposeImagesBaseOpacity(unittest.TestCase):
+    """compose_images が base_opacity を create_composite_image に透過するテスト (Issue #40)"""
+
+    def test_compose_images_passes_base_opacity_through(self):
+        """compose_images の base_opacity 引数が create_composite_image(base_opacity=...) まで透過する"""
+        # compose_images 内部でインライン import されるため image_fetcher / image_compositor に patch する
+        import image_fetcher
+        import image_compositor
+
+        mock_image = MagicMock()
+        mock_image.size = (2000, 1000)
+
+        composite_mock = MagicMock()
+        composite_mock.save = MagicMock()
+
+        with patch.object(image_fetcher, 'fetch_image', return_value=mock_image), \
+             patch.object(image_compositor, 'create_composite_image', return_value=composite_mock) as mock_create_composite, \
+             patch('agent_tools._get_s3_client') as mock_s3_factory, \
+             patch.dict(os.environ, {'S3_RESOURCES_BUCKET': 'test-bucket', 'CLOUDFRONT_DOMAIN': 'cdn.test'}):
+            mock_s3_factory.return_value = MagicMock()
+
+            compose_images(
+                image1='test',
+                image1_position='中央',
+                image1_size='400x400',
+                base_image='white',
+                base_opacity=42,
+            )
+
+            # create_composite_image が base_opacity=42 を受け取って呼ばれていること
+            self.assertTrue(mock_create_composite.called)
+            _, kwargs = mock_create_composite.call_args
+            self.assertEqual(kwargs.get('base_opacity'), 42)
 
 
 if __name__ == '__main__':
