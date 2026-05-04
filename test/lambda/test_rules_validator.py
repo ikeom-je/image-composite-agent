@@ -52,6 +52,10 @@ class TestValidateSinglePrompt(unittest.TestCase):
             validate_single_prompt('a' * 101, self.limits)
         self.assertIn('100', str(cm.exception))
 
+    def test_exact_boundary_prompt_passes(self):
+        """上限と等しい文字数は通過する（境界値）"""
+        validate_single_prompt('a' * 100, self.limits)  # 例外を投げない
+
 
 class TestTruncateCombined(unittest.TestCase):
     def setUp(self):
@@ -61,27 +65,37 @@ class TestTruncateCombined(unittest.TestCase):
         return {'name': name, 'prompt': prompt}
 
     def test_under_limit_returns_all(self):
+        """上限内なら全ルールが採用される"""
         rules = [self._rule('a', 'x' * 50), self._rule('b', 'x' * 50)]
         result, dropped = truncate_combined(rules, self.limits)
         self.assertEqual(len(result), 2)
         self.assertEqual(dropped, 0)
 
     def test_over_count_raises(self):
+        """件数上限を超えたら RuleCountError を投げる"""
         rules = [self._rule(str(i), 'x') for i in range(4)]
         with self.assertRaises(RuleCountError):
             truncate_combined(rules, self.limits)
 
     def test_over_combined_chars_drops_tail(self):
+        """結合文字数が上限を超えたら末尾から切り捨てる"""
         rules = [
             self._rule('a', 'x' * 90),
             self._rule('b', 'x' * 90),
-            self._rule('c', 'x' * 90),  # 結合超過の予定
+            self._rule('c', 'x' * 90),
         ]
         result, dropped = truncate_combined(rules, self.limits)
         self.assertEqual(len(result), 2)
         self.assertEqual(dropped, 1)
         self.assertEqual(result[0]['name'], 'a')
         self.assertEqual(result[1]['name'], 'b')
+
+    def test_exact_combined_boundary_returns_all(self):
+        """結合文字数が上限ぴったりなら全件採用される（境界値）"""
+        rules = [self._rule('a', 'x' * 100), self._rule('b', 'x' * 100)]
+        result, dropped = truncate_combined(rules, self.limits)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(dropped, 0)
 
 
 if __name__ == '__main__':

@@ -28,7 +28,8 @@ class RuleLimits:
 
 
 def validate_single_prompt(prompt: str, limits: RuleLimits) -> None:
-    if not prompt or len(prompt) == 0:
+    """単一ルール本文のサイズを検証する。空文字または上限超過で RuleSizeError を投げる。"""
+    if not prompt:
         raise RuleSizeError('prompt must not be empty')
     if len(prompt) > limits.max_prompt_chars:
         raise RuleSizeError(
