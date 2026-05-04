@@ -418,6 +418,7 @@ const agentFunction = new lambda.Function(this, 'AgentFunction', {
   environment: {
     CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
     AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+    BEDROCK_REGION: process.env.BEDROCK_REGION || 'us-east-1',
     S3_RESOURCES_BUCKET: resourcesBucket.bucketName,
     S3_UPLOAD_BUCKET: uploadBucket.bucketName,
     UPLOAD_BUCKET: uploadBucket.bucketName,
@@ -454,8 +455,9 @@ sessionResource.addMethod('DELETE', new apigateway.LambdaIntegration(agentFuncti
 
 ```
 Agent Lambda → Bedrock: bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream
-                        （US推論プロファイル + 基盤モデル）
-Agent Lambda → AWS Marketplace: aws-marketplace:ViewSubscriptions
+                        （US推論プロファイル + 基盤モデル、bedrock:InferenceProfileArn条件付き）
+Agent Lambda → AWS Marketplace: aws-marketplace:ViewSubscriptions, Subscribe, Unsubscribe
+                        （Bedrockモデルの自動サブスクリプション用）
 Agent Lambda → DynamoDB: PutItem, GetItem, Query, DeleteItem, BatchWriteItem
 Agent Lambda → S3 (Upload): GetObject, ListObjectsV2, DeleteObject
 Agent Lambda → S3 (Resources): GetObject, PutObject
@@ -479,13 +481,16 @@ export function useChatAgent() {
       const response = await axios.post(getChatApiEndpoint(), {
         sessionId: chatStore.sessionId,
         message: text,
+        modelId: chatStore.effectiveModelId || undefined,  // Settings画面で選択中のモデルID
       })
 
-      const { content, media } = response.data.response
+      const { content, media, modelId, modelName } = response.data.response
       chatStore.replaceMessage(loadingId, {
         content,
         mediaUrl: media?.data ? `data:image/png;base64,${media.data}` : media?.url,
         mediaType: media?.type,
+        modelId,
+        modelName,
       })
     } catch (err) {
       chatStore.replaceMessage(loadingId, {
@@ -518,14 +523,17 @@ function newSession() {
 
 ## 6. エラーハンドリング設計
 
-| エラーケース | 対処 | ユーザーへの応答 |
-|-------------|------|----------------|
-| Bedrock API 認証/アクセスエラー | ログ出力、500返却 | 「サービスに接続できません。しばらくお待ちください」 |
-| Bedrock API スロットリング | リトライ (1回) | 「混雑しています。少し時間をおいて再度お試しください」 |
-| ツール実行エラー | エラー内容をAgentに返し判断させる | Agentが自然言語でエラーを説明 |
-| DynamoDB エラー | best-effort（ログ出力のみ） | 応答自体は返却（履歴保存失敗の警告なし） |
-| Lambda タイムアウト | API Gateway 504 | フロントエンドで「処理がタイムアウトしました」表示 |
-| 不正なリクエスト | 400返却 | 「リクエスト形式が正しくありません」 |
+| エラーケース | HTTP | 対処 | ユーザーへの応答 |
+|-------------|------|------|----------------|
+| Bedrock `AccessDeniedException`（モデル未有効化） | 403 | ログ出力、modelId/modelNameを含めて返却 | 「モデル「<modelName>」へのアクセスが許可されていません。Bedrockコンソールでモデルアクセスを有効化してください。」 |
+| Bedrock API その他のエラー（認証・接続失敗等） | 500 | ログ出力、500返却 | 「エージェントの処理中にエラーが発生しました。しばらくお待ちください。」 |
+| ツールハルシネーション検出（テキストにファイル名あり & media無し） | 200 | 明示的指示で1回リトライ | リトライ後の応答を返却 |
+| ツール実行エラー | 200 | エラー内容をAgentに返し判断させる | Agentが自然言語でエラーを説明 |
+| DynamoDB エラー（履歴の保存・取得失敗） | 200 | best-effort（ログ出力のみ） | 応答自体は返却（履歴保存失敗の警告なし） |
+| Lambda タイムアウト（90秒超過） | 504 | API Gateway 504 | フロントエンドで「処理がタイムアウトしました」表示 |
+| 不正なJSON | 400 | 400返却 | `Invalid JSON in request body` |
+| `modelId` が `ALLOWED_MODELS` 外 | 400 | バリデーション失敗 | `Invalid modelId. Use GET /chat/models to see available models.` |
+| `message` 空 / 2000文字超過 | 400 | バリデーション失敗 | `message is required` / `message must be 2000 characters or less` |
 
 ## 7. セキュリティ設計
 
