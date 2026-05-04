@@ -2,6 +2,7 @@ import sys
 import os
 import unittest
 import json
+import base64
 from unittest.mock import patch, MagicMock
 from io import BytesIO
 from PIL import Image
@@ -152,6 +153,45 @@ class TestImageProcessor(unittest.TestCase):
         # create_composite_image が base_opacity=100（デフォルト）で呼ばれていること
         _, kwargs = mock_create_composite.call_args
         self.assertEqual(kwargs.get('base_opacity'), 100)
+
+    @patch('image_processor.fetch_images_parallel')
+    def test_handler_base_opacity_query_to_png_alpha(self, mock_fetch_parallel):
+        """baseOpacityクエリ→出力PNGのalpha値まで反映される統合テスト (Issue #40)"""
+        # ベース画像と前景画像を実体で用意（モック合成しない）
+        base_image = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        fg_image = Image.new('RGBA', (50, 50), (255, 0, 0, 255))
+        mock_fetch_parallel.return_value = {
+            'base': base_image,
+            'image1': fg_image,
+        }
+
+        event = {
+            'queryStringParameters': {
+                'baseImage': 'test',
+                'image1': 'test',
+                'image1X': '1500',
+                'image1Y': '900',
+                'image1Width': '50',
+                'image1Height': '50',
+                'baseOpacity': '50',
+                'format': 'png',
+            }
+        }
+
+        result = image_processor.handler(event, {})
+        self.assertEqual(result['statusCode'], 200)
+
+        # 出力PNGをデコードしてアルファ値を検証
+        png_bytes = base64.b64decode(result['body'])
+        out_image = Image.open(BytesIO(png_bytes)).convert('RGBA')
+
+        # 前景画像が配置されていない領域（左上付近）はベースのみ。
+        # baseOpacity=50 → alpha ≈ 127 (255 * 0.5)
+        bg_pixel = out_image.getpixel((10, 10))
+        self.assertEqual(bg_pixel[0], 255)  # R保持
+        self.assertEqual(bg_pixel[1], 255)  # G保持
+        self.assertEqual(bg_pixel[2], 255)  # B保持
+        self.assertAlmostEqual(bg_pixel[3], 127, delta=2)
 
 
 if __name__ == '__main__':
