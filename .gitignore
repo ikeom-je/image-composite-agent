@@ -35,3 +35,6 @@ frontend/dist/
 
 # Amazon Q credentials
 .amazonq/rules/credentials.md
+
+# Git worktrees
+.worktrees/
