@@ -531,8 +531,8 @@
 - [ ] 21.11 e2e/統合テスト
   - 既存30件の e2e テストを実行し、期待値画像の再生成が必要か確認
   - 必要なら `scripts/regenerate-expected-images.py` を実行して期待値更新
-  - 破壊的変更（baseImage 黒、video_format MP4）に該当するテストの期待値を更新
-  - _要件: 21.8, 21.9_
+  - 破壊的変更（baseImage 黒、video_format MP4、image1/2/3 のデフォルト座標変更）に該当するテストの期待値を更新
+  - _要件: 21.3, 21.4, 21.5, 21.8, 21.9_
 
 - [ ] 21.12 ドキュメント更新
   - `.kiro/steering/architecture.md` — `composite-default.json` の配置・配信フロー追記、API デフォルト変更を注記

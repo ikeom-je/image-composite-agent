@@ -301,15 +301,15 @@
 
 1. WHEN フロント起動時 THEN `${baseUrl}/composite-default.json` を fetch して Pinia store に格納する
 2. WHEN Lambda 起動時 THEN `composite-default.json` の値を環境変数または同梱ファイルから読み込み利用可能にする
-3. WHEN `image1` のみ指定 + `text1〜3` 未指定 + `image{N}_x/y/width/height` 省略 THEN `image_placement.single` のデフォルト（`image1=(1700, 96, 200, 200)`）を適用する
-4. WHEN `image2` を指定し個別座標が省略 THEN `image_placement.double` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`）を適用する
-5. WHEN `image3` を指定し個別座標が省略 THEN `image_placement.triple` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`, `image3=(1520, 700, 300, 300)`）を適用する
+3. WHEN `image1` のみ指定（`image2`/`image3` 未指定）+ `image{N}_x/y/width/height` 省略 THEN `image_placement.single` のデフォルト（`image1=(1700, 96, 200, 200)`）を適用する **※破壊的変更**（旧: `(100, 100, 400, 300)`）。テキスト有無は本モード判定に影響せず、`text_placeholders` は別軸で常時参照される（AC 21.6, 21.7）
+4. WHEN `image2` を指定し個別座標が省略 THEN `image_placement.double` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`）を適用する **※破壊的変更**（旧: `image1=(100,100,400,300)`, `image2=(600,100,400,300)`）
+5. WHEN `image3` を指定し個別座標が省略 THEN `image_placement.triple` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`, `image3=(1520, 700, 300, 300)`）を適用する **※破壊的変更**（旧: `image3=(350, 500, 400, 300)`）
 6. WHEN フロントUIにテキスト入力欄を表示 THEN JSON の `text_placeholders[textN].placeholder` を HTML `placeholder` 属性として反映する（text1="LIVE", text2="Telop text on the bottom", text3="message for the program"）
 7. WHEN フロントUIにテキスト座標・フォントサイズの初期値を設定 THEN JSON の値（text1: x=1800/y=300/40px、text2: x=300/y=900/50px、text3: x=300/y=100/40px）を使用する
 8. WHEN `baseImage` パラメータを省略 THEN `system_default.baseImage`（`#000000`）を適用する **※破壊的変更**（旧: 透明背景）
 9. WHEN `video_format` パラメータを省略 THEN `system_default.video.format`（`MP4`）を適用する **※破壊的変更**（旧: XMF）
 10. WHEN `image{N}_x/y/width/height` を個別に指定 THEN その値が JSON デフォルトより優先される
-11. WHEN `composite-default.json` が読み込めない（ファイル欠損・パース失敗・ネットワーク失敗）THEN エラーログを残し、ハードコードされたフォールバック値で動作継続する
+11. WHEN `composite-default.json` が読み込めない（ファイル欠損・パース失敗・ネットワーク失敗）THEN エラーログを残し、ハードコードされたフォールバック値で動作継続する。ただしリスク最小化のため、フォールバック時の `baseImage` は AC 21.8 の新仕様（`#000000`）ではなく既存挙動の `transparent` を維持する（詳細は `design.md` §6.9）
 12. WHEN `presets` セクションが空オブジェクト `{}` THEN プリセット機能は無効として扱う（将来拡張用、本要件のスコープ外）
 13. WHEN フロントから API へリクエストを送信 THEN フロントの初期値はそのままパラメータとして送信され、API 側でも同一の JSON デフォルトと整合する
 
