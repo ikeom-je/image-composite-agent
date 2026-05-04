@@ -49,6 +49,16 @@ npm run synth
 
 ## 機能開発ワークフロー
 
+### ステップ0: 着手前チェック（必須・全エージェント共通）
+
+> 複数のAIエージェント・開発者が並行作業する前提のため、各タスク開始前に下記を必ず確認する。省略すると仕様・規約・運用方針のドリフトが発生する。
+
+1. **`CLAUDE.md` を冒頭から再参照** — 「作業開始前のチェック」「仕様駆動開発ルール」「変更時の更新トリガー」を確認
+2. **仕様書を確認** — `.kiro/specs/<feature>/{requirements.md, design.md, tasks.md}` の該当部分
+3. **タスクに該当する steering ファイルを確認**（[CLAUDE.md の対応表](../../CLAUDE.md#作業開始前のチェック必読全エージェント共通) 参照）
+4. **親Issue / 関連Issue / 進行中PRの状態確認** — `gh issue view <N>` / `gh pr list`
+5. **並行作業の場合は git worktree を作成** — [git.md の「Git Worktree」](git.md#git-worktree) 参照
+
 ### ステップ1: 計画
 - GitHubイシューを作成
 - 要件を定義

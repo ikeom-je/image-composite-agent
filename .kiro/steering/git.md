@@ -172,26 +172,14 @@ test(e2e): 動画生成テストスイートを追加
 - 例: `feat(video): 動画生成機能を追加`
 
 ### PR説明
-```markdown
-## 概要
-この変更の目的を簡潔に説明
 
-## 変更内容
-- 変更点1
-- 変更点2
+PR作成時にGitHubが自動表示する [.github/pull_request_template.md](../../.github/pull_request_template.md) を編集して使用する。テンプレートには以下のセクションが含まれる:
 
-## テスト
-- [ ] ユニットテストが通過
-- [ ] APIテストが通過
-- [ ] E2Eテストが通過
-- [ ] 手動テスト完了
+- 概要 / 変更内容 / テスト（5項目チェックボックス）
+- ドキュメント更新確認（10項目チェックボックス、本ファイルの「ドキュメント更新チェックリスト」と一致）
+- スクリーンショット（UI変更時）/ 関連Issue
 
-## スクリーンショット（該当する場合）
-[画像を追加]
-
-## 関連Issue
-Closes #123
-```
+PRテンプレートを更新する際は本ファイル「ドキュメント更新チェックリスト」と CLAUDE.md の更新トリガー表も同時に更新し、3者の整合を保つ。
 
 ### レビュー基準（レビュアー観点）
 
@@ -212,6 +200,36 @@ Closes #123
 4. フィードバックに対応 → 修正→再テスト→再レビューのサイクル
 5. 最終承認
 6. マージ（指示があるまで作業者はマージしない）
+
+## ドキュメント更新チェックリスト（機能追加・変更時）
+
+新機能・バグ修正・インフラ変更を行う際、変更の種別ごとに更新すべきドキュメントを以下に示す。PR作成前にこのチェックリストで漏れを確認する（PRテンプレートにも同等の確認項目あり）。
+
+> 表中の `<feature>` プレースホルダは現在の仕様書ディレクトリ名のいずれか:
+> - `image-composition` — 画像合成・テキストオーバーレイ・動画生成機能
+> - `strands-agent` — Chat Agent（Strands SDK + Bedrock マルチモデル）
+
+### 変更種別ごとの更新先
+
+| 変更種別 | 更新すべきファイル | 補足 |
+|---------|----------------|------|
+| **新APIパラメータ追加**（例: `baseOpacity`） | `specs/<feature>/requirements.md` (Req or AC追加) + `specs/<feature>/design.md` (パラメータ表) + `steering/architecture.md` (エンドポイント表) | バリデーション・デフォルト値・後方互換性も明記 |
+| **新Lambdaエンドポイント追加**（例: `/chat/models`） | `steering/architecture.md` (エンドポイント表) + `specs/<feature>/requirements.md` (Req追加) + `specs/<feature>/design.md` (API設計セクション) | リクエスト/レスポンス形式・エラー応答も記載 |
+| **新環境変数追加**（例: `BEDROCK_REGION`） | `steering/tech.md` (環境変数一覧) + `specs/<feature>/design.md` (該当Lambda の環境変数表) | デフォルト値・用途・スコープを明記 |
+| **新Lambda関数追加** | `steering/architecture.md` (Lambda設計) + `steering/structure.md` (依存関係図) + `specs/<feature>/design.md` | メモリ・タイムアウト・アーキテクチャ（X86_64/ARM_64） |
+| **デプロイ手順変更** | `steering/workflow.md` + `CLAUDE.md`（デプロイセクション） | scripts/deploy.sh 変更時はコメント・Usage も更新 |
+| **新テストコマンド追加** | `steering/testing.md` + `package.json` (scripts) | コマンド名・用途・引数を明記 |
+| **新依存パッケージ追加** | `steering/tech.md` (バックエンド/フロントエンド/AIエージェントの該当節) | バージョン制約も記載 |
+| **CI/CDワークフロー変更** | `steering/testing.md` (GitHub Actions節) + `steering/workflow.md` (CI/CDパイプライン節) | トリガー・実行内容を反映 |
+| **バージョン更新（リリース時）** | `package.json` (version) + `steering/product.md` (バージョンセクション) | 他ファイルにバージョン記載は禁止（プレースホルダ化済み） |
+| **モジュール間依存変更** | `steering/structure.md` (Lambda モジュール間の依存関係 図) | import 構造の変更時 |
+
+### 検証方法
+
+- [ ] 変更したコードファイルに対応する仕様書（`requirements.md`/`design.md`）の該当セクションが更新されているか
+- [ ] 変更が `steering/` のいずれかのルールに該当する場合、そのファイルが更新されているか
+- [ ] 仕様書に記載のAcceptance Criteriaが実装と一致しているか（Phase 1 整合性検証参照）
+- [ ] `tasks.md` の該当タスクのチェックボックスが `[x]` になっているか（仕様駆動開発ルール3）
 
 ## Issue・PRでのコミットハッシュ参照ルール
 
