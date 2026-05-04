@@ -282,6 +282,12 @@
 8. WHEN テキストと画像を同時に指定する THEN 画像の上にテキストが重ねて描画される（Z-order: 画像→テキスト）
 9. WHEN テキストのみ（image1なし）を指定する THEN 透明背景上にテキストのみ描画される
 10. WHEN 動画生成時にテキストを指定する THEN テロップ付き合成画像がフレームに反映される
+11. WHEN フォント名を省略する THEN デフォルトの `NotoSansJP` が使用され、`NotoSansJP-Regular.ttf` がロードされる
+12. WHEN フォント名に `NotoSansJP` または `NotoSans` を指定する THEN 同一の `NotoSansJP-Regular.ttf` が使用される（エイリアス）
+13. WHEN フォント名に未登録のフォント名を指定する THEN デフォルトフォント（`NotoSansJP-Regular.ttf`）にフォールバックする
+14. WHEN フォント検索が失敗する THEN 検索パスは `lambda/python/fonts/` → `/opt/fonts`（Lambda Layer）の順で実行される
+15. WHEN すべての検索パスでフォントが見つからない THEN Pillow組み込みデフォルトフォント（`ImageFont.load_default`）にフォールバックし、警告ログを出力する
+16. WHEN TTFファイルのロードに失敗する（破損ファイル等）THEN Pillow組み込みデフォルトフォントにフォールバックし、警告ログを出力する
 
 ## 技術的制約
 

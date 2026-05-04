@@ -267,6 +267,37 @@ class ChatHistoryManager:
 
 > 注: `timestamp`（SK）はミリ秒、`ttl` は秒。両者の単位が異なる点に注意。
 
+#### セッションIDのライフサイクル
+
+```
+[初回アクセス]                        [継続利用]                            [リセット/期限切れ]
+  ┌────────────────┐                   ┌────────────────┐                  ┌────────────────┐
+  │ Frontend       │                   │ Frontend       │                  │ Frontend       │
+  │ crypto.random  │                   │ localStorage   │                  │ 会話リセット    │
+  │ UUID() で生成  │ ──保存──▶         │ から読み出し   │ ──送信──▶        │ → 新UUID生成   │
+  └───────┬────────┘                   └───────┬────────┘                  └───────┬────────┘
+          │ POST /chat (sessionId)             │ POST /chat (sessionId)            │
+          ▼                                    ▼                                    ▼
+  ┌────────────────┐                   ┌────────────────┐                  ┌────────────────┐
+  │ Lambda         │                   │ Lambda         │                  │ Lambda         │
+  │ UUIDv4 検証    │                   │ Query history  │                  │ 履歴は別ID扱い │
+  │ → put_item     │                   │ → 履歴をAgent  │                  │ → 古いIDは     │
+  │   (1件目)      │                   │   コンテキスト │                  │   TTL=7日後に  │
+  │                │                   │   に投入       │                  │   自動削除     │
+  └────────────────┘                   └────────────────┘                  └────────────────┘
+```
+
+#### DynamoDBクエリパターン
+
+| 操作 | クエリ | 備考 |
+|------|-------|------|
+| 履歴取得 | `Query(KeyConditionExpression='sessionId = :sid', ScanIndexForward=True, ConsistentRead=True, Limit=N)` | 古い順（時系列）で取得。`ConsistentRead` で書き込み直後のレースを最小化 |
+| 履歴保存 | `PutItem(Item={sessionId, timestamp, role, content, ttl, ...})` | 同一timestampはミリ秒単位なので衝突は実質的に発生しない |
+| 履歴削除 | `Query` でセッション分のキーを取得 → `BatchWriter` で `DeleteItem`（ページネーション対応） | LastEvaluatedKey をループ処理 |
+| アクセス制御 | なし（API Gateway認証で制御） | DynamoDB自体にはセッション所有者の概念なし |
+
+> セキュリティ注意: セッションIDは非対称な認証情報ではない。第三者がIDを推測できれば履歴を閲覧可能。UUIDv4 のエントロピー（122ビット）が事実上の保護。
+
 ## 3. API設計
 
 ### 3.1 POST /chat - メッセージ送信

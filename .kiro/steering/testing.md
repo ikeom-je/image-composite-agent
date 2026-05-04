@@ -86,6 +86,66 @@ npm run test:selection       # 画像選択E2E
 npm run test:integration     # 統合E2E
 ```
 
+## テスト用環境変数
+
+テスト実行時にCloudFormation出力から取得して設定する。各環境（dev/staging/production）でスタック名サフィックスが異なる点に注意。
+
+| 環境変数 | 用途 | CDK出力キー | 備考 |
+|---------|------|----------|------|
+| `API_URL` | 画像合成APIエンドポイント。`/images/composite` を含む完全URL。Playwright設定では末尾を除去してbaseURLに使用 | `ApiUrl` (ImageProcessorApiStack) | 例: `.../prod/images/composite` |
+| `CHAT_API_URL` | Chat Agent APIのベースURL（末尾 `/chat` を含む）。`POST /chat`、`GET /chat/models`、`GET/DELETE /chat/history/{sessionId}` で使用 | `ChatApiUrl` (ImageProcessorApiStack) | 例: `.../prod/chat` |
+| `FRONTEND_URL` | フロントエンドURL（CloudFrontドメイン）。E2EテストのbaseURL | `FrontendUrl` (FrontendStack) | - |
+
+### CHAT_API_URL のフォールバック
+
+`test/e2e/chat-agent.api.spec.ts` は以下の順で URL を解決する:
+
+```typescript
+chatApiUrl: process.env.CHAT_API_URL
+         || process.env.API_URL?.replace(/\/images\/composite$/, '/chat')
+         || ''
+```
+
+`CHAT_API_URL` 未設定時は `API_URL` の末尾 `/images/composite` を `/chat` に置換して導出する。CI/手動テストでは明示的に指定するのが望ましい。
+
+### 取得方法（環境別）
+
+```bash
+# production
+export CHAT_API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
+  --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text)
+
+# staging / dev は -Staging / -Dev サフィックス
+export CHAT_API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack-Dev \
+  --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text)
+```
+
+## Chat Agent テストでのセッションID管理
+
+Chat AgentテストはDynamoDB会話履歴の影響を受けるため、セッションIDの扱いに注意が必要。
+
+### セッションID生成パターン
+
+| パターン | 用途 | 実装例 |
+|---------|------|-------|
+| テストスイートごとに固定UUID | フロー全体で会話履歴を共有・累積したい場合（E2E安定化） | `test.beforeAll` で `randomUUID()` を生成し describe 全体で共有 |
+| テストごとに新規UUID | 履歴の影響を受けたくない独立テスト | 各 `test()` 内で `randomUUID()` を呼ぶ |
+| エラーケース用 | バリデーションテスト等 | data に直接 `randomUUID()` を渡す |
+
+### 履歴クリーンアップ
+
+会話履歴を蓄積しないため、テスト終了時に `DELETE /chat/history/{sessionId}` で削除する:
+
+```typescript
+test.afterAll(async ({ request }) => {
+  await request.delete(`${TEST_CONFIG.chatApiUrl}/history/${sessionId}`).catch(() => {})
+})
+```
+
+### DynamoDB ConsistentRead
+
+Chat履歴の取得は `ConsistentRead=True` で実行されるが、書き込み直後（数十ms以内）の取得は競合することがある。`POST /chat` 直後に `GET /chat/history` するテストでは小さな待機を入れるかリトライを実装する。
+
 ## テストの書き方
 
 ### ユニットテスト構造

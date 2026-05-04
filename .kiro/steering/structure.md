@@ -46,6 +46,36 @@ image-processor-api/
 - `chat_history.py` - DynamoDB会話履歴管理
 - `requirements.txt` - Python依存関係
 
+### Lambda モジュール間の依存関係
+
+#### Chat Agent Lambda（agent_handler の起動経路）
+
+```
+agent_handler.py
+   ├─ agent_tools.py          (compose_images / generate_video / list_uploaded_images / delete_uploaded_image / get_help)
+   │     └─ agent_prompts.py  (resolve_position, resolve_size)
+   ├─ agent_prompts.py        (SYSTEM_PROMPT)
+   └─ chat_history.py         (ChatHistoryManager — DynamoDB)
+```
+
+- `agent_tools._last_media_result` はモジュールグローバル変数。`agent_handler.handle_chat` が呼び出し前にリセット → ツール実行後に取得（コンテキスト超過対策のための受け渡し）。
+- 循環依存はない。`agent_prompts` と `chat_history` は他モジュールに依存しない葉ノード。
+
+#### Image Processor Lambda（image_processor の起動経路）
+
+```
+image_processor.py
+   ├─ image_compositor.py     (create_composite_image, apply_base_opacity, parse_text_parameters)
+   │     └─ text_renderer.py  (render_text_overlay, load_font)
+   ├─ image_fetcher.py        (fetch_images_parallel)
+   ├─ video_generator.py      (generate_video_from_image — ffmpeg呼び出し)
+   ├─ upload_manager.py       (create_presigned_url 等は別Lambda起動時のみ利用)
+   └─ error_handler.py        (ParameterError, ImageFetchError, ImageProcessingError)
+```
+
+- `text_renderer` は `image_compositor` のみが利用する。直接 `image_processor` から呼ばない。
+- `error_handler` は全モジュールから利用される共通の例外定義。
+
 フォント:
 - `fonts/NotoSansJP-Regular.ttf` - 日本語フォント（テキストオーバーレイ用）
 
