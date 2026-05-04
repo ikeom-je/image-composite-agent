@@ -78,6 +78,7 @@ const params = ref({
   
   // ベース画像
   baseImage: 'transparent',
+  baseOpacity: 100,  // ベース画像透明度（0-100、デフォルト100=不透明）
   
   // 画像設定
   image1: {
@@ -250,6 +251,11 @@ const buildApiUrl = (params) => {
     url.searchParams.set('video_format', params.videoGeneration.format)
   }
   
+  // ベース画像透明度（オプション、デフォルト100）
+  if (params.baseOpacity !== undefined && params.baseOpacity !== 100) {
+    url.searchParams.set('baseOpacity', params.baseOpacity.toString())
+  }
+  
   // 出力形式
   url.searchParams.set('format', params.format)
   
@@ -303,6 +309,7 @@ interface CompositionParams {
   canvas_width: 1920
   canvas_height: 1080
   baseImage: string
+  baseOpacity: number  // 0-100（デフォルト100=完全不透明）
   image1: ImageConfig
   image2: ImageConfig
   image3: ImageConfig
@@ -481,7 +488,45 @@ def handler(event, context):
         return format_response(500, {'error': str(e)})
 ```
 
-#### 2.3 画像合成エンジン
+#### 2.3 ベース画像透明度適用関数
+
+```python
+def apply_base_opacity(base_img: Image.Image, opacity: int) -> Image.Image:
+    """
+    ベース画像にopacity（透明度）を適用する
+
+    Args:
+        base_img: ベース画像（RGBAモード）
+        opacity: 透明度（0=完全透明、100=不透明）
+
+    Returns:
+        Image.Image: opacity適用後のベース画像
+    """
+    if opacity >= 100:
+        return base_img  # 最適化：透明度処理をスキップ
+    if opacity <= 0:
+        return Image.new('RGBA', base_img.size, (0, 0, 0, 0))  # 完全透明
+
+    # アルファチャンネルにopacityを乗算
+    r, g, b, a = base_img.split()
+    a = a.point(lambda x: int(x * opacity / 100))
+    return Image.merge('RGBA', (r, g, b, a))
+```
+
+**処理シーケンス（create_composite_image内）:**
+```
+1. create_base_image() でベース画像を準備（透明キャンバスまたは指定画像）
+2. apply_base_opacity(composite, base_opacity) でopacity適用
+3. image1, image2, image3 を順にペースト
+4. text_paramsがある場合はテキストを描画（Z-order: 画像→テキスト）
+```
+
+**APIパラメータ:**
+| パラメータ名 | 型 | デフォルト | 説明 |
+|------------|-----|---------|------|
+| `baseOpacity` | integer | 100 | ベース画像の不透明度（0=完全透明、100=完全不透明）。0未満・100超はクランプ、非数値は100にフォールバック |
+
+#### 2.4 画像合成エンジン
 
 ```python
 def create_composite_image(base_img: Image.Image, 

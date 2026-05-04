@@ -394,6 +394,37 @@
   - 動画生成機能のパフォーマンステスト
   - _要件: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8_
 
+- [x] 20. ベース画像透明度制御機能（baseOpacity）の実装
+
+- [x] 20.1 apply_base_opacity()関数の実装
+  - `lambda/python/image_compositor.py` に `apply_base_opacity(base_img, opacity)` 関数を追加
+  - opacity=100時は処理スキップ（最適化）、opacity=0時は完全透明画像を返す
+  - 中間値はアルファチャンネルにopacity/100を乗算
+  - `create_composite_image()` に `base_opacity: int = 100` 引数を追加し、ベース画像準備後に適用
+  - _要件: 20.1, 20.2, 20.3, 20.7_
+
+- [x] 20.2 LambdaハンドラーへのbaseOpacityパラメータ追加
+  - `lambda/python/image_processor.py` で `baseOpacity` クエリパラメータを取得
+  - 0-100範囲へのクランプ処理を実装（`max(0, min(100, value))`）
+  - 非数値入力時はデフォルト100にフォールバック（PR #42で対応）
+  - `create_composite_image()` に `base_opacity` を渡す
+  - _要件: 20.4, 20.5, 20.6_
+
+- [x] 20.3 Chat AgentツールへのbaseOpacity対応
+  - `lambda/python/agent_tools.py` の `compose_images()` / `generate_video()` に `base_opacity` 引数を追加
+  - `lambda/python/agent_prompts.py` に透明度指定の説明を追加
+  - _要件: 20.1, 20.3_
+
+- [x] 20.4 フロントエンドUI（スライダー）の実装
+  - `frontend/src/App.vue` にベース画像透明度スライダー（0-100%）を追加
+  - APIリクエストに `baseOpacity` パラメータを含める
+  - _要件: 20.1, 20.4, 20.5_
+
+- [x] 20.5 ユニットテストの作成
+  - `test/lambda/test_image_compositor_test.py` にopacity関連テスト7件を追加
+  - opacity=0（完全透明）、opacity=50（半透明）、opacity=100（不透明）、クランプ動作を検証
+  - _要件: 20.1, 20.2, 20.3, 20.4, 20.5_
+
 - [x] 19. テキストオーバーレイ機能の実装
 
 - [x] 19.1 テキスト描画エンジンの実装
