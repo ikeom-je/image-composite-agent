@@ -37,6 +37,69 @@ inclusion: auto
 - 分岐元: `main`
 - マージ先: `main` と `dev` の両方
 
+## Git Worktree
+
+複数のIssueを並行して作業する場合や、現在の作業ブランチを汚さずに別タスクに着手する場合はgit worktreeを使う。
+
+### ディレクトリ
+
+- 配置先: `.worktrees/<ブランチ名>/`（プロジェクトルート直下、`.gitignore`で除外済み）
+- グローバル配置は使わない（プロジェクトローカルに統一）
+
+### 作成手順
+
+```bash
+# worktreeを作成して新ブランチを切る
+git worktree add .worktrees/<ブランチ名> -b <ブランチ名>
+
+# 例: issue38対応
+git worktree add .worktrees/feature-issue38-spec -b feature/issue38-spec
+```
+
+### ブランチ命名
+
+worktree用ブランチも通常ブランチと同じ命名規則に従う。
+
+| 種別 | 形式 | 例 |
+|------|------|-----|
+| 機能 | `feature/issue番号-説明` | `feature/issue38-spec-base-opacity` |
+| バグ修正 | `bugfix/issue番号-説明` | `bugfix/issue42-opacity-validation` |
+
+### セットアップ
+
+worktree作成後は依存関係を確認して作業開始する。
+
+```bash
+cd .worktrees/<ブランチ名>
+
+# Node.js依存関係（package.jsonがある場合）
+npm install
+
+# Python依存関係（requirements.txtがある場合）
+pip install -r lambda/python/requirements.txt
+```
+
+### 削除
+
+作業完了・PRマージ後はworktreeを削除する。
+
+```bash
+# worktreeを削除
+git worktree remove .worktrees/<ブランチ名>
+
+# リモートにプッシュ済みのブランチを削除
+git branch -d <ブランチ名>
+```
+
+### .gitignore
+
+`.worktrees/`は`.gitignore`に追加されており、worktree内の変更が誤ってコミットされる心配はない。
+
+```
+# Git worktrees
+.worktrees/
+```
+
 ## コミットメッセージ
 
 ### 形式
