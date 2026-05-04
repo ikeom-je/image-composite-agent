@@ -1,5 +1,26 @@
 # Image Compositor - 開発ガイド
 
+## 作業開始前のチェック（必読・全エージェント共通）
+
+**新しいタスク・Issue対応・PR作成に着手する前に、毎回必ず本セクションを再確認する。** 本プロジェクトは複数のAIエージェント・開発者が並行作業することを想定しており、各自が同じルールに従うことで仕様・規約・運用方針の一貫性を保つ。
+
+1. **本ファイル（CLAUDE.md）を冒頭から再参照** — 仕様駆動開発ルール / 変更時の更新トリガー / 環境戦略 / 重要な設計原則
+2. **対象機能の仕様書を確認** — `.kiro/specs/<feature>/{requirements.md, design.md, tasks.md}`
+   - `<feature>` は `image-composition` または `strands-agent`
+3. **タスクに該当する steering ファイルを確認**:
+   - 新機能・アーキ変更 → [steering/architecture.md](.kiro/steering/architecture.md), [steering/structure.md](.kiro/steering/structure.md)
+   - 技術スタック・依存・環境変数 → [steering/tech.md](.kiro/steering/tech.md)
+   - テスト追加・テスト変更 → [steering/testing.md](.kiro/steering/testing.md)
+   - PR作成・コミット・ブランチ操作 → [steering/git.md](.kiro/steering/git.md)（**ドキュメント更新チェックリスト**を含む）
+   - デプロイ操作・ワークフロー → [steering/workflow.md](.kiro/steering/workflow.md)
+   - コード規約 → [steering/conventions.md](.kiro/steering/conventions.md)
+4. **並行作業時は git worktree を使用** — 現ブランチを汚さず複数Issueを並行対応する場合、[steering/git.md の「Git Worktree」](.kiro/steering/git.md#git-worktree) に従って `.worktrees/<branch-name>/` を作成
+5. **PR作成時は `.github/pull_request_template.md` のチェックリストを完了** — ドキュメント更新確認10項目 + tasks.md チェックボックス更新
+
+> 仕様駆動開発（Kiro/QDev）の根幹: **仕様 → 設計 → 実装 → ドキュメント整合**。途中でルール確認を省略すると、複数エージェント間でドリフトが発生する。
+
+---
+
 ## 仕様駆動開発ルール
 
 このプロジェクトはKiro/QDevによる仕様駆動開発を採用しています。**実装は必ず仕様に基づいて行ってください。**
