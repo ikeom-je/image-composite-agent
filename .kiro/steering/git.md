@@ -213,6 +213,32 @@ Closes #123
 5. 最終承認
 6. マージ（指示があるまで作業者はマージしない）
 
+## ドキュメント更新チェックリスト（機能追加・変更時）
+
+新機能・バグ修正・インフラ変更を行う際、変更の種別ごとに更新すべきドキュメントを以下に示す。PR作成前にこのチェックリストで漏れを確認する（PRテンプレートにも同等の確認項目あり）。
+
+### 変更種別ごとの更新先
+
+| 変更種別 | 更新すべきファイル | 補足 |
+|---------|----------------|------|
+| **新APIパラメータ追加**（例: `baseOpacity`） | `specs/<feature>/requirements.md` (Req or AC追加) + `specs/<feature>/design.md` (パラメータ表) + `steering/architecture.md` (エンドポイント表) | バリデーション・デフォルト値・後方互換性も明記 |
+| **新Lambdaエンドポイント追加**（例: `/chat/models`） | `steering/architecture.md` (エンドポイント表) + `specs/<feature>/requirements.md` (Req追加) + `specs/<feature>/design.md` (API設計セクション) | リクエスト/レスポンス形式・エラー応答も記載 |
+| **新環境変数追加**（例: `BEDROCK_REGION`） | `steering/tech.md` (環境変数一覧) + `specs/<feature>/design.md` (該当Lambda の環境変数表) | デフォルト値・用途・スコープを明記 |
+| **新Lambda関数追加** | `steering/architecture.md` (Lambda設計) + `steering/structure.md` (依存関係図) + `specs/<feature>/design.md` | メモリ・タイムアウト・アーキテクチャ（X86_64/ARM_64） |
+| **デプロイ手順変更** | `steering/workflow.md` + `CLAUDE.md`（デプロイセクション） | scripts/deploy.sh 変更時はコメント・Usage も更新 |
+| **新テストコマンド追加** | `steering/testing.md` + `package.json` (scripts) | コマンド名・用途・引数を明記 |
+| **新依存パッケージ追加** | `steering/tech.md` (バックエンド/フロントエンド/AIエージェントの該当節) | バージョン制約も記載 |
+| **CI/CDワークフロー変更** | `steering/testing.md` (GitHub Actions節) + `steering/workflow.md` (CI/CDパイプライン節) | トリガー・実行内容を反映 |
+| **バージョン更新（リリース時）** | `package.json` (version) + `steering/product.md` (バージョンセクション) | 他ファイルにバージョン記載は禁止（プレースホルダ化済み） |
+| **モジュール間依存変更** | `steering/structure.md` (Lambda モジュール間の依存関係 図) | import 構造の変更時 |
+
+### 検証方法
+
+- [ ] 変更したコードファイルに対応する仕様書（`requirements.md`/`design.md`）の該当セクションが更新されているか
+- [ ] 変更が `steering/` のいずれかのルールに該当する場合、そのファイルが更新されているか
+- [ ] 仕様書に記載のAcceptance Criteriaが実装と一致しているか（Phase 1 整合性検証参照）
+- [ ] `tasks.md` の該当タスクのチェックボックスが `[x]` になっているか（仕様駆動開発ルール3）
+
 ## Issue・PRでのコミットハッシュ参照ルール
 
 ### 基本ルール

@@ -10,6 +10,23 @@
 4. **設計準拠**: コンポーネント構造・データモデル・API設計は`design.md`に従う
 5. **要件トレーサビリティ**: 各タスクの `_要件: X.X_` を参照し、対応する要件が満たされていることを確認する
 
+### 変更時のドキュメント更新トリガー
+
+実装変更を加えたら、変更種別に応じて以下のドキュメントを必ず同時更新する。詳細チェックリストは [.kiro/steering/git.md](.kiro/steering/git.md#ドキュメント更新チェックリスト機能追加変更時) を参照。
+
+| 変更したもの | 必ず更新するドキュメント |
+|-----------|-------------------|
+| 新APIパラメータ | `specs/<feature>/requirements.md`（AC追加）+ `specs/<feature>/design.md`（パラメータ表）+ `steering/architecture.md`（エンドポイント表） |
+| 新Lambdaエンドポイント | `steering/architecture.md`（エンドポイント表）+ `specs/<feature>/requirements.md`（Req追加）+ `specs/<feature>/design.md`（API設計） |
+| 新環境変数 | `steering/tech.md`（環境変数一覧）+ 該当する `specs/<feature>/design.md` |
+| 新Lambda関数 | `steering/architecture.md` + `steering/structure.md`（依存関係図）+ `specs/<feature>/design.md` |
+| デプロイ手順 | `steering/workflow.md` + 本ファイルのデプロイセクション |
+| 新テストコマンド | `steering/testing.md` + `package.json` |
+| 依存パッケージ | `steering/tech.md`（バージョン制約も） |
+| CI/CDワークフロー | `steering/testing.md`（GitHub Actions節）+ `steering/workflow.md`（CI/CDパイプライン節） |
+| バージョン更新 | `package.json` + `steering/product.md` のみ（他ファイルにバージョン直書き禁止） |
+| モジュール間依存 | `steering/structure.md`（Lambda依存関係図） |
+
 ## 仕様書
 
 | ファイル | 内容 |
