@@ -1101,7 +1101,7 @@ def get_video_format_default() -> str:
     return load_defaults()['system_default']['video']['format']
 ```
 
-**`image_compositor.py` の `parse_image_parameters` 改修**: 現状ハードコードされている x/y/width/height デフォルトを `composite_defaults.get_image_default(mode, 'imageN')` で置換。mode は `image2`/`image3`/`text*` の有無で判定。
+**`image_compositor.py` の `parse_image_parameters` 改修**: 現状ハードコードされている x/y/width/height デフォルトを `composite_defaults.get_image_default(mode, 'imageN')` で置換。mode は `image2` / `image3` の有無のみで判定する（§6.5 参照、テキストの有無は判定に影響しない）。
 
 **`image_processor.py` の `baseImage` / `video_format` 解決**:
 
