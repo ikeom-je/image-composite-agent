@@ -31,10 +31,38 @@ inclusion: auto
 
 ## AIエージェント
 
-- Strands Agents SDK: AIエージェントフレームワーク
+- Strands Agents SDK: `strands-agents>=0.1.0,<1.0.0`（AIエージェントフレームワーク）
+- Strands Agents Tools: `strands-agents-tools>=0.1.0,<1.0.0`
+- Anthropic SDK: `anthropic>=0.40.0,<1.0.0`（型定義・補助）
 - AWS Bedrock: LLM推論（Claude Sonnet 4.5、Haiku等マルチモデル対応）
 - BedrockModel: US Cross-Region推論プロファイル
-- DynamoDB: 会話履歴管理（ChatHistoryテーブル）
+- DynamoDB: 会話履歴管理（ChatHistoryテーブル、TTL=7日）
+
+依存パッケージは `lambda/layers/agent-deps/requirements.txt` で管理し、Lambda Layer として配布する。
+
+### Bedrock US Cross-Region 推論プロファイル
+
+Strands Agents は推論プロファイル経由でBedrockを呼び出す。Lambda IAMロールには2種類の権限が必要:
+
+1. **推論プロファイルへの InvokeModel 権限**:
+   - リソースARN形式: `arn:aws:bedrock:us-east-1:{account}:inference-profile/{profile-id}`
+2. **基盤モデルへの InvokeModel 権限**（推論プロファイル経由でのみ使用）:
+   - リソースARN形式: `arn:aws:bedrock:{region}::foundation-model/{model-id}`
+   - 対象リージョン: `us-east-1`, `us-east-2`, `us-west-2`
+   - 条件: `bedrock:InferenceProfileArn` が許可された推論プロファイルARNと一致する場合のみ
+
+加えて、Bedrock Marketplaceでのモデル自動サブスクリプション用に `aws-marketplace:ViewSubscriptions / Subscribe / Unsubscribe` 権限を付与する。
+
+#### 許可モデル（推論プロファイルID）
+
+| モデル | 推論プロファイルID | 備考 |
+|--------|-----------------|------|
+| Claude Sonnet 4.5 | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` | デフォルト・高精度バランス型 |
+| Claude Haiku 4.5 | `us.anthropic.claude-haiku-4-5-20251001-v1:0` | 高速・低コスト |
+| Nova 2 Lite | `us.amazon.nova-2-lite-v1:0` | AWS製・低コスト・マルチモーダル |
+| Nova Micro | `us.amazon.nova-micro-v1:0` | AWS製・最小コスト |
+
+`agent_handler.py` の `ALLOWED_MODELS` で許可リストを管理し、リクエスト時の `modelId` バリデーションでインジェクションを防止する。
 
 ## AWSサービス
 
@@ -166,8 +194,9 @@ Lambda関数で使用（共通）:
 - `PATH` - バイナリパス（ffmpegを含む）
 
 Agent Lambda固有:
-- `AGENT_MODEL_ID` - デフォルトモデルID（例: us.anthropic.claude-sonnet-4-5-20250929-v1:0）
-- `CHAT_HISTORY_TABLE` - DynamoDB会話履歴テーブル名
+- `AGENT_MODEL_ID` - デフォルト推論プロファイルID（例: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`）。`ALLOWED_MODELS` に存在しない値が指定された場合は内部フォールバック値に切り替わる
+- `BEDROCK_REGION` - BedrockModel が呼び出すリージョン（デフォルト: `us-east-1`）
+- `CHAT_HISTORY_TABLE` - DynamoDB会話履歴テーブル名（PK=`sessionId`, SK=`timestamp`, TTL=`ttl`）
 
 ## ビルドシステム
 

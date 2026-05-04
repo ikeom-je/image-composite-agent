@@ -154,8 +154,8 @@ git checkout -b bugfix/bug-description
 ### ステップ3: 検証
 ```bash
 npm run test:lambda
-npm run deploy
-npm run test:api
+ENVIRONMENT=dev ./scripts/deploy.sh
+API_URL=<dev環境のApiUrl> npm run test:api
 ```
 
 ### ステップ4: デプロイ
@@ -216,15 +216,19 @@ npm run test:all-e2e
 ```bash
 # オプション1: コミットをリバートして再デプロイ
 git revert <commit-hash>
-npm run deploy
+ENVIRONMENT=<env> ./scripts/deploy.sh
 
-# オプション2: CloudFormationロールバック
-aws cloudformation rollback-stack --stack-name ImageProcessorApiStack
+# オプション2: CloudFormationロールバック（環境別スタック名に注意）
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack       # production
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Staging
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Dev
 
 # オプション3: 以前のバージョン
 git checkout <previous-tag>
-npm run deploy
+ENVIRONMENT=<env> ./scripts/deploy.sh
 ```
+
+> 注: production / staging は通常CI/CD自動デプロイ。緊急時のみ手動オプションを使用する。
 
 ## リリースワークフロー
 

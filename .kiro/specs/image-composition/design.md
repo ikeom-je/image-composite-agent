@@ -309,7 +309,7 @@ interface CompositionParams {
   canvas_width: 1920
   canvas_height: 1080
   baseImage: string
-  baseOpacity: number  // 0-100（デフォルト100=完全不透明）
+  baseOpacity: number  // 0-100（デフォルト100=完全不透明）。サーバー側で [0,100] にクランプ、非数値は100へフォールバック（Issue #37、詳細は §2.3.1）
   image1: ImageConfig
   image2: ImageConfig
   image3: ImageConfig
@@ -524,7 +524,39 @@ def apply_base_opacity(base_img: Image.Image, opacity: int) -> Image.Image:
 **APIパラメータ:**
 | パラメータ名 | 型 | デフォルト | 説明 |
 |------------|-----|---------|------|
-| `baseOpacity` | integer | 100 | ベース画像の不透明度（0=完全透明、100=完全不透明）。0未満・100超はクランプ、非数値は100にフォールバック |
+| `baseOpacity` | integer | 100 | ベース画像の不透明度（0=完全透明、100=完全不透明） |
+
+#### 2.3.1 baseOpacity 入力検証ルール
+
+`image_processor.py` のリクエストパース時に以下の順で検証・正規化を行う:
+
+```python
+# image_processor.py 抜粋（実装と同等のロジック）
+try:
+    base_opacity_param = int(query_params.get('baseOpacity', '100'))
+except (ValueError, TypeError):
+    base_opacity_param = 100  # 非数値はデフォルトにフォールバック (Issue #37)
+base_opacity_param = max(0, min(100, base_opacity_param))  # 0-100にクランプ
+```
+
+| 入力 | 処理結果 | 備考 |
+|------|---------|------|
+| 未指定（パラメータ無し） | `100` | クエリ文字列のデフォルト |
+| `"75"`（数値文字列） | `75` | `int()` で変換 |
+| `"-50"` | `0` | クランプ下限 |
+| `"150"` | `100` | クランプ上限 |
+| `"abc"`（非数値文字列） | `100` | `ValueError` → デフォルトにフォールバック（Issue #37） |
+| `null` / 空文字列 | `100` | `TypeError`/`ValueError` → デフォルトにフォールバック |
+| `"50.5"`（小数文字列） | `100` | `int()` が `ValueError` → デフォルトにフォールバック |
+
+**検証順序の理由**:
+1. 型変換エラー（`ValueError` / `TypeError`）は **エラーを返さずデフォルト100にフォールバック** する。これは後方互換性とフロントエンドの寛容な扱いのため（Issue #37）。
+2. その後、整数として有効な値を `[0, 100]` にクランプする。これにより API 呼び出し元の意図（透明度を低く/高く指定）を可能な限り尊重する。
+
+**`apply_base_opacity()` 関数内の最適化分岐**:
+- `opacity >= 100`: 処理スキップ（元画像をそのまま返す）
+- `opacity <= 0`: 完全透明な新規RGBA画像を返す
+- `0 < opacity < 100`: アルファチャンネルに `opacity / 100` を乗算
 
 #### 2.4 画像合成エンジン
 
