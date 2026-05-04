@@ -171,11 +171,14 @@ def apply_base_opacity(base_img: Image.Image, opacity: int) -> Image.Image:
 
     Args:
         base_img: ベース画像（RGBAモード）
-        opacity: 透明度（0=完全透明、100=不透明）
+        opacity: 透明度（0=完全透明、100=不透明、範囲外は内部で0-100にクランプ）
 
     Returns:
         Image.Image: opacity適用後のベース画像
     """
+    # 範囲外の値を0-100にクランプ（呼び出し側でクランプ不要）
+    opacity = max(0, min(100, opacity))
+
     if opacity >= 100:
         return base_img
     if opacity <= 0:

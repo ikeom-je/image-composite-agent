@@ -204,11 +204,10 @@ def compose_images(
                 'padding': pad,
             }
 
-    # 合成実行
-    opacity = max(0, min(100, base_opacity))
+    # 合成実行（クランプは apply_base_opacity 側に集約 - Issue #39）
     composite = create_composite_image(base_img, img1, img2, img3, params,
                                        text_params=text_params if text_params else None,
-                                       base_opacity=opacity)
+                                       base_opacity=base_opacity)
 
     # S3に保存してCloudFront URLを生成
     from datetime import datetime
@@ -389,7 +388,8 @@ def generate_video(
         'image1Width': str(sz1[0]),
         'image1Height': str(sz1[1]),
         'baseImage': base_image,
-        'baseOpacity': str(max(0, min(100, base_opacity))),
+        # クランプは image_processor 経由で apply_base_opacity 側に集約 (Issue #39)
+        'baseOpacity': str(base_opacity),
         'format': 'png',
         'generate_video': 'true',
         'video_duration': str(duration),
