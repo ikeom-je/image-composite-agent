@@ -65,16 +65,26 @@ agent_handler.py
 
 ```
 image_processor.py
-   ├─ image_compositor.py     (create_composite_image, apply_base_opacity, parse_text_parameters)
+   ├─ image_compositor.py     (create_composite_image, parse_image_parameters, parse_text_parameters)
    │     └─ text_renderer.py  (render_text_overlay, load_font)
    ├─ image_fetcher.py        (fetch_images_parallel)
-   ├─ video_generator.py      (generate_video_from_image — ffmpeg呼び出し)
-   ├─ upload_manager.py       (create_presigned_url 等は別Lambda起動時のみ利用)
+   ├─ video_generator.py      (generate_video_from_image, get_video_mime_type, get_video_extension — ffmpeg呼び出し)
+   ├─ test_image_generator.py (generate_circle_image, generate_rectangle_image, generate_triangle_image)
    └─ error_handler.py        (ParameterError, ImageFetchError, ImageProcessingError)
 ```
 
 - `text_renderer` は `image_compositor` のみが利用する。直接 `image_processor` から呼ばない。
 - `error_handler` は全モジュールから利用される共通の例外定義。
+- `image_processor` は `upload_manager` を import しない。後者は独立した `UploadManagerFunction` Lambda として動作する（下記参照）。
+
+#### Upload Manager Lambda（upload_manager の起動経路）
+
+```
+upload_manager.py
+   └─ (外部のみ: boto3, PIL, botocore)
+```
+
+S3署名付きURL発行・アップロード済み画像一覧の独立Lambda。プロジェクト内の他Pythonモジュールには依存しない。Image Processor Lambda とは API Gateway 上で別パス（`/upload/*`）にマッピングされる。
 
 フォント:
 - `fonts/NotoSansJP-Regular.ttf` - 日本語フォント（テキストオーバーレイ用）
