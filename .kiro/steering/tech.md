@@ -127,28 +127,7 @@ npm run destroy
 
 ### テスト
 
-```bash
-# 全テストの実行
-npm run test:comprehensive
-
-# Lambdaユニットテスト
-npm run test:lambda
-
-# API統合テスト
-npm run test:api
-
-# E2Eテスト
-npm run test:upload          # アップロード機能
-npm run test:selection       # 画像選択
-npm run test:integration     # 完全なワークフロー
-npm run test:all-e2e        # 全E2Eテスト
-
-# フロントエンドテスト
-npm run test:frontend
-
-# 動画生成テスト
-npm test:video-generation
-```
+テストコマンド・テストピラミッド・デプロイ後検証フローは [testing.md](testing.md) を参照（一元管理）。
 
 ### 環境セットアップ
 

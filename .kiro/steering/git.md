@@ -18,6 +18,8 @@ inclusion: auto
 | `dev` | staging環境 | 統合テスト（feature→devマージ後） |
 | `main` | production環境 | 安定リリース（dev→mainマージ後） |
 
+各環境のスタック名サフィックス・設定差異は [architecture.md](architecture.md) の「環境戦略」を参照。
+
 ### 機能ブランチ
 - 形式: `feature/短い説明` または `feature/issue番号-説明`
 - 例: `feature/video-generation`、`feature/123-s3-upload`
@@ -191,13 +193,25 @@ test(e2e): 動画生成テストスイートを追加
 Closes #123
 ```
 
-### レビュー基準
-- コードが規約に従っている
-- テストが包括的
-- セキュリティ問題がない
-- パフォーマンスが許容範囲
-- ドキュメントが完全
-- CDK変更がレビュー済み
+### レビュー基準（レビュアー観点）
+
+- [ ] コードが規約に従っている（[conventions.md](conventions.md)）
+- [ ] テストが包括的（ユニット + API + E2E）
+- [ ] セキュリティ問題なし（IAM最小権限、入力バリデーション）
+- [ ] パフォーマンスが許容範囲
+- [ ] ドキュメントが完全（仕様書・steeringの該当ファイル）
+- [ ] CDK変更がレビュー済み
+- [ ] 不要なコード・デバッグコードがない
+- [ ] 不要な依存関係がない
+
+### レビュープロセス
+
+1. 自動チェックが通過（CI/CD）
+2. 作成者による自己レビュー
+3. ピアレビュー（1名以上の承認）
+4. フィードバックに対応 → 修正→再テスト→再レビューのサイクル
+5. 最終承認
+6. マージ（指示があるまで作業者はマージしない）
 
 ## Issue・PRでのコミットハッシュ参照ルール
 
@@ -287,15 +301,15 @@ Thumbs.db
 
 ### タグ形式
 - セマンティックバージョニング: `v{MAJOR}.{MINOR}.{PATCH}`
-- 例: `v3.1.1`
+- 現在のバージョンは [product.md](product.md) を参照
 
 ### タグ作成
 ```bash
-# アノテーション付きタグ
-git tag -a v3.1.1 -m "Release v3.1.1: マルチモデル対応"
+# アノテーション付きタグ（VERSIONは package.json と一致させる）
+git tag -a v<VERSION> -m "Release v<VERSION>: <主な変更>"
 
 # タグをプッシュ
-git push origin v3.1.1
+git push origin v<VERSION>
 
 # すべてのタグをプッシュ
 git push origin --tags
