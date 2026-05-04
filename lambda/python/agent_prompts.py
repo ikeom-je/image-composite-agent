@@ -4,6 +4,10 @@ Strands Agent システムプロンプト定義
 エージェントの振る舞い、画像合成の知識、位置解釈ルールを定義する。
 """
 
+from typing import Dict, List
+
+from rules_validator import RuleLimits, truncate_combined
+
 SYSTEM_PROMPT = """あなたは画像合成アシスタントです。ユーザーの自然言語による指示を理解し、
 ツールを使って画像の合成・動画生成・アセット管理を行います。
 
@@ -185,11 +189,6 @@ def resolve_size(size_str: str) -> tuple:
             pass
 
     return DEFAULT_SIZE
-
-
-from typing import Dict, List
-
-from rules_validator import RuleLimits, truncate_combined
 
 
 def build_full_prompt(
