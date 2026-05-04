@@ -282,6 +282,16 @@
 8. WHEN テキストと画像を同時に指定する THEN 画像の上にテキストが重ねて描画される（Z-order: 画像→テキスト）
 9. WHEN テキストのみ（image1なし）を指定する THEN 透明背景上にテキストのみ描画される
 10. WHEN 動画生成時にテキストを指定する THEN テロップ付き合成画像がフレームに反映される
+11. WHEN フォント名を省略する THEN デフォルトの `NotoSansJP` が使用され、`NotoSansJP-Regular.ttf` がロードされる
+12. WHEN フォント名に `NotoSansJP` または `NotoSans` を指定する THEN 同一の `NotoSansJP-Regular.ttf` が使用される（エイリアス）
+13. WHEN フォント名に未登録の名前を指定する THEN **第1段フォールバック（ファイル名解決）** として `NotoSansJP-Regular.ttf` をTTFファイル名として採用する
+14. WHEN TTFファイルを検索する THEN 検索パスは `lambda/python/fonts/` → `/opt/fonts`（Lambda Layer）の順で実行される
+15. WHEN すべての検索パスでTTFファイルが見つからない THEN **第2段フォールバック（フォントオブジェクト）** として Pillow組み込みデフォルトフォント（`ImageFont.load_default`）が使用され、警告ログを出力する
+16. WHEN TTFファイルのロードに失敗する（破損ファイル等）THEN 同様に **第2段フォールバック** として Pillow組み込みデフォルトフォントが使用され、警告ログを出力する
+
+> フォントフォールバックの2段階構造:
+> - **第1段（19.13）**: 「未登録フォント名 → `NotoSansJP-Regular.ttf` というファイル名で検索を継続」。`text_renderer.py:_find_font_path` 内の `FONT_FILES.get(font_family, FONT_FILES['NotoSansJP'])` で実装
+> - **第2段（19.15, 19.16）**: 「TTFファイルそのものが利用できない → Pillow組み込みフォントオブジェクトに切り替え」。`text_renderer.py:load_font` の例外処理 + 検索失敗時パスで実装
 
 ## 技術的制約
 
