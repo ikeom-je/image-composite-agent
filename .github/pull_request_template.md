@@ -24,12 +24,16 @@ PRタイトルは以下の形式に従ってください:
 - [ ] ユニットテストが通過（`npm run test:lambda`）
 - [ ] APIテストが通過（`npm run test:api`）
 - [ ] E2Eテストが通過（`npm run test:all-e2e` 等）
-- [ ] Chat Agent APIテストが通過（該当する場合: `CHAT_API_URL=... npm run test:chat-agent` 等）
+- [ ] Chat Agent APIテストが通過（該当する場合: `CHAT_API_URL=... npx playwright test --config=test/playwright-api.config.ts --grep "Chat Agent"`）
 - [ ] 手動テスト完了（dev/staging環境で動作確認）
 
 ## ドキュメント更新確認
 
-<!-- 該当する変更がある場合、対応ドキュメントの更新確認チェックを入れる。詳細は .kiro/steering/git.md の「ドキュメント更新チェックリスト」参照 -->
+<!--
+該当する変更がある場合、対応ドキュメントの更新確認チェックを入れる。
+詳細は .kiro/steering/git.md の「ドキュメント更新チェックリスト」参照。
+`<feature>` は仕様書ディレクトリ名（`image-composition` または `strands-agent`）。
+-->
 
 - [ ] **新APIパラメータ**を追加した → `specs/<feature>/requirements.md` (AC追加) + `specs/<feature>/design.md` (パラメータ表) + `steering/architecture.md` (エンドポイント表) を更新
 - [ ] **新Lambdaエンドポイント**を追加した → `steering/architecture.md` (エンドポイント表) + `specs/<feature>/requirements.md` (Req追加) + `specs/<feature>/design.md` (API設計) を更新

@@ -14,6 +14,8 @@
 
 実装変更を加えたら、変更種別に応じて以下のドキュメントを必ず同時更新する。詳細チェックリストは [.kiro/steering/git.md](.kiro/steering/git.md#ドキュメント更新チェックリスト機能追加変更時) を参照。
 
+> 表中の `<feature>` は仕様書ディレクトリ名（`image-composition` または `strands-agent`）。
+
 | 変更したもの | 必ず更新するドキュメント |
 |-----------|-------------------|
 | 新APIパラメータ | `specs/<feature>/requirements.md`（AC追加）+ `specs/<feature>/design.md`（パラメータ表）+ `steering/architecture.md`（エンドポイント表） |
