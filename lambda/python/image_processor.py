@@ -454,7 +454,7 @@ def handler(event, context):
             base_opacity_param = int(query_params.get('baseOpacity', '100'))
         except (ValueError, TypeError):
             base_opacity_param = 100  # 非数値はデフォルトにフォールバック (Issue #37)
-        base_opacity_param = max(0, min(100, base_opacity_param))  # 0-100にクランプ
+        # クランプは apply_base_opacity 側に集約 (Issue #39)
         format_param = query_params.get('format', 'png')
 
         # 動画生成パラメータ
