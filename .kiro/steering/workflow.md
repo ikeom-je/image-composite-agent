@@ -41,35 +41,11 @@ npm run synth
 
 バックエンド→APIテスト→フロントエンド→E2Eテストの順に段階的に検証する。
 
-```bash
-source .env.local
-
-# 4-1. バックエンドデプロイ
-npm run build
-npx cdk deploy ImageProcessorApiStack --require-approval never
-
-# 4-2. API e2eテスト（バックエンド単体の動作確認）
-export API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
-  --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
-npm run test:api
-
-# 4-3. フロントエンドビルド + デプロイ
-cd frontend && npm run build && cd ..
-npx cdk deploy FrontendStack --require-approval never
-
-# 4-4. フロントエンドE2Eテスト
-export FRONTEND_URL=$(aws cloudformation describe-stacks --stack-name FrontendStack \
-  --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" --output text)
-npm run test:all-e2e
-```
+具体的なコマンドは [testing.md](testing.md) の「デプロイ後の検証フロー」を参照。
 
 ### 環境別デプロイ
 
-| 環境 | ブランチ | トリガー | 目的 |
-|------|---------|---------|------|
-| dev | feature/*, bugfix/* | 手動 | 開発中機能のe2eテスト確認 |
-| staging | dev | CI/CD自動（devへのマージ時） | 統合テスト |
-| production | main | CI/CD自動（mainへのマージ時） | 安定リリース |
+3環境（dev / staging / production）の構成・スタック名・設定差異は [architecture.md](architecture.md) の「環境戦略」を参照。
 
 ## 機能開発ワークフロー
 
@@ -90,27 +66,22 @@ git checkout -b feature/feature-name
 - ドキュメントを更新
 
 ### ステップ4: テスト（ローカル + dev環境 E2E）
+
 ```bash
-# ローカルテスト
+# ローカルビルド・テスト
 npm run build
 npm run test:lambda
 npm run synth
 
-# dev環境にデプロイしてE2Eテスト
+# dev環境デプロイ
 ENVIRONMENT=dev ./scripts/deploy.sh
-CHAT_API_URL=... npx playwright test test/e2e/chat-agent.api.spec.ts --config=test/playwright-api.config.ts
-FRONTEND_URL=... npx playwright test test/e2e/chat-agent.spec.ts --config=test/playwright-chat.config.ts
 ```
 
-### ステップ5: コードレビュー
-テストPASS後、実装内容をコードレビューする。レビュー観点:
-- コードが規約に従っている
-- テストが包括的（ユニット + API + E2E）
-- セキュリティ問題なし（IAM最小権限、入力バリデーション）
-- 不要なコード・デバッグコードがない
-- CDK変更がある場合は特に注意してレビュー
+dev環境デプロイ後のe2eテスト手順は [testing.md](testing.md) の「デプロイ後の検証フロー」を参照。
 
-レビューで修正が必要な場合は修正→再テスト→再レビューのサイクルを回す。
+### ステップ5: コードレビュー
+
+テストPASS後、実装内容をコードレビューする。レビュー観点・プロセスの詳細は [git.md](git.md) の「プルリクエストガイドライン」を参照。
 
 ### ステップ6: コミット + Issue コメント
 - テストPASS後にコミット（機能単位で適宜コミット）
@@ -119,9 +90,8 @@ FRONTEND_URL=... npx playwright test test/e2e/chat-agent.spec.ts --config=test/p
 
 ### ステップ7: プルリクエスト（→ dev）
 - ブランチをプッシュ
-- テンプレートを使用してPRを作成（ベースブランチ: `dev`）
-- レビューを依頼
-- フィードバックに対応
+- PRを作成（ベースブランチ: `dev`）。タイトル・説明テンプレートは [git.md](git.md) の「プルリクエストガイドライン」参照
+- レビュー → フィードバック対応
 - **devブランチへのマージは指示があるまで行わない**
 
 ### ステップ8: devへマージ → staging環境で統合テスト
@@ -152,11 +122,13 @@ git checkout -b bugfix/bug-description
 ```
 
 ### ステップ3: 検証
+
 ```bash
 npm run test:lambda
 ENVIRONMENT=dev ./scripts/deploy.sh
-API_URL=<dev環境のApiUrl> npm run test:api
 ```
+
+APIテスト・E2Eテストの詳細コマンドは [testing.md](testing.md) を参照。
 
 ### ステップ4: デプロイ
 - PRを作成
@@ -166,15 +138,7 @@ API_URL=<dev環境のApiUrl> npm run test:api
 
 ## デプロイワークフロー
 
-### 環境戦略
-
-単一AWSアカウント内で3環境を運用。CloudFormationスタック名にサフィックスを付けて分離。
-
-| 環境 | スタック名サフィックス | 用途 | デプロイトリガー |
-|------|---------------------|------|---------------|
-| dev | `-Dev` | 作業ブランチのe2eテスト確認 | 手動（開発者がローカルから） |
-| staging | `-Staging` | devブランチの統合テスト | CI/CD（devへのマージ時に自動） |
-| production | (なし) | 安定リリース。ユーザー利用環境 | CI/CD（mainへのマージ時に自動） |
+環境戦略（3環境の構成・スタック名・設定差異）は [architecture.md](architecture.md) の「環境戦略」を参照。
 
 ### デプロイ前チェックリスト
 - [ ] すべてのテストが通過
@@ -238,13 +202,13 @@ ENVIRONMENT=<env> ./scripts/deploy.sh
 - PATCH: バグ修正
 
 ### リリース手順
-1. `package.json`のバージョンを更新
+1. `package.json`のバージョンを更新（→ [product.md](product.md) の「バージョン」も更新）
 2. CHANGELOGを更新
 3. リリースブランチを作成
 4. 最終テスト
 5. mainにマージ
-6. リリースにタグ付け: `git tag -a v3.2.0 -m "Release v3.2.0"`
-7. タグをプッシュ: `git push origin v3.2.0`
+6. リリースにタグ付け: `git tag -a v<VERSION> -m "Release v<VERSION>"`
+7. タグをプッシュ: `git push origin v<VERSION>`
 8. 本番環境にデプロイ
 9. リリースノート付きでGitHubリリースを作成
 
@@ -272,22 +236,7 @@ ENVIRONMENT=<env> ./scripts/deploy.sh
 
 ## コードレビューワークフロー
 
-### レビュアーチェックリスト
-- [ ] コードが規約に従っている
-- [ ] テストが包括的
-- [ ] セキュリティ問題なし
-- [ ] パフォーマンスが許容範囲
-- [ ] ドキュメントが完全
-- [ ] CDK変更がレビュー済み
-- [ ] 不要な依存関係なし
-
-### レビュープロセス
-1. 自動チェックが通過
-2. 作成者による自己レビュー
-3. ピアレビュー（1名以上の承認）
-4. フィードバックに対応
-5. 最終承認
-6. マージ
+レビュアーチェックリスト・レビュープロセスは [git.md](git.md) の「プルリクエストガイドライン > レビュー基準」を参照。
 
 ## メンテナンスワークフロー
 

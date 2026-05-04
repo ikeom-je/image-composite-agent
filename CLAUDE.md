@@ -37,15 +37,10 @@
 
 ## 環境戦略
 
-単一AWSアカウント内で3環境を運用。スタック名サフィックスで分離。
-
-| 環境 | ブランチ | デプロイ | スタック名例 |
-|------|---------|---------|------------|
-| dev | feature/*, bugfix/* | 手動 | `ImageProcessorApiStack-Dev` |
-| staging | dev | CI/CD自動 | `ImageProcessorApiStack-Staging` |
-| production | main | CI/CD自動 | `ImageProcessorApiStack` |
-
+単一AWSアカウント内で3環境（dev / staging / production）をスタック名サフィックスで分離。
 開発フロー: `feature/* → dev(staging) → main(production)`
+
+詳細（環境分離方式・設定差異・スタック名）は [.kiro/steering/architecture.md](.kiro/steering/architecture.md) の「環境戦略」を参照。
 
 ## 重要な設計原則
 
@@ -58,19 +53,7 @@
 
 ## テスト
 
-```bash
-# Lambda単体テスト
-PYTHONPATH=lambda/python python3 -m unittest discover -s test/lambda
-
-# APIテスト（デプロイ済み環境）
-API_URL=<url> npm run test:api
-
-# フロントエンドE2E
-FRONTEND_URL=<url> npm run test:all-e2e
-
-# Chat Agent APIテスト
-CHAT_API_URL=<url> npx playwright test --config=test/playwright-api.config.ts --grep "Chat Agent"
-```
+テストコマンド・テストピラミッド・デプロイ後検証フローは [.kiro/steering/testing.md](.kiro/steering/testing.md) を参照。
 
 ## コミット
 
