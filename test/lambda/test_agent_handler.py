@@ -413,3 +413,63 @@ class TestRulesHandler(unittest.TestCase):
         self.assertEqual(body['ruleCount'], 1)
         self.assertIn('### only-a', body['fullPrompt'])
         self.assertNotIn('### only-b', body['fullPrompt'])
+
+    def test_chat_resolve_prompt_with_rule_ids(self):
+        """_resolve_chat_system_prompt: ruleIds 指定でルール本文が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        rule = repo.create(name='テストルール', prompt='テスト本文', is_active=False)
+
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=[rule['ruleId']],
+            inline_rules=[],
+        )
+        self.assertIn('テストルール', full_prompt)
+        self.assertIn('テスト本文', full_prompt)
+
+    def test_chat_resolve_prompt_with_inline_rules(self):
+        """_resolve_chat_system_prompt: inline rules が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=None,
+            inline_rules=[{'name': 'ドラフト', 'prompt': 'ドラフト本文'}],
+        )
+        self.assertIn('### ドラフト', full_prompt)
+        self.assertIn('ドラフト本文', full_prompt)
+
+    def test_chat_resolve_prompt_combines_persisted_and_inline(self):
+        """_resolve_chat_system_prompt: 永続+inline 両方が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        rule = repo.create(name='永続', prompt='永続本文', is_active=False)
+
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=[rule['ruleId']],
+            inline_rules=[{'name': 'ドラフト', 'prompt': 'ドラフト本文'}],
+        )
+        self.assertIn('### 永続', full_prompt)
+        self.assertIn('### ドラフト', full_prompt)
+
+    def test_chat_resolve_prompt_no_rules_returns_base(self):
+        """_resolve_chat_system_prompt: 何も指定なし & アクティブ無し は base SYSTEM_PROMPT のみ"""
+        from agent_handler import _resolve_chat_system_prompt
+        from agent_prompts import SYSTEM_PROMPT
+        full_prompt = _resolve_chat_system_prompt(rule_ids=None, inline_rules=[])
+        self.assertEqual(full_prompt, SYSTEM_PROMPT)
+
+    def test_chat_oversize_inline_rule_rejected(self):
+        """POST /chat: inlineRules の本文サイズ超過は 400"""
+        from agent_handler import handler
+        os.environ['RULES_MAX_PROMPT_CHARS'] = '20'
+        try:
+            body = {
+                'sessionId': '12345678-1234-1234-1234-123456789012',
+                'message': 'test',
+                'inlineRules': [{'name': 'd', 'prompt': 'a' * 100}],
+            }
+            resp = handler(self._event('POST', '/chat', body=body), None)
+            self.assertEqual(resp['statusCode'], 400)
+        finally:
+            del os.environ['RULES_MAX_PROMPT_CHARS']

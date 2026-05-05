@@ -118,8 +118,8 @@ def format_response(status_code: int, body: Any, headers: Dict[str, str] = None)
 
 
 
-def create_agent(model_id: str = None):
-    """Strands Agentを初期化する（AWS Bedrock経由）"""
+def create_agent(model_id: str = None, system_prompt: str = None):
+    """Strands Agentを初期化する（AWS Bedrock経由）。system_prompt 未指定時は SYSTEM_PROMPT を使用。"""
     from strands import Agent
     from strands.models.bedrock import BedrockModel
     from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help
@@ -134,7 +134,7 @@ def create_agent(model_id: str = None):
 
     agent = Agent(
         model=model,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt or SYSTEM_PROMPT,
         tools=[compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help],
     )
 
@@ -197,10 +197,23 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
             except Exception as e:
                 logger.warning(f"Failed to save user message: {e}")
 
+        # ルール解決（任意フィールド: ruleIds / inlineRules）
+        rule_ids = body.get('ruleIds')           # None または list
+        inline_rules = body.get('inlineRules') or []
+
+        from rules_validator import RuleSizeError
+        try:
+            full_system_prompt = _resolve_chat_system_prompt(rule_ids, inline_rules)
+        except RuleSizeError as e:
+            return format_response(400, {
+                'error': str(e),
+                'requestId': request_id,
+            })
+
         # Agent実行（メディア結果をリセット）
         import agent_tools
         agent_tools._last_media_result = None
-        agent = create_agent(model_id)
+        agent = create_agent(model_id, system_prompt=full_system_prompt)
 
         # 会話履歴がある場合はメッセージに追加
         if conversation_history:
@@ -428,6 +441,44 @@ def _get_rule_limits():
     """環境変数から RuleLimits（サイズ・件数ガード設定）を取得する。"""
     from rules_validator import RuleLimits
     return RuleLimits.from_env(os.environ)
+
+
+def _resolve_chat_system_prompt(
+    rule_ids,
+    inline_rules,
+) -> str:
+    """POST /chat 用にAgentのsystem_promptを解決する。
+
+    rule_ids: None または list[str]
+      - None: アクティブルール全件を適用
+      - list: 指定IDのみ適用（アクティブ無視）
+    inline_rules: list[dict] (永続化しない一時ルール、name/prompt)
+
+    inlineRulesの単体サイズ違反は RuleSizeError を投げる（呼び出し側が400に変換）。
+    """
+    from agent_prompts import build_full_prompt
+    from rules_validator import validate_single_prompt
+
+    limits = _get_rule_limits()
+    repo = _get_rules_repository()
+
+    # inlineRulesの単体サイズ検証（呼び出し元で400に変換すべき例外）
+    for r in inline_rules:
+        validate_single_prompt(r.get('prompt', ''), limits)
+
+    if repo is None:
+        return build_full_prompt([], inline_rules, limits)
+
+    try:
+        if rule_ids is not None:
+            persisted = repo.batch_get(rule_ids) if rule_ids else []
+        else:
+            persisted = repo.list_active()
+    except Exception as e:
+        logger.warning(f"Failed to load rules, falling back to no rules: {e}")
+        persisted = []
+
+    return build_full_prompt(persisted, inline_rules, limits)
 
 
 def handle_rules_list(event: Dict[str, Any], context: Any) -> Dict:
