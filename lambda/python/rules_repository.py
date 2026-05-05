@@ -39,11 +39,17 @@ class RulesRepository:
             raise RuntimeError('boto3 is not available')
         self.table_name = table_name
         self._region = region_name or _get_default_region()
-        self.table = boto3.resource('dynamodb', region_name=self._region).Table(table_name)
+        self._dynamo = boto3.resource('dynamodb', region_name=self._region)
+        self.table = self._dynamo.Table(table_name)
 
     def list(self) -> List[Dict]:
+        items = []
         resp = self.table.scan()
-        return resp.get('Items', [])
+        items.extend(resp.get('Items', []))
+        while 'LastEvaluatedKey' in resp:
+            resp = self.table.scan(ExclusiveStartKey=resp['LastEvaluatedKey'])
+            items.extend(resp.get('Items', []))
+        return items
 
     def list_active(self) -> List[Dict]:
         return [r for r in self.list() if r.get('isActive') is True]
@@ -56,9 +62,15 @@ class RulesRepository:
         if not rule_ids:
             return []
         keys = [{'ruleId': rid} for rid in rule_ids]
-        resp = boto3.resource('dynamodb', region_name=self._region).batch_get_item(
+        resp = self._dynamo.batch_get_item(
             RequestItems={self.table_name: {'Keys': keys}}
         )
+        unprocessed = resp.get('UnprocessedKeys', {}).get(self.table_name, {}).get('Keys', [])
+        if unprocessed:
+            logger.warning(
+                'batch_get returned %d unprocessed keys (table=%s)',
+                len(unprocessed), self.table_name,
+            )
         return resp.get('Responses', {}).get(self.table_name, [])
 
     def create(self, name: str, prompt: str, is_active: bool = False) -> Dict:
