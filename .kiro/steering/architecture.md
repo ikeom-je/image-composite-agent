@@ -68,6 +68,21 @@ inclusion: auto
 - `/chat/history` - 会話履歴（GET: 取得、DELETE: 削除）
 - `/chat/models` - 利用可能モデル一覧（GET）
 
+### `/images/composite` のデフォルト値（Issue #58 / Req 21）
+
+省略時のデフォルト値は `composite-default.json` の `system_default` を参照。CDK ビルド時に Lambda へ同梱（`lambda/python/composite_defaults.json`）し、JSON 読み込み失敗時は `composite_defaults.HARDCODED_FALLBACK` で動作継続。
+
+| パラメータ | 旧デフォルト | 新デフォルト（破壊的変更） |
+|----------|------------|------------------------|
+| `baseImage` | 透明 | `#000000`（黒） |
+| `video_format` | `XMF` | `MP4` |
+| `image1` 単独座標 | `(100, 100, 400, 300)` | `(1700, 96, 200, 200)` 右上アイコン |
+| `image1` (double) | `(100, 100, 400, 300)` | `(1700, 96, 200, 200)` |
+| `image2` (double) | `(600, 100, 400, 300)` | `(600, 400, 300, 300)` |
+| `image1`〜`3` (triple) | (旧値群) | 上記 + `image3=(1520, 700, 300, 300)` |
+
+mode 判定は `image2` / `image3` の有無のみで決定（テキスト有無は影響しない）。詳細は `.kiro/specs/image-composition/design.md §6` 参照。
+
 ### 設定
 - バイナリメディアタイプ: 明示的に設定
 - CORS: すべてのオリジンで有効（開発環境）

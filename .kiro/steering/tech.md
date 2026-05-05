@@ -155,7 +155,9 @@ npm run fix-test-assets
 - `package.json` - Node.js依存関係とスクリプト
 - `tsconfig.json` - TypeScriptコンパイラオプション
 - `frontend/vite.config.js` - Viteビルド設定
+- `frontend/vitest.config.ts` - Vitest設定（jsdom + Vue plugin）
 - `frontend/package.json` - フロントエンド依存関係
+- `frontend/public/composite-default.json` - 画像合成デフォルト値の単一ソース（Issue #58）。手動編集対象。Vite ビルドで `dist/` にコピー（CloudFront 配信）、`scripts/deploy.sh` と CI/CD で `lambda/python/composite_defaults.json` にもコピー（CDK バンドリングで Lambda に同梱）。`config.json`（デプロイ時動的生成）とは性質が異なる
 - `lambda/python/requirements.txt` - Python依存関係
 - `test/playwright.config.ts` - Playwrightテスト設定
 - `test/playwright-api.config.ts` - APIテスト設定

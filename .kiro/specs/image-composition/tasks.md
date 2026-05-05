@@ -465,25 +465,25 @@
   - テキスト入力、フォントサイズ、色選択、背景色、折り返し制御に対応
   - _要件: 19.1, 19.2, 19.3, 19.5_
 
-- [ ] 21. 画像合成デフォルト値の一元管理（composite-default.json）
+- [x] 21. 画像合成デフォルト値の一元管理（composite-default.json）
 
-- [ ] 21.1 `composite-default.json` の作成
+- [x] 21.1 `composite-default.json` の作成
   - `frontend/public/composite-default.json` を新設（git管理）
   - `system_default`（canvas, baseImage, baseOpacity, image_placement.{single,double,triple}, text_placeholders.{text1,text2,text3}, video）と空の `presets: {}` を含む
   - `version: "1.0"` を含めスキーマ進化に備える
   - _要件: 21.1, 21.2, 21.12_
 
-- [ ] 21.2 CDK 拡張（フロント配信）
+- [x] 21.2 CDK 拡張（フロント配信）
   - `frontend/public/` に置けば Vite ビルドで `dist/` に含まれ、既存の `BucketDeployment` で S3 にアップロードされることを確認
   - 必要なら `lib/frontend-stack.ts` のキャッシュポリシー設定を確認・調整（`config.json` と同じ扱い）
   - _要件: 21.1_
 
-- [ ] 21.3 CDK 拡張（Lambda 同梱）
+- [x] 21.3 CDK 拡張（Lambda 同梱）
   - `lib/image-processor-api-stack.ts` の Lambda 関数定義に、`composite-default.json` を `lambda/python/composite_defaults.json` にコピーするビルドステップを追加（`bundling.commands` または `Code.fromAsset` の prebuild）
   - Agent Lambda にも同梱（`agent_handler.py` から参照する場合）
   - _要件: 21.2_
 
-- [ ] 21.4 Lambda: `composite_defaults.py` ユーティリティ新設
+- [x] 21.4 Lambda: `composite_defaults.py` ユーティリティ新設
   - `lambda/python/composite_defaults.py` を作成
   - `load_defaults()` でJSONを読み込み、モジュールレベルキャッシュ
   - `get_image_default(mode, image_key)` / `get_base_image_default()` / `get_video_format_default()` などのヘルパー
@@ -491,38 +491,38 @@
   - ユニットテスト（読み込み成功 / ファイル欠損 / JSON不正 / モード判定）を作成
   - _要件: 21.2, 21.3, 21.4, 21.5, 21.11_
 
-- [ ] 21.5 Lambda: `image_compositor.py` の `parse_image_parameters` 改修
+- [x] 21.5 Lambda: `image_compositor.py` の `parse_image_parameters` 改修
   - 現状ハードコードされた x/y/width/height デフォルトを `composite_defaults.get_image_default(mode, 'imageN')` で置換
   - mode 判定（single / double / triple）を実装
   - 個別パラメータ指定時はそちらを優先（既存動作維持）
   - 既存ユニットテストが通ることを確認、追加テストでモード判定を検証
   - _要件: 21.3, 21.4, 21.5, 21.10_
 
-- [ ] 21.6 Lambda: `image_processor.py` の baseImage / video_format デフォルト変更
+- [x] 21.6 Lambda: `image_processor.py` の baseImage / video_format デフォルト変更
   - `query_params.get('baseImage') or composite_defaults.get_base_image_default()` に変更
   - `query_params.get('video_format') or composite_defaults.get_video_format_default()` に変更
   - 破壊的変更（baseImage: 透明→黒、video_format: XMF→MP4）の警告ログ出力
   - _要件: 21.8, 21.9_
 
-- [ ] 21.7 フロント: `compositeDefaults` ストア新設または `config.ts` 拡張
+- [x] 21.7 フロント: `compositeDefaults` ストア新設または `config.ts` 拡張
   - `frontend/src/stores/compositeDefaults.ts` を新設（または `config.ts` を拡張）
   - 起動時に `${baseUrl}/composite-default.json` を fetch
   - 失敗時は `HARDCODED_FALLBACK` を使用、警告ログ
   - 型定義（`CompositeDefaults`, `ImagePlacement`, `TextPlaceholder` など）を追加
   - _要件: 21.1, 21.11_
 
-- [ ] 21.8 フロント: `App.vue` の params 初期化を JSON 値から動的生成
+- [x] 21.8 フロント: `App.vue` の params 初期化を JSON 値から動的生成
   - `params` の各フィールド初期値を `compositeDefaults.system_default` から取得
   - `compositeDefaults` ロード完了を待つ（`onMounted` または `watchEffect`）
   - フォールバック値は `??` で短絡
   - _要件: 21.1, 21.7, 21.8, 21.9_
 
-- [ ] 21.9 フロント: テキスト入力欄に placeholder を反映
+- [x] 21.9 フロント: テキスト入力欄に placeholder を反映
   - `ImageConfigTable.vue` の text1/text2/text3 入力欄に `:placeholder="textPlaceholders.textN.placeholder"` を追加
   - placeholder 表示中はリクエストに送信しない（既存動作維持）
   - _要件: 21.6_
 
-- [ ] 21.10 ユニットテスト
+- [x] 21.10 ユニットテスト
   - `composite_defaults.py` のロード/フォールバック/モード判定を網羅
   - `parse_image_parameters` の各モード判定テスト
   - フロント `compositeDefaults` ストアの fetch 失敗時フォールバック
@@ -534,14 +534,14 @@
   - 破壊的変更（baseImage 黒、video_format MP4、image1/2/3 のデフォルト座標変更）に該当するテストの期待値を更新
   - _要件: 21.3, 21.4, 21.5, 21.8, 21.9_
 
-- [ ] 21.12 ドキュメント更新
+- [x] 21.12 ドキュメント更新
   - `.kiro/steering/architecture.md` — `composite-default.json` の配置・配信フロー追記、API デフォルト変更を注記
   - `.kiro/steering/structure.md` — Lambda 依存関係図に `composite_defaults.py` を追加
   - `.kiro/steering/tech.md` — 新ファイル `composite-default.json` の説明
   - `CHANGELOG.md` または `README.md` に破壊的変更を記載
   - _要件: 21全般_
 
-- [ ] 21.13 PR と破壊的変更の周知
+- [x] 21.13 PR と破壊的変更の周知
   - PR 本文の冒頭に「**破壊的変更**」セクションを設けて明記（baseImage 省略時=黒、video_format 省略時=MP4、image1 単独時座標）
   - dev からの最新を逆マージしてマージ
   - PR テンプレート（`.github/pull_request_template.md`）のチェックリストを完了
