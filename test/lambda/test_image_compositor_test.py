@@ -36,25 +36,40 @@ class TestImageCompositor(unittest.TestCase):
         self.test_image3 = Image.new('RGBA', (100, 100), (0, 0, 255, 255))  # 青
         self.transparent_image = Image.new('RGBA', (100, 100), (255, 255, 255, 128))  # 半透明白
     
-    def test_parse_image_parameters_default(self):
-        """デフォルトパラメータの解析テスト"""
+    def test_parse_image_parameters_default_single_mode(self):
+        """空クエリ → mode=single、image1 のみ JSON デフォルト適用（Issue #58 / AC 21.3）"""
         params = parse_image_parameters({})
-        
-        # デフォルト値の確認
-        self.assertEqual(params['image1']['x'], 1600)
-        self.assertEqual(params['image1']['y'], 20)
-        self.assertEqual(params['image1']['width'], 300)
+
+        # image1 は single モードのデフォルト座標
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertEqual(params['image1']['y'], 96)
+        self.assertEqual(params['image1']['width'], 200)
         self.assertEqual(params['image1']['height'], 200)
-        
-        self.assertEqual(params['image2']['x'], 1600)
-        self.assertEqual(params['image2']['y'], 240)
-        
-        self.assertEqual(params['image3']['x'], 20)
-        self.assertEqual(params['image3']['y'], 20)
-    
-    def test_parse_image_parameters_custom(self):
-        """カスタムパラメータの解析テスト"""
+
+        # image2/image3 は single モードでは含まれない（validate / create_composite_image と整合）
+        self.assertNotIn('image2', params)
+        self.assertNotIn('image3', params)
+
+    def test_parse_image_parameters_default_double_mode(self):
+        """image2 指定 → mode=double、image1+image2 に JSON デフォルト適用（Issue #58 / AC 21.4）"""
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b'})
+
+        self.assertEqual(params['image1'], {'x': 1700, 'y': 96, 'width': 200, 'height': 200})
+        self.assertEqual(params['image2'], {'x': 600, 'y': 400, 'width': 300, 'height': 300})
+        self.assertNotIn('image3', params)
+
+    def test_parse_image_parameters_default_triple_mode(self):
+        """image3 指定 → mode=triple、3画像に JSON デフォルト適用（Issue #58 / AC 21.5）"""
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b', 'image3': 'c'})
+
+        self.assertEqual(params['image1'], {'x': 1700, 'y': 96, 'width': 200, 'height': 200})
+        self.assertEqual(params['image2'], {'x': 600, 'y': 400, 'width': 300, 'height': 300})
+        self.assertEqual(params['image3'], {'x': 1520, 'y': 700, 'width': 300, 'height': 300})
+
+    def test_parse_image_parameters_custom_overrides_default(self):
+        """個別座標指定が JSON デフォルトより優先される（AC 21.10）"""
         query_params = {
+            'image1': 'a', 'image2': 'b', 'image3': 'c',
             'image1X': '100',
             'image1Y': '200',
             'image1Width': '400',
@@ -62,36 +77,44 @@ class TestImageCompositor(unittest.TestCase):
             'image2X': '500',
             'image3Y': '600'
         }
-        
+
         params = parse_image_parameters(query_params)
-        
-        # カスタム値の確認
+
         self.assertEqual(params['image1']['x'], 100)
         self.assertEqual(params['image1']['y'], 200)
         self.assertEqual(params['image1']['width'], 400)
         self.assertEqual(params['image1']['height'], 300)
         self.assertEqual(params['image2']['x'], 500)
         self.assertEqual(params['image3']['y'], 600)
-        
-        # 指定されていない値はデフォルト
-        self.assertEqual(params['image2']['y'], 240)  # デフォルト値
-    
+
+        # 指定されていない image2 のフィールドは triple のデフォルト
+        self.assertEqual(params['image2']['y'], 400)
+        self.assertEqual(params['image2']['width'], 300)
+        self.assertEqual(params['image2']['height'], 300)
+
+    def test_parse_image_parameters_text_does_not_affect_mode(self):
+        """テキスト有無は image_placement モード判定に影響しない（AC 21.3）"""
+        params = parse_image_parameters({'image1': 'a', 'text1': 'LIVE'})
+        # mode='single' のまま、image2 は含まれない
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertNotIn('image2', params)
+
     def test_parse_image_parameters_invalid_values(self):
-        """無効な値の解析テスト"""
+        """無効な値は JSON デフォルトに戻る（safe_int の挙動）"""
         query_params = {
             'image1X': 'invalid',
             'image1Y': '',
             'image1Width': 'abc',
             'image1Height': None
         }
-        
+
         params = parse_image_parameters(query_params)
-        
-        # 無効な値はデフォルトに戻る
-        self.assertEqual(params['image1']['x'], 1600)  # デフォルト値
-        self.assertEqual(params['image1']['y'], 20)    # デフォルト値
-        self.assertEqual(params['image1']['width'], 300)  # デフォルト値
-        self.assertEqual(params['image1']['height'], 200) # デフォルト値
+
+        # 無効値は single モードの image1 デフォルトに戻る
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertEqual(params['image1']['y'], 96)
+        self.assertEqual(params['image1']['width'], 200)
+        self.assertEqual(params['image1']['height'], 200)
     
     def test_validate_image_parameters_valid(self):
         """有効なパラメータの検証テスト"""
@@ -197,18 +220,20 @@ class TestImageCompositor(unittest.TestCase):
     def test_create_composite_image_2_images(self):
         """2画像合成テスト"""
         params = parse_image_parameters({
+            'image1': 'a', 'image2': 'b',
             'image1X': '50', 'image1Y': '50', 'image1Width': '100', 'image1Height': '100',
             'image2X': '150', 'image2Y': '150', 'image2Width': '100', 'image2Height': '100'
         })
-        
+
         result = create_composite_image(None, self.test_image1, self.test_image2, None, params)
-        
+
         self.assertEqual(result.size, (2000, 1000))
         self.assertEqual(result.mode, 'RGBA')
-    
+
     def test_create_composite_image_3_images(self):
         """3画像合成テスト"""
         params = parse_image_parameters({
+            'image1': 'a', 'image2': 'b', 'image3': 'c',
             'image1X': '50', 'image1Y': '50', 'image1Width': '100', 'image1Height': '100',
             'image2X': '150', 'image2Y': '150', 'image2Width': '100', 'image2Height': '100',
             'image3X': '250', 'image3Y': '250', 'image3Width': '100', 'image3Height': '100'
@@ -224,12 +249,13 @@ class TestImageCompositor(unittest.TestCase):
     def test_create_composite_image_with_base(self):
         """ベース画像ありの合成テスト"""
         base_image = Image.new('RGBA', (1000, 500), (128, 128, 128, 255))  # グレー背景
-        params = parse_image_parameters({})
-        
+        # image2 を渡すので mode=double 相当にして JSON デフォルト座標を使う
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b'})
+
         result = create_composite_image(
             base_image, self.test_image1, self.test_image2, None, params
         )
-        
+
         self.assertEqual(result.size, (2000, 1000))  # キャンバスサイズにリサイズ
         self.assertEqual(result.mode, 'RGBA')
     
