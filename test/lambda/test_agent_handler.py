@@ -349,3 +349,24 @@ class TestRulesHandler(unittest.TestCase):
             None
         )
         self.assertEqual(resp['statusCode'], 400)
+
+    def test_ruleid_preview_rejected_put(self):
+        """{ruleId}=preview に対する PUT も400で防御"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('PUT', '/chat/rules/{ruleId}',
+                       body={'name': 'x'},
+                       path_params={'ruleId': 'preview'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)
+
+    def test_ruleid_preview_rejected_delete(self):
+        """{ruleId}=preview に対する DELETE も400で防御"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('DELETE', '/chat/rules/{ruleId}',
+                       path_params={'ruleId': 'preview'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)

@@ -412,6 +412,9 @@ def _extract_media_from_result(result, agent) -> Optional[Dict]:
 
 # === ルール CRUD ハンドラ ===
 
+# 注: rules_validator / rules_repository は handler 関数内で遅延 import している。
+# Lambda コールドスタート時の不要なロードを避けつつ、テスト環境で部分的にモジュールが
+# 不在でも他のハンドラが動作可能にするため。
 def _get_rules_repository():
     """RulesRepository を取得。RULES_TABLE 未設定時は None。"""
     from rules_repository import RulesRepository
@@ -422,6 +425,7 @@ def _get_rules_repository():
 
 
 def _get_rule_limits():
+    """環境変数から RuleLimits（サイズ・件数ガード設定）を取得する。"""
     from rules_validator import RuleLimits
     return RuleLimits.from_env(os.environ)
 
