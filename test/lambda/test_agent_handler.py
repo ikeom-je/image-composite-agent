@@ -370,3 +370,46 @@ class TestRulesHandler(unittest.TestCase):
             None
         )
         self.assertEqual(resp['statusCode'], 400)
+
+    def test_preview_no_rules(self):
+        """ルールなしでもbase prompt + メタ情報を返す"""
+        from agent_handler import handler
+        resp = handler(self._event('GET', '/chat/rules/preview'), None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertIn('fullPrompt', body)
+        self.assertEqual(body['ruleCount'], 0)
+        self.assertEqual(body['appliedRules'], [])
+        self.assertIn('limits', body)
+
+    def test_preview_with_active_rules(self):
+        """アクティブルールのみが反映される"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        repo.create(name='active1', prompt='本文1', is_active=True)
+        repo.create(name='inactive', prompt='本文2', is_active=False)
+
+        resp = handler(self._event('GET', '/chat/rules/preview'), None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['ruleCount'], 1)
+        self.assertIn('### active1', body['fullPrompt'])
+        self.assertNotIn('### inactive', body['fullPrompt'])
+
+    def test_preview_with_ruleids_query(self):
+        """ruleIds クエリで指定ルールのみ反映"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        a = repo.create(name='only-a', prompt='p1', is_active=False)
+        b = repo.create(name='only-b', prompt='p2', is_active=True)
+
+        event = self._event('GET', '/chat/rules/preview')
+        event['queryStringParameters'] = {'ruleIds': a['ruleId']}
+        resp = handler(event, None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['ruleCount'], 1)
+        self.assertIn('### only-a', body['fullPrompt'])
+        self.assertNotIn('### only-b', body['fullPrompt'])

@@ -544,8 +544,40 @@ def handle_rules_delete(event: Dict[str, Any], context: Any) -> Dict:
 
 
 def handle_rules_preview(event: Dict[str, Any], context: Any) -> Dict:
-    """GET /chat/rules/preview - Task 6 で本実装。仮スタブ"""
-    return format_response(501, {'error': 'Not implemented yet'})
+    """GET /chat/rules/preview - 結合済み system prompt のプレビュー"""
+    from agent_prompts import build_full_prompt
+
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+
+    qs = event.get('queryStringParameters') or {}
+    rule_ids_param = qs.get('ruleIds') or ''
+    rule_ids = [r.strip() for r in rule_ids_param.split(',') if r.strip()]
+
+    if rule_ids:
+        rules = repo.batch_get(rule_ids)
+    else:
+        rules = repo.list_active()
+
+    limits = _get_rule_limits()
+    full_prompt = build_full_prompt(rules, [], limits)
+
+    applied = [
+        {'ruleId': r['ruleId'], 'name': r['name'], 'chars': len(r.get('prompt', ''))}
+        for r in rules
+    ]
+    return format_response(200, {
+        'fullPrompt': full_prompt,
+        'appliedRules': applied,
+        'totalChars': len(full_prompt),
+        'ruleCount': len(rules),
+        'limits': {
+            'maxPromptChars': limits.max_prompt_chars,
+            'maxCount': limits.max_count,
+            'maxCombinedChars': limits.max_combined_chars,
+        },
+    })
 
 
 def handler(event: Dict[str, Any], context: Any) -> Dict:
