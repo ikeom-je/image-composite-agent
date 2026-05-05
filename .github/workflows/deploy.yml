@@ -128,6 +128,13 @@ jobs:
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
         run: bash scripts/create-ffmpeg-layer.sh
 
+      - name: Copy composite-default.json for Lambda bundling
+        # Issue #58 / Req 21.2: composite-default.json を Lambda 同梱用にコピー
+        # frontend/public/ がソース、lambda/python/composite_defaults.json は git 管理外
+        run: |
+          cp frontend/public/composite-default.json lambda/python/composite_defaults.json
+          echo "✅ composite_defaults.json copied for Lambda bundling"
+
       - name: Deploy ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}
         run: |
           STACK="ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}"

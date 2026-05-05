@@ -88,9 +88,10 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     # 動画生成パラメータの検証（オプション）
     generate_video = query_params.get('generate_video', 'false').lower()
     if generate_video == 'true':
-        # 動画生成が有効な場合の追加検証
-        video_duration = query_params.get('video_duration', '3')
-        video_format = query_params.get('video_format', 'XMF')
+        # 動画生成が有効な場合の追加検証（デフォルトは composite_defaults.json から取得）
+        from composite_defaults import get_video_format_default, get_video_duration_default
+        video_duration = query_params.get('video_duration', str(get_video_duration_default()))
+        video_format = query_params.get('video_format') or get_video_format_default()
         
         try:
             duration_int = int(video_duration)
@@ -446,21 +447,30 @@ def handler(event, context):
             )
         
         # パラメータ取得
+        # composite-default.json のデフォルト値を解決（Issue #58 / Req 21）
+        from composite_defaults import (
+            get_base_image_default,
+            get_base_opacity_default,
+            get_video_format_default,
+            get_video_duration_default,
+        )
+
         image1_param = query_params.get('image1')
         image2_param = query_params.get('image2')
         image3_param = query_params.get('image3')  # オプション
-        base_image_param = query_params.get('baseImage')
+        # baseImage 省略時は JSON デフォルト（破壊的変更: 旧=透明 → 新=#000000、AC 21.8）
+        base_image_param = query_params.get('baseImage') or get_base_image_default()
         try:
-            base_opacity_param = int(query_params.get('baseOpacity', '100'))
+            base_opacity_param = int(query_params.get('baseOpacity', str(get_base_opacity_default())))
         except (ValueError, TypeError):
-            base_opacity_param = 100  # 非数値はデフォルトにフォールバック (Issue #37)
+            base_opacity_param = get_base_opacity_default()  # 非数値はデフォルトにフォールバック (Issue #37)
         # クランプは apply_base_opacity 側に集約 (Issue #39)
         format_param = query_params.get('format', 'png')
 
-        # 動画生成パラメータ
+        # 動画生成パラメータ（破壊的変更: 旧=XMF → 新=MP4、AC 21.9）
         generate_video = query_params.get('generate_video', 'false').lower() == 'true'
-        video_duration = int(query_params.get('video_duration', '3'))
-        video_format = query_params.get('video_format', 'XMF')
+        video_duration = int(query_params.get('video_duration', str(get_video_duration_default())))
+        video_format = query_params.get('video_format') or get_video_format_default()
         
         logger.info(f"🎯 Images to process: image1={image1_param}, image2={image2_param}, image3={image3_param} [Request ID: {request_id}]")
         logger.info(f"🎬 Video generation: enabled={generate_video}, duration={video_duration}s, format={video_format} [Request ID: {request_id}]")

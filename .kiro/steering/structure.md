@@ -40,6 +40,7 @@ image-processor-api/
 - `video_generator.py` - 画像からの動画生成
 - `test_image_generator.py` - テスト画像生成
 - `error_handler.py` - 集中エラーハンドリング
+- `composite_defaults.py` - 画像合成デフォルト値の一元管理（Issue #58）。`composite_defaults.json`（CDK ビルド時に同梱、`frontend/public/composite-default.json` がソース）から読み込み、JSON 失敗時は `HARDCODED_FALLBACK` を返す
 - `agent_handler.py` - Chat Agent Lambdaハンドラー（マルチモデル対応）
 - `agent_tools.py` - Strands @tool 定義
 - `agent_prompts.py` - システムプロンプト・座標マッピング
@@ -66,7 +67,9 @@ agent_handler.py
 ```
 image_processor.py
    ├─ image_compositor.py     (create_composite_image, parse_image_parameters, parse_text_parameters)
-   │     └─ text_renderer.py  (render_text_overlay, load_font)
+   │     ├─ text_renderer.py  (render_text_overlay, load_font)
+   │     └─ composite_defaults.py  (determine_image_mode, get_image_default — JSON デフォルト解決)
+   ├─ composite_defaults.py   (get_base_image_default, get_video_format_default, etc.)
    ├─ image_fetcher.py        (fetch_images_parallel)
    ├─ video_generator.py      (generate_video_from_image, get_video_mime_type, get_video_extension — ffmpeg呼び出し)
    ├─ test_image_generator.py (generate_circle_image, generate_rectangle_image, generate_triangle_image)
@@ -139,7 +142,8 @@ frontend/
 ### ストア（Pinia）
 
 - `app.ts` - アプリケーション状態（ローディング、エラー）
-- `config.ts` - 設定管理
+- `config.ts` - デプロイ時設定（API URL / CloudFront URL 等、`config.json` 動的生成）
+- `compositeDefaults.ts` - 画像合成デフォルト値（`composite-default.json` をビルド時に同梱配信、Issue #58）
 - `image.ts` - 画像状態管理
 - `notification.ts` - 通知キュー
 - `chat.ts` - チャット状態管理（セッション、モデル選択）
