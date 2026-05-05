@@ -410,6 +410,140 @@ def _extract_media_from_result(result, agent) -> Optional[Dict]:
     return None
 
 
+# === ルール CRUD ハンドラ ===
+
+def _get_rules_repository():
+    """RulesRepository を取得。RULES_TABLE 未設定時は None。"""
+    from rules_repository import RulesRepository
+    table_name = os.environ.get('RULES_TABLE')
+    if not table_name:
+        return None
+    return RulesRepository(table_name)
+
+
+def _get_rule_limits():
+    from rules_validator import RuleLimits
+    return RuleLimits.from_env(os.environ)
+
+
+def handle_rules_list(event: Dict[str, Any], context: Any) -> Dict:
+    """GET /chat/rules"""
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+    rules = repo.list()
+    return format_response(200, {'rules': rules})
+
+
+def handle_rules_create(event: Dict[str, Any], context: Any) -> Dict:
+    """POST /chat/rules"""
+    from rules_validator import validate_single_prompt, RuleSizeError
+    try:
+        body = json.loads(event.get('body', '{}') or '{}')
+    except json.JSONDecodeError:
+        return format_response(400, {'error': 'Invalid JSON'})
+
+    name = (body.get('name') or '').strip()
+    prompt = body.get('prompt') or ''
+    is_active = bool(body.get('isActive', False))
+
+    if not name or len(name) > 100:
+        return format_response(400, {'error': 'name is required (1-100 chars)'})
+
+    limits = _get_rule_limits()
+    try:
+        validate_single_prompt(prompt, limits)
+    except RuleSizeError as e:
+        return format_response(400, {'error': str(e)})
+
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+    rule = repo.create(name=name, prompt=prompt, is_active=is_active)
+    return format_response(201, {'rule': rule})
+
+
+def handle_rules_get(event: Dict[str, Any], context: Any) -> Dict:
+    """GET /chat/rules/{ruleId}"""
+    rule_id = event.get('pathParameters', {}).get('ruleId', '')
+    if rule_id == 'preview':
+        return format_response(400, {'error': 'ruleId "preview" is reserved'})
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+    rule = repo.get(rule_id)
+    if rule is None:
+        return format_response(404, {'error': 'Rule not found'})
+    return format_response(200, {'rule': rule})
+
+
+def handle_rules_update(event: Dict[str, Any], context: Any) -> Dict:
+    """PUT /chat/rules/{ruleId}"""
+    from rules_validator import validate_single_prompt, RuleSizeError
+    from rules_repository import RuleNotFound
+
+    rule_id = event.get('pathParameters', {}).get('ruleId', '')
+    if rule_id == 'preview':
+        return format_response(400, {'error': 'ruleId "preview" is reserved'})
+
+    try:
+        body = json.loads(event.get('body', '{}') or '{}')
+    except json.JSONDecodeError:
+        return format_response(400, {'error': 'Invalid JSON'})
+
+    fields = {}
+    if 'name' in body:
+        n = (body.get('name') or '').strip()
+        if not n or len(n) > 100:
+            return format_response(400, {'error': 'name must be 1-100 chars'})
+        fields['name'] = n
+    if 'prompt' in body:
+        prompt = body.get('prompt') or ''
+        try:
+            validate_single_prompt(prompt, _get_rule_limits())
+        except RuleSizeError as e:
+            return format_response(400, {'error': str(e)})
+        fields['prompt'] = prompt
+    if 'isActive' in body:
+        fields['isActive'] = bool(body['isActive'])
+
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+
+    try:
+        rule = repo.update(rule_id, **fields)
+    except RuleNotFound:
+        return format_response(404, {'error': 'Rule not found'})
+    return format_response(200, {'rule': rule})
+
+
+def handle_rules_delete(event: Dict[str, Any], context: Any) -> Dict:
+    """DELETE /chat/rules/{ruleId}"""
+    from rules_repository import RuleNotFound, DefaultRuleProtected
+
+    rule_id = event.get('pathParameters', {}).get('ruleId', '')
+    if rule_id == 'preview':
+        return format_response(400, {'error': 'ruleId "preview" is reserved'})
+
+    repo = _get_rules_repository()
+    if repo is None:
+        return format_response(500, {'error': 'RULES_TABLE not configured'})
+
+    try:
+        repo.delete(rule_id)
+    except RuleNotFound:
+        return format_response(404, {'error': 'Rule not found'})
+    except DefaultRuleProtected:
+        return format_response(403, {'error': 'Default rule cannot be deleted'})
+    return format_response(204, {})
+
+
+def handle_rules_preview(event: Dict[str, Any], context: Any) -> Dict:
+    """GET /chat/rules/preview - Task 6 で本実装。仮スタブ"""
+    return format_response(501, {'error': 'Not implemented yet'})
+
+
 def handler(event: Dict[str, Any], context: Any) -> Dict:
     """メインハンドラー関数"""
     try:
@@ -419,7 +553,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict:
 
         logger.info(f"Agent handler: {http_method} {resource} ({path})")
 
-        if http_method == 'POST' and '/chat' in path and '/history' not in path and '/models' not in path:
+        # === ルール系ルーティング（resource ベース、静的パス優先） ===
+        if resource == '/chat/rules':
+            if http_method == 'GET': return handle_rules_list(event, context)
+            if http_method == 'POST': return handle_rules_create(event, context)
+        if resource == '/chat/rules/preview' and http_method == 'GET':
+            return handle_rules_preview(event, context)
+        if resource == '/chat/rules/{ruleId}':
+            if http_method == 'GET': return handle_rules_get(event, context)
+            if http_method == 'PUT': return handle_rules_update(event, context)
+            if http_method == 'DELETE': return handle_rules_delete(event, context)
+
+        # === 既存のチャット系ルーティング（pathベース、後方互換） ===
+        if http_method == 'POST' and '/chat' in path and '/history' not in path and '/models' not in path and '/rules' not in path:
             return handle_chat(event, context)
         elif http_method == 'GET' and '/models' in path:
             return handle_get_models(event, context)
@@ -429,8 +575,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict:
             return handle_delete_history(event, context)
         elif http_method == 'OPTIONS':
             return format_response(200, {})
-        else:
-            return format_response(404, {'error': 'Not found'})
+
+        return format_response(404, {'error': 'Not found'})
 
     except Exception as e:
         logger.error(f"Handler error: {e}")
