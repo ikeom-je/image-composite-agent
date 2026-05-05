@@ -528,7 +528,7 @@
   - フロント `compositeDefaults` ストアの fetch 失敗時フォールバック
   - _要件: 21.3〜21.5, 21.11_
 
-- [ ] 21.11 e2e/統合テスト
+- [x] 21.11 e2e/統合テスト
   - 既存30件の e2e テストを実行し、期待値画像の再生成が必要か確認
   - 必要なら `scripts/regenerate-expected-images.py` を実行して期待値更新
   - 破壊的変更（baseImage 黒、video_format MP4、image1/2/3 のデフォルト座標変更）に該当するテストの期待値を更新
