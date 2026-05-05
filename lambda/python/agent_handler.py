@@ -201,6 +201,18 @@ def handle_chat(event: Dict[str, Any], context: Any) -> Dict:
         rule_ids = body.get('ruleIds')           # None または list
         inline_rules = body.get('inlineRules') or []
 
+        # 型ガード: 不正な型は400で弾く（クライアントエラー）
+        if rule_ids is not None and not isinstance(rule_ids, list):
+            return format_response(400, {
+                'error': 'ruleIds must be a list of strings',
+                'requestId': request_id,
+            })
+        if not isinstance(inline_rules, list):
+            return format_response(400, {
+                'error': 'inlineRules must be a list of {name, prompt} objects',
+                'requestId': request_id,
+            })
+
         from rules_validator import RuleSizeError
         try:
             full_system_prompt = _resolve_chat_system_prompt(rule_ids, inline_rules)
@@ -444,8 +456,8 @@ def _get_rule_limits():
 
 
 def _resolve_chat_system_prompt(
-    rule_ids,
-    inline_rules,
+    rule_ids: Optional[list],
+    inline_rules: list,
 ) -> str:
     """POST /chat 用にAgentのsystem_promptを解決する。
 
