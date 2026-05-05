@@ -33,9 +33,6 @@ frontend/dist/
 # MCP configuration (local settings)
 .mcp.json
 
-# Amazon Q credentials
-.amazonq/rules/credentials.md
-
 # Git worktrees
 .worktrees/
 
