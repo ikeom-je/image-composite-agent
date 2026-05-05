@@ -38,3 +38,6 @@ frontend/dist/
 
 # Git worktrees
 .worktrees/
+
+# Lambda 同梱用の composite_defaults.json（deploy.sh が frontend/public からコピー、Issue #58）
+lambda/python/composite_defaults.json

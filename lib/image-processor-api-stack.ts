@@ -106,6 +106,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
               'pip install --upgrade pip',
               'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
+              'if [ -f composite_defaults.json ]; then cp composite_defaults.json /asset-output/; fi',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'if [ -d fonts ]; then cp -r fonts /asset-output/; fi',
               'echo "Optimizing bundle size..."',
@@ -173,6 +174,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
               'pip install --upgrade pip',
               'pip install -r requirements.txt -t /asset-output --no-cache-dir --platform manylinux2014_x86_64 --only-binary=:all:',
               'cp *.py /asset-output/',
+              'if [ -f composite_defaults.json ]; then cp composite_defaults.json /asset-output/; fi',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'if [ -d fonts ]; then cp -r fonts /asset-output/; fi',
               'echo "Optimizing bundle size..."',
@@ -627,6 +629,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
               //  Pillow 等の C 拡張が ImportError になる）
               'pip install strands-agents anthropic pillow boto3 opentelemetry-sdk opentelemetry-api opentelemetry-exporter-otlp-proto-http -t /asset-output --no-cache-dir --platform manylinux2014_aarch64 --only-binary=:all: 2>&1 | tail -5',
               'cp *.py /asset-output/',
+              'if [ -f composite_defaults.json ]; then cp composite_defaults.json /asset-output/; fi',
               'if [ -d images ]; then cp -r images /asset-output/; fi',
               'if [ -d fonts ]; then cp -r fonts /asset-output/; fi',
               'echo "Optimizing bundle size..."',

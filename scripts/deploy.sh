@@ -99,8 +99,20 @@ CONF
   echo "✅ config.json 生成完了 (frontend/public/config.json)"
 }
 
+copy_composite_defaults() {
+  # composite-default.json を Lambda 同梱用にコピー (Issue #58 / Req 21.2)
+  # フロント側のソースを単一に保つため、Lambda 用は git 管理外（.gitignore 済み）
+  if [ -f frontend/public/composite-default.json ]; then
+    cp frontend/public/composite-default.json lambda/python/composite_defaults.json
+    echo "✅ composite_defaults.json を Lambda 同梱用にコピー"
+  else
+    echo "⚠️  frontend/public/composite-default.json が見つかりません。Lambda は HARDCODED_FALLBACK で動作します"
+  fi
+}
+
 case "$STACK" in
   backend|api)
+    copy_composite_defaults
     echo "🚀 バックエンドのみデプロイ..."
     npx cdk deploy "$API_STACK" $CDK_CONTEXT --require-approval never
     update_lambda_cloudfront_domain
@@ -114,6 +126,7 @@ case "$STACK" in
     update_lambda_cloudfront_domain
     ;;
   all|"")
+    copy_composite_defaults
     echo "🚀 バックエンドデプロイ..."
     npx cdk deploy "$API_STACK" $CDK_CONTEXT --require-approval never
     generate_config
