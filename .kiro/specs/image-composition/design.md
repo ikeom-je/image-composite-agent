@@ -924,3 +924,244 @@ def generate_expected_images():
 6. **テストデータ管理**: test/test-resultsディレクトリでの一時ファイル管理
 
 この設計は、すべての要件に対応する包括的なソリューションを提供し、既存のコンポーネントアーキテクチャを維持しながら、v2.3.0の実証済みUIデザインを実装し、テスト期待値画像の適切な管理を実現します。
+
+---
+
+## 6. デフォルト値一元管理（composite-default.json）
+
+> 対応要件: Requirement 21（画像合成デフォルト値の一元管理）
+
+### 6.1 目的
+
+画像合成APIとフロントエンドのデフォルト値を **`composite-default.json` 1ファイルに集約**し、以下を実現する:
+
+1. デフォルト値が複数箇所（`image_processor.py`, `image_compositor.py`, `App.vue`, `design.md`）に散在することによるドリフトを防止
+2. 利用シーン（1画像/2画像/3画像、テキスト有無）に応じた **動的デフォルト解決**
+3. 将来の **プリセット拡張**（Live表示・番組宣伝・字幕などの典型配置パターン）の基盤
+4. Agent からの **プリセット呼び出し連携**（後続 issue で実装）
+
+### 6.2 JSON 構造
+
+`frontend/public/composite-default.json` をマスターファイルとし、CDK デプロイで S3 配信、Lambda にも同梱する。
+
+```json
+{
+  "version": "1.0",
+  "system_default": {
+    "canvas": { "width": 1920, "height": 1080 },
+    "baseImage": "#000000",
+    "baseOpacity": 100,
+    "image_placement": {
+      "single": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 }
+      },
+      "double": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 },
+        "image2": { "x": 600, "y": 400, "width": 300, "height": 300 }
+      },
+      "triple": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 },
+        "image2": { "x": 600, "y": 400, "width": 300, "height": 300 },
+        "image3": { "x": 1520, "y": 700, "width": 300, "height": 300 }
+      }
+    },
+    "text_placeholders": {
+      "text1": { "placeholder": "LIVE", "x": 1800, "y": 300, "font_size": 40 },
+      "text2": { "placeholder": "Telop text on the bottom", "x": 300, "y": 900, "font_size": 50 },
+      "text3": { "placeholder": "message for the program", "x": 300, "y": 100, "font_size": 40 }
+    },
+    "video": { "format": "MP4", "duration": 3 }
+  },
+  "presets": {}
+}
+```
+
+### 6.3 配布フロー
+
+```
+[git管理]
+frontend/public/composite-default.json
+        │
+        ├─ Vite ビルド ─► frontend/dist/composite-default.json
+        │       │
+        │       └─ CDK BucketDeployment ─► S3 (Frontend Bucket) ─► CloudFront ─► ブラウザ fetch
+        │
+        └─ CDK ビルド ─► lambda/python/composite_defaults.json (同梱)
+                             │
+                             └─ Lambda 起動時に読み込み（モジュールレベルキャッシュ）
+```
+
+- フロント: 既存の `config.json` 配信パターン（`image-composite-viewer-stack.ts`）に準拠
+- Lambda: `composite-default.json` を `lambda/python/` 配下にビルド時コピーし、`composite_defaults.py` で読み込み
+
+### 6.4 動的デフォルト解決の優先順位
+
+API/フロント問わず、画像配置・背景色・動画形式の解決順序は以下:
+
+```
+1. リクエスト/UI明示指定（image1_x など）  ← 最優先
+2. composite-default.json の system_default 値
+3. ハードコードされたフォールバック値      ← JSON読み込み失敗時
+```
+
+### 6.5 1/2/3画像モード判定ロジック
+
+API側 (`image_processor.py` / `image_compositor.py`) で `image2` / `image3` の有無のみをもとにモードを決定する。**テキストの有無はモード判定に影響しない**（テキストは `text_placeholders` で別軸として常に参照されるため）。
+
+```python
+def determine_image_mode(query_params: dict) -> str:
+    has_image2 = bool(query_params.get('image2'))
+    has_image3 = bool(query_params.get('image3'))
+
+    if has_image3:
+        return 'triple'
+    elif has_image2:
+        return 'double'
+    else:
+        return 'single'  # image1 のみ → 右上アイコン配置（テキスト有無無関係）
+```
+
+`single` モードでは `image1` のデフォルト座標が `(1700, 96, 200, 200)` の右上アイコン位置になる。
+テキスト併用時は `image_placement.single` の image1 座標 + `text_placeholders` の x/y/font_size を独立に解決する。
+
+> **設計判断**: テキストの有無で image_placement を切り替えるべきか検討したが、(1) JSON に第4のモード定義が必要になり構造が複雑化、(2) UI の placeholder 表示と API 送信の境界で挙動が分岐し実装ミスが起きやすい、(3) テキストは画像の上にレイヤとして重なるだけで配置干渉が薄い — の3点から、image_placement と text_placeholders を直交軸として扱うことに統一した。
+
+### 6.6 フロントエンド実装方針
+
+**Pinia ストア拡張** (`frontend/src/stores/config.ts` または新ストア `compositeDefaults.ts`):
+
+```typescript
+const compositeDefaults = ref<CompositeDefaults | null>(null)
+
+async function loadCompositeDefaults() {
+  try {
+    const res = await fetch(`${baseUrl}/composite-default.json`)
+    compositeDefaults.value = await res.json()
+  } catch (e) {
+    console.warn('composite-default.json読み込み失敗、フォールバック値使用', e)
+    compositeDefaults.value = HARDCODED_FALLBACK
+  }
+}
+```
+
+**App.vue の params 初期化**:
+
+```typescript
+const sd = compositeDefaultsStore.compositeDefaults?.system_default
+const params = ref({
+  canvas_width: sd?.canvas.width ?? 1920,
+  canvas_height: sd?.canvas.height ?? 1080,
+  baseImage: sd?.baseImage ?? '#000000',
+  baseOpacity: sd?.baseOpacity ?? 100,
+  image1: sd?.image_placement.single.image1 ?? FALLBACK_IMAGE1,
+})
+```
+
+**テキスト入力欄の placeholder**:
+
+```vue
+<textarea
+  :placeholder="textPlaceholders.text1.placeholder"
+  v-model="textConfigs.text1.text"
+/>
+```
+
+### 6.7 Lambda 実装方針
+
+**新ユーティリティ** `lambda/python/composite_defaults.py`:
+
+```python
+import json
+from pathlib import Path
+from typing import Dict, Any
+
+_CACHED_DEFAULTS: Dict[str, Any] | None = None
+
+def load_defaults() -> Dict[str, Any]:
+    global _CACHED_DEFAULTS
+    if _CACHED_DEFAULTS is not None:
+        return _CACHED_DEFAULTS
+    try:
+        path = Path(__file__).parent / 'composite_defaults.json'
+        with open(path, 'r', encoding='utf-8') as f:
+            _CACHED_DEFAULTS = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"composite_defaults.json読み込み失敗、ハードコード値使用: {e}")
+        _CACHED_DEFAULTS = HARDCODED_FALLBACK
+    return _CACHED_DEFAULTS
+
+def get_image_default(mode: str, image_key: str) -> Dict[str, int]:
+    sd = load_defaults()['system_default']
+    return sd['image_placement'][mode][image_key]
+
+def get_base_image_default() -> str:
+    return load_defaults()['system_default']['baseImage']
+
+def get_video_format_default() -> str:
+    return load_defaults()['system_default']['video']['format']
+```
+
+**`image_compositor.py` の `parse_image_parameters` 改修**: 現状ハードコードされている x/y/width/height デフォルトを `composite_defaults.get_image_default(mode, 'imageN')` で置換。mode は `image2` / `image3` の有無のみで判定する（§6.5 参照、テキストの有無は判定に影響しない）。
+
+**`image_processor.py` の `baseImage` / `video_format` 解決**:
+
+```python
+base_image_param = query_params.get('baseImage') or composite_defaults.get_base_image_default()
+video_format = query_params.get('video_format') or composite_defaults.get_video_format_default()
+```
+
+### 6.8 CDK 拡張
+
+- フロント: `frontend/public/composite-default.json` を置けば Vite ビルドで `dist/` に含まれ、`BucketDeployment` で S3 にアップロードされる（追加実装最小）
+- Lambda: `lambda/python/composite_defaults.json` をビルド時コピーするステップを `lib/image-processor-api-stack.ts` に追加
+
+### 6.9 フォールバック戦略
+
+JSON 読み込み失敗時のハードコードフォールバック値:
+
+| 項目 | フォールバック値 |
+|------|--------------|
+| canvas | 1920×1080 |
+| baseImage | `transparent`（既存挙動を維持してリスク最小化） |
+| baseOpacity | 100 |
+| image_placement.single.image1 | (1700, 96, 200, 200) |
+| image_placement.double | image1=同上, image2=(600, 400, 300, 300) |
+| image_placement.triple | 上記+image3=(1520, 700, 300, 300) |
+| text_placeholders | text1/text2/text3 ともに `{ "placeholder": "", "x": 0, "y": 0, "font_size": 48 }`（フィールドは保持、文字列は空） |
+| video.format | MP4 |
+| video.duration | 3 |
+
+> **フォールバックの構造的互換性**: フロント / Lambda の consumer コード（`App.vue` の params 初期化、`composite_defaults.get_image_default()` 等）は JSON が読み込めたときと同じキー構造を前提に値を参照する。そのため、フォールバックは値だけが異なる**同形のオブジェクト**として返す（キーの欠落は `KeyError` / `undefined` を引き起こすため避ける）。
+>
+> **フォールバック時の `baseImage`**: 既存挙動（透明）を維持し、JSON が正常に読み込めた場合のみ新仕様（黒背景）が適用される。これは「JSON配信が壊れた状態で API を呼ぶ既存利用者の結果画像が突然変わる」リスクを避けるためで、AC 21.8（新仕様）と AC 21.11（フォールバック）は意図的に値が異なる。
+
+### 6.10 プリセット拡張性（将来 / issue #59）
+
+`presets` セクションは本 issue では空オブジェクト `{}` のみ。後続 issue で:
+
+- `live` / `promo` / `subtitle` の3プリセット定義
+- SettingsPage UI でプリセット選択
+- Agent ツール `apply_preset(name)` でプリセット呼び出し
+- ユーザー個別の上書き値を localStorage に保存
+
+### 6.11 破壊的変更とマイグレーション
+
+| 変更 | 旧挙動 | 新挙動 | 影響 |
+|------|--------|--------|------|
+| `baseImage` 省略時 | 透明背景 | 黒背景 (`#000000`) | 既存 API 利用者で `baseImage` を明示しないリクエストの結果画像が変わる |
+| `video_format` 省略時 | XMF | MP4 | 動画ダウンロードの拡張子・MIMEタイプが変わる |
+| `image1` のみのデフォルト座標 | (100, 100, 400, 300) | (1700, 96, 200, 200) | 既存 API 利用者で座標未指定の画像配置が右上に変わる |
+
+**周知**: PR 本文の冒頭に「破壊的変更」セクション、`CHANGELOG.md` 記載、`steering/architecture.md` の API セクションに注記。
+
+### 6.12 テスト方針
+
+- ユニットテスト: `composite_defaults.py` のロード/フォールバック/モード判定
+- 統合テスト: API リクエスト時に JSON デフォルトが反映されることを確認
+- e2e テスト: 既存30件のテストで期待値画像の再生成が必要か確認、必要なら `scripts/regenerate-expected-images.py` を実行
+- フロントテスト: `composite-default.json` fetch 失敗時のフォールバック動作
+
+### 6.13 関連 Issue
+
+- **#58**: 本セクションを実装する（最小スコープ）
+- **#59**: presets / SettingsPage UI / Agent 連携（後続）

@@ -293,6 +293,28 @@
 > - **第1段（19.13）**: 「未登録フォント名 → `NotoSansJP-Regular.ttf` というファイル名で検索を継続」。`text_renderer.py:_find_font_path` 内の `FONT_FILES.get(font_family, FONT_FILES['NotoSansJP'])` で実装
 > - **第2段（19.15, 19.16）**: 「TTFファイルそのものが利用できない → Pillow組み込みフォントオブジェクトに切り替え」。`text_renderer.py:load_font` の例外処理 + 検索失敗時パスで実装
 
+### Requirement 21: 画像合成デフォルト値の一元管理（composite-default.json）
+
+**User Story:** ユーザーとして、画像合成APIとフロントエンドのデフォルト値が一元管理されており、利用シーンに即した実用的な初期値で素早く合成を開始したい。将来は典型配置パターン（ライブ配信、番組宣伝、字幕など）をプリセットとして再利用できるようにしたい。
+
+#### Acceptance Criteria
+
+1. WHEN フロント起動時 THEN `${baseUrl}/composite-default.json` を fetch して Pinia store に格納する
+2. WHEN Lambda 起動時 THEN `composite-default.json` の値を Lambda 関数バンドルに同梱されたファイル（`lambda/python/composite_defaults.json`）から読み込み利用可能にする（CDK ビルド時にコピー、詳細は `design.md` §6.3, §6.8）
+3. WHEN `image1` のみ指定（`image2`/`image3` 未指定）+ `image{N}_x/y/width/height` 省略 THEN `image_placement.single` のデフォルト（`image1=(1700, 96, 200, 200)`）を適用する **※破壊的変更**（旧: `(100, 100, 400, 300)`）。テキスト有無は本モード判定に影響せず、`text_placeholders` は別軸で常時参照される（AC 21.6, 21.7）
+4. WHEN `image2` を指定し個別座標が省略 THEN `image_placement.double` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`）を適用する **※破壊的変更**（旧: `image1=(100,100,400,300)`, `image2=(600,100,400,300)`）
+5. WHEN `image3` を指定し個別座標が省略 THEN `image_placement.triple` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`, `image3=(1520, 700, 300, 300)`）を適用する **※破壊的変更**（旧: `image3=(350, 500, 400, 300)`）
+6. WHEN フロントUIにテキスト入力欄を表示 THEN JSON の `text_placeholders[textN].placeholder` を HTML `placeholder` 属性として反映する（text1="LIVE", text2="Telop text on the bottom", text3="message for the program"）
+7. WHEN フロントUIにテキスト座標・フォントサイズの初期値を設定 THEN JSON の値（text1: x=1800/y=300/40px、text2: x=300/y=900/50px、text3: x=300/y=100/40px）を使用する
+8. WHEN `baseImage` パラメータを省略 THEN `system_default.baseImage`（`#000000`）を適用する **※破壊的変更**（旧: 透明背景）
+9. WHEN `video_format` パラメータを省略 THEN `system_default.video.format`（`MP4`）を適用する **※破壊的変更**（旧: XMF）
+10. WHEN `image{N}_x/y/width/height` を個別に指定 THEN その値が JSON デフォルトより優先される
+11. WHEN `composite-default.json` が読み込めない（ファイル欠損・パース失敗・ネットワーク失敗）THEN エラーログを残し、ハードコードされたフォールバック値で動作継続する。ただしリスク最小化のため、フォールバック時の `baseImage` は AC 21.8 の新仕様（`#000000`）ではなく既存挙動の `transparent` を維持する（詳細は `design.md` §6.9）
+12. WHEN `presets` セクションが空オブジェクト `{}` THEN プリセット機能は無効として扱う（将来拡張用、本要件のスコープ外）
+13. WHEN フロントから API へリクエストを送信 THEN フロントの初期値はそのままパラメータとして送信され、API 側でも同一の JSON デフォルトと整合する
+
+> JSON 構造の詳細とフロー図は `design.md` の「6. デフォルト値一元管理」セクションを参照。
+
 ## 技術的制約
 
 - AWS CDK + Lambda + API Gateway + S3 + CloudFront構成
@@ -309,6 +331,7 @@
 - test/test-resultsディレクトリでのテスト出力ファイル管理
 - ffmpegを使用した動画生成機能（オプション）
 - `baseOpacity`パラメータ（0-100整数）によるベース画像透明度制御
+- `composite-default.json` による画像合成デフォルト値の一元管理（フロント・Lambda 共通参照、`presets` 拡張性確保）
 
 ## 成功基準
 
@@ -328,3 +351,4 @@
 13. 期待値画像修正・再生成スクリプトの提供
 14. オプション動画生成機能による魅力的なコンテンツ作成
 15. テキストオーバーレイによる情報付加コンテンツの作成
+17. `composite-default.json` による画像合成デフォルト値の一元管理とプリセット拡張性
