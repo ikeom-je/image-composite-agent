@@ -300,7 +300,7 @@
 #### Acceptance Criteria
 
 1. WHEN フロント起動時 THEN `${baseUrl}/composite-default.json` を fetch して Pinia store に格納する
-2. WHEN Lambda 起動時 THEN `composite-default.json` の値を環境変数または同梱ファイルから読み込み利用可能にする
+2. WHEN Lambda 起動時 THEN `composite-default.json` の値を Lambda 関数バンドルに同梱されたファイル（`lambda/python/composite_defaults.json`）から読み込み利用可能にする（CDK ビルド時にコピー、詳細は `design.md` §6.3, §6.8）
 3. WHEN `image1` のみ指定（`image2`/`image3` 未指定）+ `image{N}_x/y/width/height` 省略 THEN `image_placement.single` のデフォルト（`image1=(1700, 96, 200, 200)`）を適用する **※破壊的変更**（旧: `(100, 100, 400, 300)`）。テキスト有無は本モード判定に影響せず、`text_placeholders` は別軸で常時参照される（AC 21.6, 21.7）
 4. WHEN `image2` を指定し個別座標が省略 THEN `image_placement.double` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`）を適用する **※破壊的変更**（旧: `image1=(100,100,400,300)`, `image2=(600,100,400,300)`）
 5. WHEN `image3` を指定し個別座標が省略 THEN `image_placement.triple` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`, `image3=(1520, 700, 300, 300)`）を適用する **※破壊的変更**（旧: `image3=(350, 500, 400, 300)`）
