@@ -7,6 +7,8 @@ import path from 'path';
  */
 export default defineConfig({
   testDir: './e2e',
+  // .spec.ts のみを test として認識（コンパイル artifact .spec.js / .spec.d.ts を除外）
+  testMatch: /\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -66,7 +68,7 @@ export default defineConfig({
       name: 'frontend-tests',
       testMatch: /.*frontend\.spec\.ts/,
       use: {
-        baseURL: 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
@@ -74,7 +76,7 @@ export default defineConfig({
       testMatch: /frontend-api\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
@@ -82,7 +84,7 @@ export default defineConfig({
       testMatch: /upload-functionality\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
@@ -90,7 +92,7 @@ export default defineConfig({
       testMatch: /image-selection\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
@@ -98,7 +100,7 @@ export default defineConfig({
       testMatch: /integration-workflow\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
