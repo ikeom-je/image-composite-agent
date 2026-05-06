@@ -609,7 +609,7 @@ export class ImageProcessorApiStack extends cdk.Stack {
     });
 
     // assets/seed-rules/*.import.jsonl のみを S3 へ配置（*.put.json は除外）
-    new s3deploy.BucketDeployment(this, 'DeployRulesSeed', {
+    const deployRulesSeed = new s3deploy.BucketDeployment(this, 'DeployRulesSeed', {
       sources: [s3deploy.Source.asset('assets/seed-rules', {
         exclude: ['*.put.json'],
       })],
@@ -636,6 +636,8 @@ export class ImageProcessorApiStack extends cdk.Stack {
         S3KeyPrefix: 'rules/',
       },
     });
+    // 依存関係: import は BucketDeployment 完了後に走る必要があるため、明示的に依存させる
+    cfnRulesTable.node.addDependency(deployRulesSeed);
 
     // Agent Lambda用 DLQ
     const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
