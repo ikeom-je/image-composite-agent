@@ -895,6 +895,70 @@ else:
       ],
     });
 
+    // /chat/rules リソース（カスタムルールプロンプト管理 API）
+    const rulesResource = chatResource.addResource('rules', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    rulesResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    rulesResource.addMethod('POST', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '201', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '400', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    // /chat/rules/preview （静的パスを {ruleId} より先に定義）
+    const rulesPreviewResource = rulesResource.addResource('preview', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+    rulesPreviewResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    // /chat/rules/{ruleId}
+    const ruleItemResource = rulesResource.addResource('{ruleId}', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+    for (const httpMethod of ['GET', 'PUT', 'DELETE'] as const) {
+      ruleItemResource.addMethod(httpMethod, agentLambdaIntegration, {
+        authorizationType: apigateway.AuthorizationType.NONE,
+        methodResponses: [
+          { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '204', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '400', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '403', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '404', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        ],
+      });
+    }
+
     // APIエンドポイントを保存
     this.apiEndpoint = `${api.url}images/composite`;
     this.uploadApiEndpoint = `${api.url}upload`;
