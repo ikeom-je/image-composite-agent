@@ -176,33 +176,83 @@ npm run test:all-e2e
 ```
 
 ### CI/CDパイプライン（staging / production）
-- **staging**: devブランチへのマージ時にGitHub Actionsが自動デプロイ + e2eテスト
-- **production**: mainブランチへのマージ時にGitHub Actionsが自動デプロイ
-- ワークフロー定義: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`
 
-### デプロイ後
-- スモークテストを実行
-- CloudWatchアラームを監視
-- エラー率を確認
-- 機能を検証
+`.github/workflows/deploy.yml` が **`push` イベントで自動発火** する。手動 `gh workflow run` は通常不要。
+
+| ブランチ push | 環境 | スタックサフィックス | e2e-test |
+|--------------|------|------------------|----------|
+| `dev` | staging | `-Staging` | api スイート自動実行 |
+| `main` | production | （なし） | api スイート自動実行 |
+
+**自動実行ジョブ順序**（deploy.yml）:
+1. `resolve-env` - ブランチ名から環境名/スタックサフィックスを決定
+2. `ci-check` - `ci.yml` を呼び出し（ユニット・型・lint）
+3. `deploy-backend` - `ImageProcessorApiStack[suffix]` を `cdk deploy`
+4. `deploy-frontend` - `config.json` 生成 → frontend ビルド → `FrontendStack[suffix]` を `cdk deploy` → Lambda の `CLOUDFRONT_DOMAIN` 環境変数を更新
+5. `e2e-test` - `e2e-test.yml` を `test_suite: api` で呼び出し
+
+> 手動オーバーライド: `workflow_dispatch` で環境（staging/production）と対象（all/backend/frontend）を選択して再デプロイ可能。緊急修正後の差分デプロイ等で利用。
+
+ワークフロー定義: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`, `.github/workflows/e2e-test.yml`
+
+### デプロイ後の確認
+
+CI/CD で自動デプロイされた直後、以下を順に確認する:
+
+1. **GitHub Actions の成否確認**
+   ```bash
+   gh run list --workflow deploy.yml --limit 3
+   gh run view <run-id> --log-failed  # 失敗時のみ
+   ```
+2. **CloudFormation スタック状態**
+   ```bash
+   # production
+   aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
+     --query "Stacks[0].StackStatus" --output text
+   aws cloudformation describe-stacks --stack-name FrontendStack \
+     --query "Stacks[0].StackStatus" --output text
+   # 期待値: UPDATE_COMPLETE / CREATE_COMPLETE
+   ```
+3. **スモークテスト（API 1リクエスト）**
+   ```bash
+   API_URL=$(aws cloudformation describe-stacks --stack-name ImageProcessorApiStack \
+     --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+   curl -sS -o /dev/null -w "HTTP %{http_code}\n" \
+     "${API_URL}images/composite?image1=test&image2=transparent&format=png"
+   # 期待値: HTTP 200
+   ```
+4. **フロントエンド表示確認**
+   - CloudFront URL を開いて画面表示 / ヘッダーのバージョン表記を確認
+   - `config.json` の `version` / `buildHash` が新しいことを確認
+5. **CloudFront キャッシュ無効化**（必要な場合のみ）
+   - `index.html` 等の即時反映が必要なら手動 invalidation を実行
+   - 通常は CloudFront のオリジン更新で `config.json` は短 TTL のため自動的に更新される
+6. **CloudWatch Logs / アラームの監視**
+   - デプロイ後 5〜10 分は Lambda のエラー率・レイテンシをチェック
+   - 該当ロググループ: `/aws/lambda/ImageProcessor*`, `/aws/lambda/AgentFunction*`
 
 ### ロールバック手順
-```bash
-# オプション1: コミットをリバートして再デプロイ
-git revert <commit-hash>
-ENVIRONMENT=<env> ./scripts/deploy.sh
 
-# オプション2: CloudFormationロールバック（環境別スタック名に注意）
-aws cloudformation rollback-stack --stack-name ImageProcessorApiStack       # production
+production で問題が発生した場合は、**`git revert` ベースの再デプロイ**を第一選択とする（履歴が残るため）。
+
+```bash
+# オプション1（推奨）: コミット/PR をリバートして main に push → 自動再デプロイ
+git checkout main
+git pull github main
+git revert <commit-hash>          # マージコミットなら -m 1 を付与
+git push github main              # → deploy.yml が自動発火し production に再デプロイ
+
+# オプション2: 以前のリリースタグから手動デプロイ（CI/CD が壊れている等の緊急時）
+git checkout <previous-tag>      # 例: v3.1.1
+ENVIRONMENT=production ./scripts/deploy.sh
+
+# オプション3: CloudFormation ネイティブロールバック（直前デプロイの取消のみ）
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack          # production
 aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Staging
 aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Dev
-
-# オプション3: 以前のバージョン
-git checkout <previous-tag>
-ENVIRONMENT=<env> ./scripts/deploy.sh
 ```
 
-> 注: production / staging は通常CI/CD自動デプロイ。緊急時のみ手動オプションを使用する。
+> 注: production / staging は通常CI/CD自動デプロイ。オプション2/3は緊急時のみ。リバート後は必ず再度デプロイ後の確認手順を実行する。
 
 ## リリースワークフロー
 
@@ -211,16 +261,51 @@ ENVIRONMENT=<env> ./scripts/deploy.sh
 - MINOR: 新機能（後方互換性あり）
 - PATCH: バグ修正
 
+### リリースブランチ命名規則
+
+- 形式: `release/v<MAJOR>.<MINOR>.<PATCH>`
+- 例: `release/v3.2.0`, `release/v3.2.1`
+- 分岐元: `dev`（staging で検証済みの状態）
+- マージ先: `main`（プルリクエスト経由・**Merge Commit**、squash しない）
+
 ### リリース手順
-1. `package.json`のバージョンを更新（→ [product.md](product.md) の「バージョン」も更新）
-2. CHANGELOGを更新
-3. リリースブランチを作成
-4. 最終テスト
-5. mainにマージ
-6. リリースにタグ付け: `git tag -a v<VERSION> -m "Release v<VERSION>"`
-7. タグをプッシュ: `git push origin v<VERSION>`
-8. 本番環境にデプロイ
-9. リリースノート付きでGitHubリリースを作成
+
+1. **dev で staging 検証完了を確認**
+   - PR #62 等の staging e2e テスト合格、CloudWatch にエラーなし
+2. **バージョン更新 PR を作成**（任意・dev 上で完結する場合は省略可）
+   - `package.json` の `version` を更新
+   - `steering/product.md` の「バージョン」セクションを更新
+   - 他ファイルへのバージョン直書きは禁止（プレースホルダ化済み）
+3. **release PR を作成**: `dev` → `main`
+   ```bash
+   git checkout dev && git pull github dev
+   git checkout -b release/v<VERSION>
+   git push -u github release/v<VERSION>
+   gh pr create --base main --head release/v<VERSION> \
+     --title "release(v<VERSION>): <概要>" \
+     --body "<release note 形式の本文>"
+   ```
+   - PR タイトル: `release(v<VERSION>): <概要>` 例: `release(v3.2.0): テキストオーバーレイ機能を本番リリース`
+   - PR 本文: 主要変更の箇条書き + 関連 PR 番号 + 検証状況
+4. **PR レビュー・マージ**: Merge Commit でマージ（squash しない）
+   - main push → `deploy.yml` が自動で production デプロイ + e2e-test 実行
+5. **「デプロイ後の確認」を実行**（前節参照）
+6. **リリースタグ作成 + push**
+   ```bash
+   git checkout main && git pull github main
+   git tag -a v<VERSION> -m "Release v<VERSION>"
+   git push github v<VERSION>
+   ```
+7. **GitHub Release 作成**
+   ```bash
+   gh release create v<VERSION> --title "v<VERSION>" --notes "<release note>"
+   ```
+8. **dev に main を取り込む**（リリース PR が main に merge commit を作る場合、dev に back-merge して履歴を整合させる）
+   ```bash
+   git checkout dev && git pull github dev
+   git merge github/main          # back-merge
+   git push github dev
+   ```
 
 ## 監視ワークフロー
 
