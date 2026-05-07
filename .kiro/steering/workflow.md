@@ -322,6 +322,28 @@ aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Dev
 - ユーザーフィードバック
 - 技術的負債
 
+### Lambda コールドスタート計測（パフォーマンス調査）
+
+新しい依存（フォント・大きなライブラリ等）を Lambda に同梱する際は、**コールドスタートへの影響**を CloudWatch Insights で計測する。
+
+```bash
+# Lambda 関数名を取得（例: production の ImageProcessor）
+FUNC_NAME=$(aws cloudformation list-stack-resources --stack-name ImageProcessorApiStack \
+  --query "StackResourceSummaries[?ResourceType=='AWS::Lambda::Function' && contains(LogicalResourceId, 'ImageProcessor')].PhysicalResourceId" \
+  --output text)
+
+# 直近 1 時間の Init Duration / Duration を集計
+aws logs start-query \
+  --log-group-name "/aws/lambda/${FUNC_NAME}" \
+  --start-time $(($(date +%s) - 3600)) \
+  --end-time $(date +%s) \
+  --query-string 'fields @timestamp, @initDuration, @duration | filter @type = "REPORT" | stats avg(@initDuration), max(@initDuration), avg(@duration), count() by bin(5m)'
+```
+
+- `@initDuration` が記録されるのはコールドスタートのみ（ウォーム時は欠損）
+- 機能 ON/OFF による比較は、リクエストパラメータでフィルタした 2 クエリを並べて差分を見る
+- 影響が **>500ms 増加** なら最適化検討（Lambda Layer 化、サブセット化、provisioned concurrency 等）
+
 ### インシデント対応
 1. 検出: CloudWatchアラーム
 2. 評価: ログとメトリクスを確認
