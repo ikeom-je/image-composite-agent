@@ -4,6 +4,8 @@
 
 Image Compositorの全機能を自然言語で操作できるAIチャットエージェントを、Strands Agents SDKとAWS Bedrock（Claude Sonnet 4.5）を用いて構築する。
 
+> 関連spec: カスタムルールプロンプト機能（system promptへの動的ルール注入・管理画面UI）は [`../custom-rules-prompt/`](../custom-rules-prompt/) を参照（issue #8 / #9）。
+
 ---
 
 ## Req 1: エージェントコア基盤

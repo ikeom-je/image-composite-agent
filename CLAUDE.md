@@ -61,6 +61,9 @@
 | [.kiro/specs/strands-agent/design.md](.kiro/specs/strands-agent/design.md) | チャットエージェント設計書 |
 | [.kiro/specs/strands-agent/tasks.md](.kiro/specs/strands-agent/tasks.md) | チャットエージェント実装タスク一覧 |
 | [.kiro/specs/strands-agent/usecases.md](.kiro/specs/strands-agent/usecases.md) | チャットエージェントユースケース |
+| [.kiro/specs/custom-rules-prompt/requirements.md](.kiro/specs/custom-rules-prompt/requirements.md) | カスタムルールプロンプト要件定義（issue #8/#9） |
+| [.kiro/specs/custom-rules-prompt/design.md](.kiro/specs/custom-rules-prompt/design.md) | カスタムルールプロンプト設計書 |
+| [.kiro/specs/custom-rules-prompt/tasks.md](.kiro/specs/custom-rules-prompt/tasks.md) | カスタムルールプロンプト実装タスク + 作業フロー別チェックリスト |
 
 ## 開発ルール（詳細は各ファイル参照）
 

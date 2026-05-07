@@ -181,3 +181,295 @@ class TestHandleDeleteHistory(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# === Task 5/6: Rules CRUD handler tests ===
+
+import json as _json_for_rules
+
+try:
+    import boto3 as _boto3_for_rules
+    from moto import mock_aws
+    _MOTO_AVAILABLE = True
+except ImportError:
+    _MOTO_AVAILABLE = False
+
+
+@unittest.skipIf(not _MOTO_AVAILABLE, "moto/boto3 not installed")
+@mock_aws
+class TestRulesHandler(unittest.TestCase):
+    """ルールCRUDハンドラのテスト（moto使用）"""
+
+    TABLE_NAME = 'TestRulesTable'
+
+    def setUp(self):
+        os.environ['RULES_TABLE'] = self.TABLE_NAME
+        self.dynamodb = _boto3_for_rules.resource('dynamodb', region_name='us-east-1')
+        self.dynamodb.create_table(
+            TableName=self.TABLE_NAME,
+            KeySchema=[{'AttributeName': 'ruleId', 'KeyType': 'HASH'}],
+            AttributeDefinitions=[{'AttributeName': 'ruleId', 'AttributeType': 'S'}],
+            BillingMode='PAY_PER_REQUEST',
+        )
+
+    def tearDown(self):
+        os.environ.pop('RULES_TABLE', None)
+
+    def _event(self, method, resource, body=None, path_params=None):
+        return {
+            'httpMethod': method,
+            'resource': resource,
+            'path': resource.replace('{ruleId}', path_params.get('ruleId', 'X')) if path_params else resource,
+            'pathParameters': path_params or {},
+            'queryStringParameters': None,
+            'body': _json_for_rules.dumps(body) if body else None,
+        }
+
+    def test_list_empty(self):
+        """ルールなし時に空配列を返す"""
+        from agent_handler import handler
+        resp = handler(self._event('GET', '/chat/rules'), None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['rules'], [])
+
+    def test_create_returns_201(self):
+        """POST /chat/rules で 201 と作成済みルールを返す"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('POST', '/chat/rules', body={'name': 'test', 'prompt': 'hello'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 201)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['rule']['name'], 'test')
+        self.assertFalse(body['rule']['isActive'])
+        self.assertFalse(body['rule']['isDefault'])
+
+    def test_create_oversize_prompt_returns_400(self):
+        """promptが上限超過なら 400"""
+        from agent_handler import handler
+        os.environ['RULES_MAX_PROMPT_CHARS'] = '50'
+        try:
+            resp = handler(
+                self._event('POST', '/chat/rules', body={'name': 'x', 'prompt': 'a' * 100}),
+                None
+            )
+            self.assertEqual(resp['statusCode'], 400)
+        finally:
+            del os.environ['RULES_MAX_PROMPT_CHARS']
+
+    def test_create_missing_name_returns_400(self):
+        """nameなしリクエストは 400"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('POST', '/chat/rules', body={'prompt': 'p'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)
+
+    def test_get_missing_returns_404(self):
+        """存在しないIDは 404"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('GET', '/chat/rules/{ruleId}', path_params={'ruleId': 'nope'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 404)
+
+    def test_get_existing_returns_200(self):
+        """存在するルールを取得できる"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        created = repo.create(name='r', prompt='p', is_active=True)
+
+        resp = handler(
+            self._event('GET', '/chat/rules/{ruleId}', path_params={'ruleId': created['ruleId']}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['rule']['ruleId'], created['ruleId'])
+
+    def test_update_partial(self):
+        """部分更新ができる"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        created = repo.create(name='r', prompt='p', is_active=False)
+
+        resp = handler(
+            self._event('PUT', '/chat/rules/{ruleId}',
+                       body={'isActive': True},
+                       path_params={'ruleId': created['ruleId']}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertTrue(body['rule']['isActive'])
+
+    def test_delete_returns_204(self):
+        """通常ルールの削除は 204"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        created = repo.create(name='r', prompt='p', is_active=False)
+
+        resp = handler(
+            self._event('DELETE', '/chat/rules/{ruleId}', path_params={'ruleId': created['ruleId']}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 204)
+
+    def test_delete_default_returns_403(self):
+        """デフォルトルールの削除は 403"""
+        from agent_handler import handler
+        self.dynamodb.Table(self.TABLE_NAME).put_item(Item={
+            'ruleId': 'jaa-subtitle-handbook-v1',
+            'name': 'JAA',
+            'prompt': 'p',
+            'isDefault': True,
+            'isActive': True,
+            'createdAt': '2026-05-04T00:00:00Z',
+            'updatedAt': '2026-05-04T00:00:00Z',
+        })
+        resp = handler(
+            self._event('DELETE', '/chat/rules/{ruleId}',
+                       path_params={'ruleId': 'jaa-subtitle-handbook-v1'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 403)
+
+    def test_ruleid_preview_rejected(self):
+        """{ruleId}=preview は400で防御（パス優先順位の保険）"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('GET', '/chat/rules/{ruleId}', path_params={'ruleId': 'preview'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)
+
+    def test_ruleid_preview_rejected_put(self):
+        """{ruleId}=preview に対する PUT も400で防御"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('PUT', '/chat/rules/{ruleId}',
+                       body={'name': 'x'},
+                       path_params={'ruleId': 'preview'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)
+
+    def test_ruleid_preview_rejected_delete(self):
+        """{ruleId}=preview に対する DELETE も400で防御"""
+        from agent_handler import handler
+        resp = handler(
+            self._event('DELETE', '/chat/rules/{ruleId}',
+                       path_params={'ruleId': 'preview'}),
+            None
+        )
+        self.assertEqual(resp['statusCode'], 400)
+
+    def test_preview_no_rules(self):
+        """ルールなしでもbase prompt + メタ情報を返す"""
+        from agent_handler import handler
+        resp = handler(self._event('GET', '/chat/rules/preview'), None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertIn('fullPrompt', body)
+        self.assertEqual(body['ruleCount'], 0)
+        self.assertEqual(body['appliedRules'], [])
+        self.assertIn('limits', body)
+
+    def test_preview_with_active_rules(self):
+        """アクティブルールのみが反映される"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        repo.create(name='active1', prompt='本文1', is_active=True)
+        repo.create(name='inactive', prompt='本文2', is_active=False)
+
+        resp = handler(self._event('GET', '/chat/rules/preview'), None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['ruleCount'], 1)
+        self.assertIn('### active1', body['fullPrompt'])
+        self.assertNotIn('### inactive', body['fullPrompt'])
+
+    def test_preview_with_ruleids_query(self):
+        """ruleIds クエリで指定ルールのみ反映"""
+        from agent_handler import handler
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        a = repo.create(name='only-a', prompt='p1', is_active=False)
+        b = repo.create(name='only-b', prompt='p2', is_active=True)
+
+        event = self._event('GET', '/chat/rules/preview')
+        event['queryStringParameters'] = {'ruleIds': a['ruleId']}
+        resp = handler(event, None)
+        self.assertEqual(resp['statusCode'], 200)
+        body = _json_for_rules.loads(resp['body'])
+        self.assertEqual(body['ruleCount'], 1)
+        self.assertIn('### only-a', body['fullPrompt'])
+        self.assertNotIn('### only-b', body['fullPrompt'])
+
+    def test_chat_resolve_prompt_with_rule_ids(self):
+        """_resolve_chat_system_prompt: ruleIds 指定でルール本文が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        rule = repo.create(name='テストルール', prompt='テスト本文', is_active=False)
+
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=[rule['ruleId']],
+            inline_rules=[],
+        )
+        self.assertIn('テストルール', full_prompt)
+        self.assertIn('テスト本文', full_prompt)
+
+    def test_chat_resolve_prompt_with_inline_rules(self):
+        """_resolve_chat_system_prompt: inline rules が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=None,
+            inline_rules=[{'name': 'ドラフト', 'prompt': 'ドラフト本文'}],
+        )
+        self.assertIn('### ドラフト', full_prompt)
+        self.assertIn('ドラフト本文', full_prompt)
+
+    def test_chat_resolve_prompt_combines_persisted_and_inline(self):
+        """_resolve_chat_system_prompt: 永続+inline 両方が含まれる"""
+        from agent_handler import _resolve_chat_system_prompt
+        from rules_repository import RulesRepository
+        repo = RulesRepository(self.TABLE_NAME, region_name='us-east-1')
+        rule = repo.create(name='永続', prompt='永続本文', is_active=False)
+
+        full_prompt = _resolve_chat_system_prompt(
+            rule_ids=[rule['ruleId']],
+            inline_rules=[{'name': 'ドラフト', 'prompt': 'ドラフト本文'}],
+        )
+        self.assertIn('### 永続', full_prompt)
+        self.assertIn('### ドラフト', full_prompt)
+
+    def test_chat_resolve_prompt_no_rules_returns_base(self):
+        """_resolve_chat_system_prompt: 何も指定なし & アクティブ無し は base SYSTEM_PROMPT のみ"""
+        from agent_handler import _resolve_chat_system_prompt
+        from agent_prompts import SYSTEM_PROMPT
+        full_prompt = _resolve_chat_system_prompt(rule_ids=None, inline_rules=[])
+        self.assertEqual(full_prompt, SYSTEM_PROMPT)
+
+    def test_chat_oversize_inline_rule_rejected(self):
+        """POST /chat: inlineRules の本文サイズ超過は 400"""
+        from agent_handler import handler
+        os.environ['RULES_MAX_PROMPT_CHARS'] = '20'
+        try:
+            body = {
+                'sessionId': '12345678-1234-1234-1234-123456789012',
+                'message': 'test',
+                'inlineRules': [{'name': 'd', 'prompt': 'a' * 100}],
+            }
+            resp = handler(self._event('POST', '/chat', body=body), None)
+            self.assertEqual(resp['statusCode'], 400)
+        finally:
+            del os.environ['RULES_MAX_PROMPT_CHARS']

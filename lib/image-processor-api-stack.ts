@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -597,6 +598,49 @@ export class ImageProcessorApiStack extends cdk.Stack {
       timeToLiveAttribute: 'ttl',
     });
 
+    // ========================================
+    // カスタムルールプロンプト機能 (issue #8)
+    // ========================================
+
+    // S3 シードバケット（DynamoDB Native Import 用）
+    const rulesSeedBucket = new s3.Bucket(this, 'RulesSeedBucket', {
+      bucketName: envName('imagecompositor-rules-seed', envConfig).toLowerCase(),
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    });
+
+    // assets/seed-rules/*.import.jsonl のみを S3 へ配置（*.put.json は除外）
+    const deployRulesSeed = new s3deploy.BucketDeployment(this, 'DeployRulesSeed', {
+      sources: [s3deploy.Source.asset('assets/seed-rules', {
+        exclude: ['*.put.json'],
+      })],
+      destinationBucket: rulesSeedBucket,
+      destinationKeyPrefix: 'rules',
+    });
+
+    // DynamoDB ルールテーブル（初回作成時に S3 から自動 import）
+    const rulesTable = new dynamodb.Table(this, 'RulesTable', {
+      tableName: envName('ImageCompositor-Rules', envConfig),
+      partitionKey: { name: 'ruleId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: envConfig.isProduction
+        ? cdk.RemovalPolicy.RETAIN
+        : cdk.RemovalPolicy.DESTROY,
+    });
+    // CDK v2.110.0 では L2 Table が importSource をサポートしないため、
+    // L1 CfnTable の escape hatch で ImportSourceSpecification を設定する
+    const cfnRulesTable = rulesTable.node.defaultChild as dynamodb.CfnTable;
+    cfnRulesTable.addPropertyOverride('ImportSourceSpecification', {
+      InputFormat: 'DYNAMODB_JSON',
+      S3BucketSource: {
+        S3Bucket: rulesSeedBucket.bucketName,
+        S3KeyPrefix: 'rules/',
+      },
+    });
+    // 依存関係: import は BucketDeployment 完了後に走る必要があるため、明示的に依存させる
+    cfnRulesTable.node.addDependency(deployRulesSeed);
+
     // Agent Lambda用 DLQ
     const agentDLQ = new sqs.Queue(this, 'AgentDLQ', {
       queueName: envName('agent-handler-dlq', envConfig),
@@ -688,6 +732,10 @@ else:
       logGroup: agentLogGroup,
       environment: {
         CHAT_HISTORY_TABLE: chatHistoryTable.tableName,
+        RULES_TABLE: rulesTable.tableName,
+        RULES_MAX_PROMPT_CHARS: '10000',
+        RULES_MAX_COUNT: '5',
+        RULES_MAX_COMBINED_CHARS: '20000',
         AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
         BEDROCK_REGION: process.env.BEDROCK_REGION || 'us-east-1',
         S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
@@ -704,6 +752,8 @@ else:
 
     // Agent Lambda IAM権限
     chatHistoryTable.grantReadWriteData(agentFunction);
+    // RulesTable CRUD 権限（最小権限）
+    rulesTable.grantReadWriteData(agentFunction);
     // Bedrock InvokeModel 権限
     // Bedrock Marketplace: モデル自動サブスクリプションに必要（初回呼び出し時に自動有効化）
     agentFunction.addToRolePolicy(new iam.PolicyStatement({
@@ -847,6 +897,70 @@ else:
         },
       ],
     });
+
+    // /chat/rules リソース（カスタムルールプロンプト管理 API）
+    const rulesResource = chatResource.addResource('rules', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+
+    rulesResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    rulesResource.addMethod('POST', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '201', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '400', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    // /chat/rules/preview （静的パスを {ruleId} より先に定義）
+    const rulesPreviewResource = rulesResource.addResource('preview', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+    rulesPreviewResource.addMethod('GET', agentLambdaIntegration, {
+      authorizationType: apigateway.AuthorizationType.NONE,
+      methodResponses: [
+        { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+      ],
+    });
+
+    // /chat/rules/{ruleId}
+    const ruleItemResource = rulesResource.addResource('{ruleId}', {
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: ['GET', 'PUT', 'DELETE', 'OPTIONS'],
+        allowHeaders: ['Content-Type', 'Authorization'],
+      },
+    });
+    for (const httpMethod of ['GET', 'PUT', 'DELETE'] as const) {
+      ruleItemResource.addMethod(httpMethod, agentLambdaIntegration, {
+        authorizationType: apigateway.AuthorizationType.NONE,
+        methodResponses: [
+          { statusCode: '200', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '204', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '400', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '403', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '404', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+          { statusCode: '500', responseParameters: { 'method.response.header.Access-Control-Allow-Origin': true } },
+        ],
+      });
+    }
 
     // APIエンドポイントを保存
     this.apiEndpoint = `${api.url}images/composite`;

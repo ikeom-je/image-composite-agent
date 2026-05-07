@@ -445,6 +445,51 @@ test.describe('Chat Agent API テスト', () => {
     })
   })
 
+  // ===== J: カスタムルールプロンプト（issue #8） =====
+
+  test.describe('J. ruleIds / inlineRules サポート', () => {
+    test('J1: inlineRules を含むリクエストが200で受理される', async () => {
+      const testSession = randomUUID()
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: testSession,
+          message: 'テスト画像を左下に合成して',
+          inlineRules: [{ name: 'e2e-test-rule', prompt: 'テロップは下20%に配置すること' }],
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+      expect(res.status()).toBe(200)
+      const body = await res.json()
+      expect(body.response.content).toBeTruthy()
+      // クリーンアップ
+      await api.delete(`${TEST_CONFIG.chatApiUrl}/history/${testSession}`).catch(() => {})
+    })
+
+    test('J2: AC 5.1 - inlineRules の本文サイズ超過は400', async () => {
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: randomUUID(),
+          message: 'test',
+          inlineRules: [{ name: 'oversize', prompt: 'a'.repeat(20000) }],
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+      expect(res.status()).toBe(400)
+    })
+
+    test('J3: 不正な inlineRules 型（list ではなく object）は400', async () => {
+      const res = await api.post(TEST_CONFIG.chatApiUrl, {
+        data: {
+          sessionId: randomUUID(),
+          message: 'test',
+          inlineRules: { name: 'invalid', prompt: 'object instead of list' },
+        },
+        timeout: TEST_CONFIG.timeout,
+      })
+      expect(res.status()).toBe(400)
+    })
+  })
+
   // ===== CORS =====
 
   test.describe('CORS', () => {
