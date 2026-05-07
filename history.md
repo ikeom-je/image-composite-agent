@@ -1,5 +1,23 @@
 # 画像合成REST API 開発履歴
 
+## 2026-03-28: テキストオーバーレイ機能の追加 (Issue #13)
+
+### テキストテロップオーバーレイ機能
+- **text_renderer.py新規作成**: Pillow ImageDrawベースのテキスト描画エンジン
+- **日本語フォント対応**: Noto Sans JP Regularフォントをバンドル
+- **テキストパラメータ**: text1〜text3、位置・フォントサイズ・色・背景色・不透明度・折り返し制御
+- **合成エンジン統合**: create_composite_image()にtext_params引数追加（Z-order: 画像→テキスト）
+- **テキストのみリクエスト**: image1省略でテキストのみの描画に対応
+- **Chat Agent対応**: compose_images/generate_video両ツールにテキストパラメータ追加
+- **フロントエンドUI**: ImageConfigTableにテキスト設定セクション追加（紫系アクセント）
+- **CDKバンドリング**: ImageProcessor/Agent両Lambdaにfonts/ディレクトリコピー追加
+
+### テスト
+- text_renderer単体テスト: 12テスト
+- image_compositorテキストテスト: 13テスト
+- agent_toolsテスト: 18テスト
+- 既存テストへの影響なし
+
 ## 2025-08-08: 動画生成機能の完全実装 (v2.6.0)
 
 ### 動画生成機能の完全実装

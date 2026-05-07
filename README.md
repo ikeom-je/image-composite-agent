@@ -5,7 +5,9 @@
 ## ✨ 主な特徴
 
 - **🎨 3画像同時合成**: 最大3つの画像を同時に合成（後方互換性完全保持）
-- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock Claude Sonnet 4.5）
+- **📝 テキストオーバーレイ**: 最大3つのテキストテロップを画像上に配置（日本語対応・折り返し・背景矩形）
+- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応）
+- **🔄 マルチモデル対応**: Claude Sonnet 4.5、Haiku等の利用可能モデルを動的に切り替え
 - **📁 画像アップロード機能**: ドラッグ&ドロップによる直接S3アップロード
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
 - **⚡ 並列処理**: 最大3画像の同時取得による高速化
@@ -312,6 +314,26 @@ GET /images/composite
 | `image3X` | 3つ目の画像のX座標 | 20 |
 | `image3Y` | 3つ目の画像のY座標 | 20 |
 
+### オプションパラメータ（テキストオーバーレイ）
+
+text1〜text3まで最大3つのテキストレイヤーを指定可能（text2/text3は省略可）:
+
+| パラメータ | 説明 | デフォルト |
+|-----------|------|-----------|
+| `text1` | テキスト内容（指定時にテキスト描画有効） | - |
+| `text1X` | X座標 | 0 |
+| `text1Y` | Y座標 | 0 |
+| `text1FontSize` | フォントサイズ(px) | 48 |
+| `text1FontColor` | 文字色（`#RRGGBB`形式） | `#FFFFFF` |
+| `text1FontFamily` | フォント名 | `NotoSansJP` |
+| `text1BgColor` | テロップ背景色（省略時は背景なし） | - |
+| `text1BgOpacity` | 背景の不透明度 (0.0-1.0) | 0.7 |
+| `text1Wrap` | 折り返し改行の有無 (`true`/`false`) | `false` |
+| `text1MaxWidth` | 折り返し時の最大幅(px) | - |
+| `text1Padding` | テロップ背景のパディング(px) | 10 |
+
+テキストのみ（画像なし）のリクエストも可能です（`image1`を省略し、`text1`等を指定）。
+
 ## 📁 S3画像アップロード機能
 
 ### アップロード機能の特徴
@@ -396,10 +418,10 @@ curl "${API_URL}?baseImage=s3://${UPLOAD_BUCKET}/uploads/images/base.png&image1=
 
 ### 主要ライブラリ
 
-- **Pillow**: 高性能画像処理
+- **Pillow**: 高性能画像処理（ImageDraw/ImageFontによるテキスト描画含む）
 - **boto3**: AWS SDK
 - **Strands Agents SDK**: AIエージェントフレームワーク
-- **AWS Bedrock**: Claude Sonnet 4.5 LLM推論
+- **AWS Bedrock**: LLM推論（Claude Sonnet 4.5、Haiku等マルチモデル対応）
 
 ### 出力仕様
 
@@ -407,7 +429,8 @@ curl "${API_URL}?baseImage=s3://${UPLOAD_BUCKET}/uploads/images/base.png&image1=
 - **出力サイズ**: 1920x1080ピクセル
 - **透過サポート**: ✅ あり（3画像すべて対応）
 - **エンコード**: Base64（API Gateway制限による）
-- **合成順序**: base → image1 → image2 → image3
+- **合成順序**: base → image1 → image2 → image3 → text1 → text2 → text3
+- **テキスト描画**: Noto Sans JP フォント、日本語完全対応
 
 ## 📁 プロジェクト構造
 
@@ -421,6 +444,7 @@ image-processor-api/
 │   └── python/
 │       ├── image_processor.py             # メインLambda関数（3画像対応）
 │       ├── image_compositor.py            # 合成エンジン
+│       ├── text_renderer.py              # テキスト描画エンジン（テロップオーバーレイ）
 │       ├── image_fetcher.py               # 画像取得（S3/HTTP/テスト画像）
 │       ├── upload_manager.py              # アップロード管理Lambda関数
 │       ├── video_generator.py             # 動画生成
@@ -429,6 +453,7 @@ image-processor-api/
 │       ├── agent_prompts.py               # システムプロンプト・座標マッピング
 │       ├── chat_history.py                # DynamoDB会話履歴管理
 │       ├── requirements.txt               # Python依存関係
+│       ├── fonts/                         # フォントファイル（Noto Sans JP）
 │       └── images/                        # テスト画像
 ├── frontend/                             # Vue.js フロントエンド
 │   ├── src/

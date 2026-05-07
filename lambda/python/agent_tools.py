@@ -65,6 +65,33 @@ def compose_images(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    text1: str = "",
+    text1_position: str = "左下",
+    text1_font_size: int = 48,
+    text1_font_color: str = "#FFFFFF",
+    text1_bg_color: str = "",
+    text1_bg_opacity: float = 0.7,
+    text1_wrap: bool = False,
+    text1_max_width: int = 0,
+    text1_padding: int = 10,
+    text2: str = "",
+    text2_position: str = "中央下",
+    text2_font_size: int = 48,
+    text2_font_color: str = "#FFFFFF",
+    text2_bg_color: str = "",
+    text2_bg_opacity: float = 0.7,
+    text2_wrap: bool = False,
+    text2_max_width: int = 0,
+    text2_padding: int = 10,
+    text3: str = "",
+    text3_position: str = "右下",
+    text3_font_size: int = 48,
+    text3_font_color: str = "#FFFFFF",
+    text3_bg_color: str = "",
+    text3_bg_opacity: float = 0.7,
+    text3_wrap: bool = False,
+    text3_max_width: int = 0,
+    text3_padding: int = 10,
 ) -> dict:
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
@@ -79,6 +106,33 @@ def compose_images(
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。"test","transparent",S3キー,HTTP URL。
+        text1: テキスト1の内容。空文字で省略。
+        text1_position: テキスト1の配置位置。"左上","中央"等の名前、または"x,y"座標。
+        text1_font_size: テキスト1のフォントサイズ(px)。
+        text1_font_color: テキスト1の文字色（"#FFFFFF"等のCSS形式）。
+        text1_bg_color: テキスト1の背景色（省略で背景なし）。
+        text1_bg_opacity: テキスト1の背景不透明度（0.0-1.0）。
+        text1_wrap: テキスト1の折り返し有効化。
+        text1_max_width: テキスト1の最大幅（0で制限なし）。
+        text1_padding: テキスト1の余白(px)。
+        text2: テキスト2の内容。空文字で省略。
+        text2_position: テキスト2の配置位置。
+        text2_font_size: テキスト2のフォントサイズ(px)。
+        text2_font_color: テキスト2の文字色。
+        text2_bg_color: テキスト2の背景色。
+        text2_bg_opacity: テキスト2の背景不透明度。
+        text2_wrap: テキスト2の折り返し有効化。
+        text2_max_width: テキスト2の最大幅。
+        text2_padding: テキスト2の余白(px)。
+        text3: テキスト3の内容。空文字で省略。
+        text3_position: テキスト3の配置位置。
+        text3_font_size: テキスト3のフォントサイズ(px)。
+        text3_font_color: テキスト3の文字色。
+        text3_bg_color: テキスト3の背景色。
+        text3_bg_opacity: テキスト3の背景不透明度。
+        text3_wrap: テキスト3の折り返し有効化。
+        text3_max_width: テキスト3の最大幅。
+        text3_padding: テキスト3の余白(px)。
     """
     from image_fetcher import fetch_image
     from image_compositor import create_composite_image
@@ -117,8 +171,31 @@ def compose_images(
     if base_image and base_image != 'transparent':
         base_img = fetch_image(base_image, 'base')
 
+    # テキストパラメータの構築
+    text_params = {}
+    for i, (txt, pos, fsz, fcol, bgcol, bgop, wrp, mw, pad) in enumerate([
+        (text1, text1_position, text1_font_size, text1_font_color, text1_bg_color, text1_bg_opacity, text1_wrap, text1_max_width, text1_padding),
+        (text2, text2_position, text2_font_size, text2_font_color, text2_bg_color, text2_bg_opacity, text2_wrap, text2_max_width, text2_padding),
+        (text3, text3_position, text3_font_size, text3_font_color, text3_bg_color, text3_bg_opacity, text3_wrap, text3_max_width, text3_padding),
+    ], 1):
+        if txt:
+            tpos = _resolve_position(pos)
+            text_params[f'text{i}'] = {
+                'text': txt,
+                'x': tpos[0], 'y': tpos[1],
+                'font_size': fsz,
+                'font_color': fcol,
+                'font_family': 'NotoSansJP',
+                'bg_color': bgcol if bgcol else None,
+                'bg_opacity': bgop,
+                'wrap': wrp,
+                'max_width': mw if mw > 0 else None,
+                'padding': pad,
+            }
+
     # 合成実行
-    composite = create_composite_image(base_img, img1, img2, img3, params)
+    composite = create_composite_image(base_img, img1, img2, img3, params,
+                                       text_params=text_params if text_params else None)
 
     # S3に保存してCloudFront URLを生成
     from datetime import datetime
@@ -164,6 +241,13 @@ def compose_images(
         summary_lines.append(
             f"画像3: source={image3}, 位置=({params['image3']['x']}, {params['image3']['y']}), サイズ={params['image3']['width']}x{params['image3']['height']}"
         )
+    for i in range(1, 4):
+        key = f'text{i}'
+        if key in text_params:
+            tp = text_params[key]
+            summary_lines.append(
+                f"テキスト{i}: \"{tp['text']}\", 位置=({tp['x']}, {tp['y']}), サイズ={tp['font_size']}px"
+            )
 
     # URLはコンテキストウィンドウ超過を防ぐため、グローバル変数に保存
     global _last_media_result
@@ -197,6 +281,33 @@ def generate_video(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    text1: str = "",
+    text1_position: str = "左下",
+    text1_font_size: int = 48,
+    text1_font_color: str = "#FFFFFF",
+    text1_bg_color: str = "",
+    text1_bg_opacity: float = 0.7,
+    text1_wrap: bool = False,
+    text1_max_width: int = 0,
+    text1_padding: int = 10,
+    text2: str = "",
+    text2_position: str = "中央下",
+    text2_font_size: int = 48,
+    text2_font_color: str = "#FFFFFF",
+    text2_bg_color: str = "",
+    text2_bg_opacity: float = 0.7,
+    text2_wrap: bool = False,
+    text2_max_width: int = 0,
+    text2_padding: int = 10,
+    text3: str = "",
+    text3_position: str = "右下",
+    text3_font_size: int = 48,
+    text3_font_color: str = "#FFFFFF",
+    text3_bg_color: str = "",
+    text3_bg_opacity: float = 0.7,
+    text3_wrap: bool = False,
+    text3_max_width: int = 0,
+    text3_padding: int = 10,
 ) -> dict:
     """合成画像から動画を生成します。まず画像を合成し、その結果から指定フォーマットの動画を生成します。
 
@@ -213,6 +324,33 @@ def generate_video(
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
         base_image: ベース画像のソース。
+        text1: テキスト1の内容。空文字で省略。
+        text1_position: テキスト1の配置位置。
+        text1_font_size: テキスト1のフォントサイズ(px)。
+        text1_font_color: テキスト1の文字色。
+        text1_bg_color: テキスト1の背景色。
+        text1_bg_opacity: テキスト1の背景不透明度。
+        text1_wrap: テキスト1の折り返し有効化。
+        text1_max_width: テキスト1の最大幅。
+        text1_padding: テキスト1の余白(px)。
+        text2: テキスト2の内容。空文字で省略。
+        text2_position: テキスト2の配置位置。
+        text2_font_size: テキスト2のフォントサイズ(px)。
+        text2_font_color: テキスト2の文字色。
+        text2_bg_color: テキスト2の背景色。
+        text2_bg_opacity: テキスト2の背景不透明度。
+        text2_wrap: テキスト2の折り返し有効化。
+        text2_max_width: テキスト2の最大幅。
+        text2_padding: テキスト2の余白(px)。
+        text3: テキスト3の内容。空文字で省略。
+        text3_position: テキスト3の配置位置。
+        text3_font_size: テキスト3のフォントサイズ(px)。
+        text3_font_color: テキスト3の文字色。
+        text3_bg_color: テキスト3の背景色。
+        text3_bg_opacity: テキスト3の背景不透明度。
+        text3_wrap: テキスト3の折り返し有効化。
+        text3_max_width: テキスト3の最大幅。
+        text3_padding: テキスト3の余白(px)。
     """
     logger.info(f"generate_video: duration={duration}, format={video_format}")
 
@@ -262,6 +400,28 @@ def generate_video(
             'image3_width': str(sz3[0]),
             'image3_height': str(sz3[1]),
         })
+
+    # テキストパラメータをinvoke_paramsに追加
+    for i, (txt, pos, fsz, fcol, bgcol, bgop, wrp, mw, pad) in enumerate([
+        (text1, text1_position, text1_font_size, text1_font_color, text1_bg_color, text1_bg_opacity, text1_wrap, text1_max_width, text1_padding),
+        (text2, text2_position, text2_font_size, text2_font_color, text2_bg_color, text2_bg_opacity, text2_wrap, text2_max_width, text2_padding),
+        (text3, text3_position, text3_font_size, text3_font_color, text3_bg_color, text3_bg_opacity, text3_wrap, text3_max_width, text3_padding),
+    ], 1):
+        if txt:
+            tpos = _resolve_position(pos)
+            invoke_params[f'text{i}'] = txt
+            invoke_params[f'text{i}X'] = str(tpos[0])
+            invoke_params[f'text{i}Y'] = str(tpos[1])
+            invoke_params[f'text{i}FontSize'] = str(fsz)
+            invoke_params[f'text{i}FontColor'] = fcol
+            if bgcol:
+                invoke_params[f'text{i}BgColor'] = bgcol
+                invoke_params[f'text{i}BgOpacity'] = str(bgop)
+            if wrp:
+                invoke_params[f'text{i}Wrap'] = 'true'
+                if mw > 0:
+                    invoke_params[f'text{i}MaxWidth'] = str(mw)
+            invoke_params[f'text{i}Padding'] = str(pad)
 
     # ImageProcessor Lambda を呼び出し（ffmpegはそちらに搭載）
     function_name = os.environ.get('IMAGE_PROCESSOR_FUNCTION', '')

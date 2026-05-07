@@ -55,7 +55,7 @@ _要件: 8.1-8.6_
 
 - [x] 6.1 DynamoDB ChatHistoryテーブル定義
 - [x] 6.2 Secrets Manager参照設定
-- [x] 6.3 Agent Lambda関数定義（Python 3.11, 512MB, 90s, ARM64）
+- [x] 6.3 Agent Lambda関数定義（Python 3.12, 2048MB, 90s, ARM64）
 - [x] 6.4 Lambda Layer定義（Agent依存パッケージ）
 - [x] 6.5 API Gateway `/chat` リソース追加（POST/GET/DELETE）
 - [x] 6.6 IAMポリシー設定（最小権限）
@@ -97,3 +97,11 @@ _要件: 12.3_
 - [x] 10.3 画像合成結果表示テスト
 - [x] 10.4 会話履歴復元テスト
 - [x] 10.5 エラー表示テスト
+
+## タスク11: テキストオーバーレイ対応
+_要件: 2.7, 2.8, 3.5_
+
+- [x] 11.1 compose_images ツールにtext1〜text3パラメータ追加
+- [x] 11.2 generate_video ツールにtext1〜text3パラメータ追加
+- [x] 11.3 agent_prompts.py にテキストオーバーレイガイダンス追加
+- [x] 11.4 自然言語位置指定でテロップ配置（POSITION_MAP流用）

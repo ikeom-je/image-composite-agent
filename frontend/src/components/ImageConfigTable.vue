@@ -303,6 +303,144 @@
       </table>
     </div>
 
+    <!-- テキストオーバーレイ設定 -->
+    <div class="text-overlay-section mb-6">
+      <h3 class="section-title">📝 テキストオーバーレイ設定</h3>
+
+      <!-- テキストオーバーレイON/OFF切り替え -->
+      <div class="text-toggle-section">
+        <div class="toggle-container">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              :checked="textConfigs.enabled"
+              @change="$emit('update-text-config', 'enabled', 'enabled', ($event.target as HTMLInputElement).checked)"
+              class="toggle-checkbox"
+            />
+            <span class="toggle-slider"></span>
+            <span class="toggle-text">テキストオーバーレイを有効にする</span>
+          </label>
+        </div>
+        <div class="toggle-description">
+          <small>最大3つのテキストテロップを画像上に配置します。日本語・英語対応。</small>
+        </div>
+      </div>
+
+      <div v-if="textConfigs.enabled" class="text-config-content">
+        <div
+          v-for="(textKey, idx) in ['text1', 'text2', 'text3']"
+          :key="textKey"
+          class="text-item"
+        >
+          <h4 class="text-item-title">テキスト{{ idx + 1 }}</h4>
+          <div class="text-form-grid">
+            <div class="text-form-row">
+              <label>テキスト:</label>
+              <textarea
+                :value="textConfigs[textKey].text"
+                @input="$emit('update-text-config', textKey, 'text', ($event.target as HTMLTextAreaElement).value)"
+                rows="2"
+                class="text-input"
+                placeholder="テキストを入力..."
+              />
+            </div>
+            <div class="text-form-row-inline">
+              <div>
+                <label>X:</label>
+                <input
+                  type="number"
+                  :value="textConfigs[textKey].x"
+                  @input="$emit('update-text-config', textKey, 'x', Number(($event.target as HTMLInputElement).value))"
+                  min="0" max="1920"
+                  class="number-input-sm"
+                />
+              </div>
+              <div>
+                <label>Y:</label>
+                <input
+                  type="number"
+                  :value="textConfigs[textKey].y"
+                  @input="$emit('update-text-config', textKey, 'y', Number(($event.target as HTMLInputElement).value))"
+                  min="0" max="1080"
+                  class="number-input-sm"
+                />
+              </div>
+              <div>
+                <label>サイズ:</label>
+                <input
+                  type="number"
+                  :value="textConfigs[textKey].fontSize"
+                  @input="$emit('update-text-config', textKey, 'fontSize', Number(($event.target as HTMLInputElement).value))"
+                  min="1" max="500"
+                  class="number-input-sm"
+                />
+              </div>
+              <div>
+                <label>文字色:</label>
+                <input
+                  type="color"
+                  :value="textConfigs[textKey].fontColor"
+                  @input="$emit('update-text-config', textKey, 'fontColor', ($event.target as HTMLInputElement).value)"
+                  class="color-input"
+                />
+              </div>
+            </div>
+            <div class="text-form-row-inline">
+              <div>
+                <label>背景色:</label>
+                <input
+                  type="color"
+                  :value="textConfigs[textKey].bgColor || '#000000'"
+                  @input="$emit('update-text-config', textKey, 'bgColor', ($event.target as HTMLInputElement).value)"
+                  class="color-input"
+                  :disabled="!textConfigs[textKey].bgColor"
+                />
+                <label class="inline-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="!!textConfigs[textKey].bgColor"
+                    @change="$emit('update-text-config', textKey, 'bgColor', ($event.target as HTMLInputElement).checked ? '#000000' : '')"
+                  />
+                  有効
+                </label>
+              </div>
+              <div v-if="textConfigs[textKey].bgColor">
+                <label>不透明度:</label>
+                <input
+                  type="range"
+                  :value="textConfigs[textKey].bgOpacity"
+                  @input="$emit('update-text-config', textKey, 'bgOpacity', Number(($event.target as HTMLInputElement).value))"
+                  min="0" max="1" step="0.1"
+                  class="range-input"
+                />
+                <span class="opacity-value">{{ (textConfigs[textKey].bgOpacity * 100).toFixed(0) }}%</span>
+              </div>
+              <div>
+                <label class="inline-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="textConfigs[textKey].wrap"
+                    @change="$emit('update-text-config', textKey, 'wrap', ($event.target as HTMLInputElement).checked)"
+                  />
+                  折り返し
+                </label>
+              </div>
+              <div v-if="textConfigs[textKey].wrap">
+                <label>最大幅:</label>
+                <input
+                  type="number"
+                  :value="textConfigs[textKey].maxWidth"
+                  @input="$emit('update-text-config', textKey, 'maxWidth', Number(($event.target as HTMLInputElement).value))"
+                  min="1" max="1920"
+                  class="number-input-sm"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 動画生成設定 -->
     <div class="video-generation-container">
       <h3 class="section-title">🎬 動画生成設定</h3>
@@ -479,6 +617,12 @@ interface Props {
     duration: number
     format: string
   }
+  textConfigs?: {
+    enabled: boolean
+    text1: { text: string; x: number; y: number; fontSize: number; fontColor: string; bgColor: string; bgOpacity: number; wrap: boolean; maxWidth: number; padding: number }
+    text2: { text: string; x: number; y: number; fontSize: number; fontColor: string; bgColor: string; bgOpacity: number; wrap: boolean; maxWidth: number; padding: number }
+    text3: { text: string; x: number; y: number; fontSize: number; fontColor: string; bgColor: string; bgOpacity: number; wrap: boolean; maxWidth: number; padding: number }
+  }
   imageMode?: number
   isGeneratingVideo?: boolean
   videoGenerationProgress?: number
@@ -489,7 +633,13 @@ const props = withDefaults(defineProps<Props>(), {
   imageMode: 2,
   isGeneratingVideo: false,
   videoGenerationProgress: 0,
-  videoGenerationStep: 1
+  videoGenerationStep: 1,
+  textConfigs: () => ({
+    enabled: false,
+    text1: { text: '', x: 100, y: 800, fontSize: 48, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+    text2: { text: '', x: 100, y: 900, fontSize: 36, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+    text3: { text: '', x: 100, y: 950, fontSize: 24, fontColor: '#FFFFFF', bgColor: '', bgOpacity: 0.7, wrap: false, maxWidth: 800, padding: 10 },
+  }),
 })
 
 // Emits
@@ -497,6 +647,7 @@ const emit = defineEmits<{
   'update-config': [imageKey: string, field: string, value: any]
   'update-mode': [mode: number]
   'update-video-config': [field: string, value: any]
+  'update-text-config': [textKey: string, field: string, value: any]
 }>()
 
 // Reactive state for field-level validation errors
@@ -1386,5 +1537,127 @@ const getVideoExtension = (format: string): string => {
   .video-params-section {
     padding: 16px;
   }
+}
+
+/* テキストオーバーレイ */
+.text-overlay-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  background: #faf5ff;
+}
+
+.text-toggle-section {
+  margin-bottom: 16px;
+}
+
+.text-toggle-section .toggle-description {
+  margin-top: 4px;
+  color: #6b7280;
+}
+
+.text-config-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.text-item {
+  border: 1px solid #ddd6fe;
+  border-radius: 6px;
+  padding: 12px;
+  background: white;
+}
+
+.text-item-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #7c3aed;
+  margin-bottom: 8px;
+}
+
+.text-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.text-form-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.text-form-row label {
+  font-size: 12px;
+  color: #6b7280;
+  min-width: 60px;
+  padding-top: 4px;
+}
+
+.text-form-row-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.text-form-row-inline > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.text-form-row-inline label {
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.text-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+  resize: vertical;
+  min-width: 200px;
+}
+
+.number-input-sm {
+  width: 70px;
+  padding: 4px 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.color-input {
+  width: 32px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 1px;
+}
+
+.range-input {
+  width: 80px;
+}
+
+.opacity-value {
+  font-size: 11px;
+  color: #6b7280;
+  min-width: 30px;
+}
+
+.inline-toggle {
+  display: flex !important;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 12px !important;
+  color: #6b7280 !important;
+  min-width: auto !important;
 }
 </style>
