@@ -59,87 +59,89 @@
 ### タスク1: spec準備とブランチ準備
 _要件: 全Req（読み込み）_
 
-- [ ] 1.1 worktree作成: `git worktree add ../image-composite-agent-issue8 -b feature/issue8-custom-rules-api dev`
-- [ ] 1.2 requirements.md / design.md を読み返す
-- [ ] 1.3 `.env.local` の存在を確認
+- [x] 1.1 worktree作成: `git worktree add ../image-composite-agent-issue8 -b feature/issue8-custom-rules-api dev`
+- [x] 1.2 requirements.md / design.md を読み返す
+- [x] 1.3 `.env.local` の存在を確認
 
 ### タスク2: シードデータとデフォルトルール本文
 _要件: 6.1, 6.3, 6.6_
 
-- [ ] 2.1 ディレクトリ作成: `assets/seed-rules/`
-- [ ] 2.2 JAA字幕ハンドブックPDFから画像合成関連規定を要点抽出（セーフゾーン / テロップ位置 / 文字サイズ目安 / 種別ガイド / 禁止事項）
-- [ ] 2.3 `assets/seed-rules/jaa-rule.import.jsonl` を ND-JSON（DynamoDB Import）形式で作成
-- [ ] 2.4 `assets/seed-rules/jaa-rule.put.json` を put-item 用形式（`Item` キーなし）で作成
-- [ ] 2.5 本文MarkdownをコードレビューしやすいようヒアドキュメントでなくJSON文字列にエスケープ
-- [ ] 2.6 2ファイル間で属性内容が一致していることをPRレビューで確認する旨を README に記載（任意）
+- [x] 2.1 ディレクトリ作成: `assets/seed-rules/`
+- [x] 2.2 JAA字幕ハンドブックPDFから画像合成関連規定を要点抽出（セーフゾーン / テロップ位置 / 文字サイズ目安 / 種別ガイド / 禁止事項）
+- [x] 2.3 `assets/seed-rules/jaa-rule.import.jsonl` を ND-JSON（DynamoDB Import）形式で作成
+- [x] 2.4 `assets/seed-rules/jaa-rule.put.json` を put-item 用形式（`Item` キーなし）で作成
+- [x] 2.5 本文MarkdownをコードレビューしやすいようヒアドキュメントでなくJSON文字列にエスケープ
+- [x] 2.6 2ファイル間で属性内容が一致していることをPRレビューで確認する旨を README に記載（任意）
 
 ### タスク3: RulesTable / S3シードバケット / Import (CDK)
 _要件: 1.1-1.5, 7.1-7.3, 7.6_
 
-- [ ] 3.1 `lib/image-processor-api-stack.ts` に `RulesTable` を追加（PK ruleId、PAY_PER_REQUEST、removalPolicy 環境別）
-- [ ] 3.2 `RulesSeedBucket` を追加し、`BucketDeployment` で `assets/seed-rules/` を配置（`*.put.json` は exclude）
-- [ ] 3.3 `RulesTable` の `importSource` を S3 シードバケット（`*.import.jsonl`）に設定
-- [ ] 3.4 `cdk synth` 成功を確認
+- [x] 3.1 `lib/image-processor-api-stack.ts` に `RulesTable` を追加（PK ruleId、PAY_PER_REQUEST、removalPolicy 環境別）
+- [x] 3.2 `RulesSeedBucket` を追加し、`BucketDeployment` で `assets/seed-rules/` を配置（`*.put.json` は exclude）
+- [x] 3.3 `RulesTable` の `importSource` を S3 シードバケット（`*.import.jsonl`）に設定
+- [ ] 3.4 `cdk synth` 成功を確認（ローカルRaspberry Piでは Docker bundling非対応のため CI で確認）
 
 ### タスク4: ルール CRUD バックエンド実装
 _要件: 2.1-2.8, 5.1, 5.4_
 
-- [ ] 4.1 `lambda/python/rules_repository.py` 新規作成（list/get/create/update/delete/list_active/batch_get）
-- [ ] 4.2 `lambda/python/rules_validator.py` 新規作成（validate_single, truncate_combined, RuleLimits）
-- [ ] 4.3 `lambda/python/agent_handler.py` 拡張: `/chat/rules`, `/chat/rules/{ruleId}` ルーティング
-- [ ] 4.4 UUID採番、createdAt/updatedAt付与、`isDefault=false`デフォルト
-- [ ] 4.5 デフォルトルール削除拒否（403）
+- [x] 4.1 `lambda/python/rules_repository.py` 新規作成（list/get/create/update/delete/list_active/batch_get）
+- [x] 4.2 `lambda/python/rules_validator.py` 新規作成（validate_single, truncate_combined, RuleLimits）
+- [x] 4.3 `lambda/python/agent_handler.py` 拡張: `/chat/rules`, `/chat/rules/{ruleId}` ルーティング
+- [x] 4.4 UUID採番、createdAt/updatedAt付与、`isDefault=false`デフォルト
+- [x] 4.5 デフォルトルール削除拒否（403）
 
 ### タスク5: system prompt注入ロジック
 _要件: 3.1-3.5, 4.1-4.4, 5.2, 5.3, 11.1-11.4_
 
-- [ ] 5.1 `lambda/python/agent_prompts.py` に `build_full_prompt(rules, inline_rules, limits)` 追加
-- [ ] 5.2 `agent_handler.handle_chat` を拡張: `ruleIds` / `inlineRules` リクエストフィールドの取り込み
-- [ ] 5.3 ルール取得キャッシュ（10秒TTL）の実装
-- [ ] 5.4 `/chat/rules/preview` エンドポイント実装
-- [ ] 5.5 best-effort: ルール取得失敗時もチャット応答自体は返す
+- [x] 5.1 `lambda/python/agent_prompts.py` に `build_full_prompt(rules, inline_rules, limits)` 追加
+- [x] 5.2 `agent_handler.handle_chat` を拡張: `ruleIds` / `inlineRules` リクエストフィールドの取り込み
+- [ ] 5.3 ルール取得キャッシュ（10秒TTL）の実装（性能最適化、別issueで対応）
+- [x] 5.4 `/chat/rules/preview` エンドポイント実装
+- [x] 5.5 best-effort: ルール取得失敗時もチャット応答自体は返す
 
 ### タスク6: API Gateway / IAM (CDK)
 _要件: 7.4, 7.5_
 
-- [ ] 6.1 `/chat/rules` リソース追加（GET/POST）
-- [ ] 6.2 `/chat/rules/preview` リソース追加（GET）— **`{ruleId}` より先に定義する**
-- [ ] 6.3 `/chat/rules/{ruleId}` リソース追加（GET/PUT/DELETE）
-- [ ] 6.4 ハンドラ側で `ruleId == "preview"` を400で reject（防御）
-- [ ] 6.5 全エンドポイントを `AuthorizationType.NONE` で設定
-- [ ] 6.6 CORS設定統一
-- [ ] 6.7 Agent Lambda の IAMポリシーに RulesTable CRUD 権限を追加（最小権限）
-- [ ] 6.8 環境変数 `RULES_TABLE`, `RULES_MAX_*` を Lambda に設定
+- [x] 6.1 `/chat/rules` リソース追加（GET/POST）
+- [x] 6.2 `/chat/rules/preview` リソース追加（GET）— **`{ruleId}` より先に定義する**
+- [x] 6.3 `/chat/rules/{ruleId}` リソース追加（GET/PUT/DELETE）
+- [x] 6.4 ハンドラ側で `ruleId == "preview"` を400で reject（防御）
+- [x] 6.5 全エンドポイントを `AuthorizationType.NONE` で設定
+- [x] 6.6 CORS設定統一
+- [x] 6.7 Agent Lambda の IAMポリシーに RulesTable CRUD 権限を追加（最小権限）
+- [x] 6.8 環境変数 `RULES_TABLE`, `RULES_MAX_*` を Lambda に設定
 
 ### タスク7: シードスクリプト
 _要件: 6.4, 6.5_
 
-- [ ] 7.1 `scripts/seed-rules.sh` 新規作成（`*.put.json` を読み込む）
-- [ ] 7.2 デフォルト動作（`attribute_not_exists` で冪等）
-- [ ] 7.3 `--overwrite` オプション（強制上書き）
-- [ ] 7.4 環境別テーブル名解決ロジック（`ImageCompositor-Rules-{dev|staging}` / `ImageCompositor-Rules`、既存`ChatHistory`命名と統一）
+- [x] 7.1 `scripts/seed-rules.sh` 新規作成（`*.put.json` を読み込む）
+- [x] 7.2 デフォルト動作（`attribute_not_exists` で冪等）
+- [x] 7.3 `--overwrite` オプション（強制上書き）
+- [x] 7.4 環境別テーブル名解決ロジック（`ImageCompositor-Rules-{dev|staging}` / `ImageCompositor-Rules`、既存`ChatHistory`命名と統一）
 
 ### タスク8: 単体テスト
 _要件: 13.1, 13.2_
 
-- [ ] 8.1 `test/lambda/test_rules_repository.py` - moto等でDynamoDBモック、CRUDテスト・UUID採番・デフォルト削除保護
-- [ ] 8.2 `test/lambda/test_rules_validator.py` - 単一/件数/結合上限テスト
-- [ ] 8.3 `test/lambda/test_agent_prompts.py` 拡張 - build_full_prompt のケース網羅（0件/1件/上限超過/inline混在）
-- [ ] 8.4 `test/lambda/test_agent_handler.py` 拡張 - 各エンドポイント・ruleIds/inlineRules適用・`ruleId="preview"` reject
+- [x] 8.1 `test/lambda/test_rules_repository.py` - moto等でDynamoDBモック、CRUDテスト・UUID採番・デフォルト削除保護
+- [x] 8.2 `test/lambda/test_rules_validator.py` - 単一/件数/結合上限テスト
+- [x] 8.3 `test/lambda/test_agent_prompts.py` 拡張 - build_full_prompt のケース網羅（0件/1件/上限超過/inline混在）
+- [x] 8.4 `test/lambda/test_agent_handler.py` 拡張 - 各エンドポイント・ruleIds/inlineRules適用・`ruleId="preview"` reject
 
 ### タスク9: API統合テスト
 _要件: 13.3, 13.4_
 
-- [ ] 9.1 `test/e2e/rules.api.spec.ts` 新規作成 - CRUDフロー
-- [ ] 9.2 デフォルトルール削除拒否テスト
-- [ ] 9.3 preview エンドポイントテスト
-- [ ] 9.4 バリデーションエラーケース
-- [ ] 9.5 `test/e2e/chat-agent.api.spec.ts` 拡張 - inlineRules適用
+- [x] 9.1 `test/e2e/rules.api.spec.ts` 新規作成 - CRUDフロー
+- [x] 9.2 デフォルトルール削除拒否テスト
+- [x] 9.3 preview エンドポイントテスト
+- [x] 9.4 バリデーションエラーケース
+- [x] 9.5 `test/e2e/chat-agent.api.spec.ts` 拡張 - inlineRules適用
 
-### タスク10: dev環境デプロイ・動作確認
+### タスク10: dev/staging環境デプロイ・動作確認
 _要件: 全Req_
 
-- [ ] 10.1 `ENVIRONMENT=dev ./scripts/deploy.sh` でdev環境にデプロイ
+> ローカル環境（Raspberry Pi）でのCDK Docker bundlingがCPU非互換のため、CI/CD（dev branch → staging自動デプロイ）で実施。
+
+- [ ] 10.1 PRマージ後、`dev`ブランチ → staging自動デプロイの完了を確認
 - [ ] 10.2 デフォルトルール（JAA）が自動投入されたことを確認（`aws dynamodb scan`）
 - [ ] 10.3 CRUDをcurl/Postmanで動作確認
 - [ ] 10.4 `POST /chat` で `ruleIds` / `inlineRules` が反映されることを動作確認
@@ -147,8 +149,8 @@ _要件: 全Req_
 ### タスク11: PR作成・レビュー
 _要件: 全Req_
 
-- [ ] 11.1 PR作成前チェックリスト（上部）を実行
-- [ ] 11.2 PRをdevブランチへ向けて作成、issue #8 を参照
+- [x] 11.1 PR作成前チェックリスト（上部）を実行
+- [x] 11.2 PRをdevブランチへ向けて作成、issue #8 を参照
 - [ ] 11.3 レビュー対応・マージ
 - [ ] 11.4 worktree削除
 
