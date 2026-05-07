@@ -14,9 +14,7 @@ cdk.out
 *.pyc
 
 # Test output files (temporary)
-test/test-results/*
-!test/test-results/.gitkeep
-!test/test-results/README.md
+test/test-results/
 
 # Claude Code
 .claude/
@@ -35,5 +33,8 @@ frontend/dist/
 # MCP configuration (local settings)
 .mcp.json
 
-# Amazon Q credentials
-.amazonq/rules/credentials.md
+# Git worktrees
+.worktrees/
+
+# Lambda 同梱用の composite_defaults.json（deploy.sh が frontend/public からコピー、Issue #58）
+lambda/python/composite_defaults.json

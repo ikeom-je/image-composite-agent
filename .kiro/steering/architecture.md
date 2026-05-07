@@ -4,6 +4,27 @@ inclusion: auto
 
 # アーキテクチャルール
 
+## 環境戦略
+
+単一AWSアカウント内で3環境（dev / staging / production）を運用する。
+
+| 環境 | スタック名サフィックス | ブランチ | デプロイ方式 |
+|------|---------------------|---------|------------|
+| dev | `-Dev` | feature/*, bugfix/* | 手動（ローカルから） |
+| staging | `-Staging` | dev | CI/CD自動 |
+| production | (なし) | main | CI/CD自動 |
+
+### 環境分離方式
+- CloudFormationスタック名にサフィックスを付与して同一アカウント内でリソースを分離
+- 例: `ImageProcessorApiStack-Dev`, `ImageProcessorApiStack-Staging`, `ImageProcessorApiStack`
+- 各環境のS3バケット、Lambda関数、API Gateway、CloudFront等はすべて独立
+- 環境変数 `ENVIRONMENT` で dev / staging / prod を切り替え
+
+### 環境ごとの設定差異
+- **dev**: デバッグモード有効、ログレベルDEBUG
+- **staging**: デバッグモード無効、ログレベルINFO、本番同等設定
+- **production**: デバッグモード無効、ログレベルINFO、最適化済み
+
 ## サーバーレス原則
 
 - コンピュートにはLambdaを使用（ステートレス関数）
@@ -46,6 +67,21 @@ inclusion: auto
 - `/chat` - Chat Agent（POST: メッセージ送信）
 - `/chat/history` - 会話履歴（GET: 取得、DELETE: 削除）
 - `/chat/models` - 利用可能モデル一覧（GET）
+
+### `/images/composite` のデフォルト値（Issue #58 / Req 21）
+
+省略時のデフォルト値は `composite-default.json` の `system_default` を参照。CDK ビルド時に Lambda へ同梱（`lambda/python/composite_defaults.json`）し、JSON 読み込み失敗時は `composite_defaults.HARDCODED_FALLBACK` で動作継続。
+
+| パラメータ | 旧デフォルト | 新デフォルト（破壊的変更） |
+|----------|------------|------------------------|
+| `baseImage` | 透明 | `#000000`（黒） |
+| `video_format` | `XMF` | `MP4` |
+| `image1` 単独座標 | `(100, 100, 400, 300)` | `(1700, 96, 200, 200)` 右上アイコン |
+| `image1` (double) | `(100, 100, 400, 300)` | `(1700, 96, 200, 200)` |
+| `image2` (double) | `(600, 100, 400, 300)` | `(600, 400, 300, 300)` |
+| `image1`〜`3` (triple) | (旧値群) | 上記 + `image3=(1520, 700, 300, 300)` |
+
+mode 判定は `image2` / `image3` の有無のみで決定（テキスト有無は影響しない）。詳細は `.kiro/specs/image-composition/design.md §6` 参照。
 
 ### 設定
 - バイナリメディアタイプ: 明示的に設定

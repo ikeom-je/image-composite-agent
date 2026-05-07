@@ -129,7 +129,7 @@ def create_agent(model_id: str = None):
     model = BedrockModel(
         model_id=agent_model_id,
         max_tokens=4096,
-        region_name="us-east-1",
+        region_name=os.environ.get('BEDROCK_REGION', 'us-east-1'),
     )
 
     agent = Agent(

@@ -5,8 +5,8 @@ import { test, expect } from '@playwright/test';
  * アップロード→選択→合成の完全ワークフローテスト
  */
 
-const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
-const UPLOAD_API_URL = `${API_BASE_URL.replace('/images/composite', '')}/upload`;
+const API_COMPOSITE_URL = process.env.API_URL || 'http://localhost:3000/images/composite';
+const UPLOAD_API_URL = process.env.UPLOAD_API_URL || API_COMPOSITE_URL.replace('/images/composite', '/upload');
 
 // テスト用画像データ（小さなPNG画像）
 const TEST_PNG_DATA = Buffer.from([
@@ -60,8 +60,11 @@ test.describe('統合機能E2Eテスト', () => {
     // Step 3: 画像一覧で確認
     console.log('📋 Step 3: 画像一覧確認');
     
+    // maxKeys=10 だとアップロード済み画像数 > 10 のとき新規ファイルが
+    // S3 key (UUID) のアルファベット順ページングで漏れて find が undefined → flaky
+    // 上限の 1000 まで取得して確実にヒットさせる
     const listResponse = await request.get(`${UPLOAD_API_URL}/images`, {
-      params: { maxKeys: '10' }
+      params: { maxKeys: '1000' }
     });
 
     expect(listResponse.status()).toBe(200);
@@ -78,7 +81,7 @@ test.describe('統合機能E2Eテスト', () => {
     // Step 4: アップロード画像を使用した1画像合成
     console.log('🎨 Step 4: 1画像合成テスト');
     
-    const composite1Response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const composite1Response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: uploadedImage.s3Path,
@@ -107,7 +110,7 @@ test.describe('統合機能E2Eテスト', () => {
     // Step 5: アップロード画像 + テスト画像の2画像合成
     console.log('🎨 Step 5: 2画像合成テスト');
     
-    const composite2Response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const composite2Response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: uploadedImage.s3Path,
@@ -115,7 +118,7 @@ test.describe('統合機能E2Eテスト', () => {
         image1Y: '100',
         image1Width: '400',
         image1Height: '300',
-        image2: 'circle',
+        image2: 'test',
         image2X: '600',
         image2Y: '100',
         image2Width: '400',
@@ -137,7 +140,7 @@ test.describe('統合機能E2Eテスト', () => {
     // Step 6: 3画像合成（アップロード画像 + 2つのテスト画像）
     console.log('🎨 Step 6: 3画像合成テスト');
     
-    const composite3Response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const composite3Response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: uploadedImage.s3Path,
@@ -145,12 +148,12 @@ test.describe('統合機能E2Eテスト', () => {
         image1Y: '100',
         image1Width: '300',
         image1Height: '200',
-        image2: 'circle',
+        image2: 'test',
         image2X: '500',
         image2Y: '150',
         image2Width: '300',
         image2Height: '200',
-        image3: 'rectangle',
+        image3: 'test',
         image3X: '800',
         image3Y: '250',
         image3Width: '300',
@@ -245,7 +248,7 @@ test.describe('統合機能E2Eテスト', () => {
         }
       });
       
-      const response = await request.get(`${API_BASE_URL}/images/composite`, {
+      const response = await request.get(`${API_COMPOSITE_URL}`, {
         params: cleanParams
       });
 
@@ -266,7 +269,7 @@ test.describe('統合機能E2Eテスト', () => {
     console.log('❌ エラーシナリオテスト開始');
     
     // シナリオ1: 存在しないS3画像での合成
-    const errorResponse1 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const errorResponse1 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 's3://nonexistent-bucket/nonexistent-image.png',
@@ -284,7 +287,7 @@ test.describe('統合機能E2Eテスト', () => {
     console.log('✓ 存在しないS3画像エラー: 適切に処理');
     
     // シナリオ2: 無効なS3パス形式
-    const errorResponse2 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const errorResponse2 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'invalid-s3-path',
@@ -302,7 +305,7 @@ test.describe('統合機能E2Eテスト', () => {
     console.log('✓ 無効なS3パス形式エラー: 適切に処理');
     
     // シナリオ3: 混合エラー（一部正常、一部エラー）
-    const errorResponse3 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const errorResponse3 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test', // 正常
@@ -349,7 +352,7 @@ test.describe('統合機能E2Eテスト', () => {
     if (listData.images.length > 0) {
       // Step 2: S3画像を使用した合成
       const compositeStartTime = Date.now();
-      const compositeResponse = await request.get(`${API_BASE_URL}/images/composite`, {
+      const compositeResponse = await request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'test',
           image1: listData.images[0].s3Path,
@@ -357,7 +360,7 @@ test.describe('統合機能E2Eテスト', () => {
           image1Y: '100',
           image1Width: '400',
           image1Height: '300',
-          image2: 'circle',
+          image2: 'test',
           image2X: '600',
           image2Y: '100',
           image2Width: '400',
@@ -405,7 +408,7 @@ test.describe('統合機能E2Eテスト', () => {
       const s3Images = largeListData.images.slice(0, 3);
       
       // 3つのS3画像を使用した合成
-      const multiS3Response = await request.get(`${API_BASE_URL}/images/composite`, {
+      const multiS3Response = await request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'transparent',
           image1: s3Images[0].s3Path,
@@ -449,7 +452,7 @@ test.describe('統合機能E2Eテスト', () => {
     
     // 複数の合成リクエストを同時実行
     const concurrentRequests = [
-      request.get(`${API_BASE_URL}/images/composite`, {
+      request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'test',
           image1: 'test',
@@ -462,10 +465,10 @@ test.describe('統合機能E2Eテスト', () => {
           format: 'png'
         }
       }),
-      request.get(`${API_BASE_URL}/images/composite`, {
+      request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'transparent',
-          image1: 'circle',
+          image1: 'test',
           image1X: '200',
           image1Y: '200',
           image1Width: '400',
@@ -475,10 +478,10 @@ test.describe('統合機能E2Eテスト', () => {
           format: 'png'
         }
       }),
-      request.get(`${API_BASE_URL}/images/composite`, {
+      request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'test',
-          image1: 'rectangle',
+          image1: 'test',
           image1X: '300',
           image1Y: '300',
           image1Width: '400',

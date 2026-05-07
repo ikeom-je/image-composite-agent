@@ -160,32 +160,11 @@ export const useConfigStore = defineStore('config', () => {
   }
   
   const getConfigUrls = (): string[] => {
-    const environment = detectEnvironment()
     const baseUrl = window.location.origin
-    
+    // config.jsonに環境名が含まれるため、環境別ファイルは不要
     return [
-      `${baseUrl}/config.${environment}.json`, // 環境固有設定
-      `${baseUrl}/config.json`, // デフォルト設定
-      '/config.json', // 相対パス
+      `${baseUrl}/config.json`,
     ]
-  }
-  
-  const detectEnvironment = (): string => {
-    // 環境変数から検出
-    if (import.meta.env.VITE_ENVIRONMENT) {
-      return import.meta.env.VITE_ENVIRONMENT
-    }
-    
-    // ホスト名から推測
-    const hostname = window.location.hostname
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'development'
-    }
-    if (hostname.includes('staging') || hostname.includes('dev')) {
-      return 'staging'
-    }
-    
-    return 'production'
   }
   
   const getDefaultConfig = (): AppConfig => {

@@ -1,5 +1,38 @@
 # 画像合成REST API 開発履歴
 
+> **このファイルの役割**: 大きな機能追加・設計変更の **経緯（why／context）** を残すドキュメント。
+> git log（結果＝what）と GitHub Releases（リリースノート）の補完。
+> 詳しい役割・書き分け・更新タイミングは [.kiro/steering/conventions.md](.kiro/steering/conventions.md) の「ドキュメント規約 / history.md の役割」セクションを参照。
+
+## 2026-04-01: ベース画像の透明度（opacity）パラメータ追加 (Issue #7)
+
+### ベース画像透明度
+- **baseOpacityパラメータ追加**: 0〜100（0=完全透明、100=不透明、デフォルト100）
+- **image_compositor.py**: apply_base_opacity()関数追加（アルファチャンネル乗算）
+- **image_processor.py**: baseOpacityパラメータ取得・クランプ・create_composite_imageへ渡す
+- **agent_tools.py**: compose_images/generate_videoにbase_opacityパラメータ追加
+- **agent_prompts.py**: 透明度指定の説明追加
+- **App.vue**: ベース画像透明度スライダー（0-100%）追加
+- **後方互換性維持**: デフォルト100で既存動作に影響なし
+
+### テスト
+- apply_base_opacityユニットテスト7件追加
+- 全50テストパス
+
+## 2026-03-29: ベース画像に白背景・カスタム背景色対応 (Issue #6)
+
+### 白背景・カスタム背景色
+- **baseImageパラメータ拡張**: `white`（白背景）、`#RRGGBB`/`#RRGGBBAA`（カスタム色）対応
+- **image_processor.py**: 特殊ベース画像値の直接処理（fetch不要）
+- **agent_tools.py**: compose_images/generate_videoのbase_imageパラメータ拡張
+- **agent_prompts.py**: ベース画像オプション説明をシステムプロンプトに追加
+- **ImageSelector.vue**: 白背景オプション追加
+- **後方互換性維持**: 既存のtest/transparent/S3/HTTPオプションに影響なし
+
+### テスト
+- 白背景・カスタム色・半透明色のユニットテスト追加
+- _parse_colorのベース画像用テスト追加
+
 ## 2026-03-28: テキストオーバーレイ機能の追加 (Issue #13)
 
 ### テキストテロップオーバーレイ機能

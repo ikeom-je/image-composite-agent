@@ -16,38 +16,46 @@ logger.setLevel(logging.INFO)
 
 def parse_image_parameters(query_params: Dict[str, str]) -> Dict[str, Dict[str, int]]:
     """
-    クエリパラメータから画像配置パラメータを解析する
-    
+    クエリパラメータから画像配置パラメータを解析する。
+
+    デフォルト値は composite_defaults.json の system_default.image_placement[mode] を参照。
+    mode は image2/image3 の有無のみで判定（テキスト有無は影響しない、design §6.5）。
+
+    mode='single' のとき image2/image3 は使われないため、JSON にデフォルト定義がない。
+    その場合は (0, 0, 0, 0) を返す（API ハンドラ側で該当画像なしの場合は paste されない）。
+
     Args:
         query_params: API Gatewayからのクエリパラメータ
-        
+
     Returns:
         Dict[str, Dict[str, int]]: 解析された画像パラメータ
     """
+    from composite_defaults import determine_image_mode, get_image_default
+
     def safe_int(value: str, default: int) -> int:
         """文字列を安全に整数に変換"""
         try:
             return int(value) if value else default
         except (ValueError, TypeError):
             return default
-    
-    # デフォルト値の設定
-    defaults = {
-        'image1': {'x': 1600, 'y': 20, 'width': 300, 'height': 200},
-        'image2': {'x': 1600, 'y': 240, 'width': 300, 'height': 200},
-        'image3': {'x': 20, 'y': 20, 'width': 300, 'height': 200}
-    }
-    
+
+    mode = determine_image_mode(query_params)
+    keys_for_mode = {
+        'single': ['image1'],
+        'double': ['image1', 'image2'],
+        'triple': ['image1', 'image2', 'image3'],
+    }[mode]
+
     params = {}
-    
-    for image_name in ['image1', 'image2', 'image3']:
+    for image_name in keys_for_mode:
+        default = get_image_default(mode, image_name)
         params[image_name] = {
-            'x': safe_int(query_params.get(f'{image_name}X'), defaults[image_name]['x']),
-            'y': safe_int(query_params.get(f'{image_name}Y'), defaults[image_name]['y']),
-            'width': safe_int(query_params.get(f'{image_name}Width'), defaults[image_name]['width']),
-            'height': safe_int(query_params.get(f'{image_name}Height'), defaults[image_name]['height'])
+            'x': safe_int(query_params.get(f'{image_name}X'), default['x']),
+            'y': safe_int(query_params.get(f'{image_name}Y'), default['y']),
+            'width': safe_int(query_params.get(f'{image_name}Width'), default['width']),
+            'height': safe_int(query_params.get(f'{image_name}Height'), default['height'])
         }
-    
+
     return params
 
 
@@ -165,6 +173,33 @@ def create_base_image(base_img: Optional[Image.Image], canvas_size: Tuple[int, i
     return base_img
 
 
+def apply_base_opacity(base_img: Image.Image, opacity: int) -> Image.Image:
+    """
+    ベース画像にopacity（透明度）を適用する
+
+    Args:
+        base_img: ベース画像（RGBAモード）
+        opacity: 透明度（0=完全透明、100=不透明、範囲外は内部で0-100にクランプ）
+
+    Returns:
+        Image.Image: opacity適用後のベース画像
+    """
+    # 範囲外の値を0-100にクランプ（呼び出し側でクランプ不要）
+    opacity = max(0, min(100, opacity))
+
+    if opacity >= 100:
+        return base_img
+    if opacity <= 0:
+        return Image.new('RGBA', base_img.size, (0, 0, 0, 0))
+
+    # アルファチャンネルにopacityを乗算
+    r, g, b, a = base_img.split()
+    a = a.point(lambda x: int(x * opacity / 100))
+    base_img = Image.merge('RGBA', (r, g, b, a))
+    logger.info(f"Applied base opacity: {opacity}%")
+    return base_img
+
+
 def resize_and_convert_image(image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:
     """
     画像を高品質でリサイズし、RGBAモードに変換する
@@ -210,10 +245,11 @@ def create_composite_image(base_img: Optional[Image.Image],
                           image2: Optional[Image.Image],
                           image3: Optional[Image.Image],
                           params: Dict[str, Dict[str, int]],
-                          text_params: Optional[Dict[str, Dict[str, Any]]] = None) -> Image.Image:
+                          text_params: Optional[Dict[str, Dict[str, Any]]] = None,
+                          base_opacity: int = 100) -> Image.Image:
     """
     1つ、2つ、または3つの画像を合成する（image1のみ必須）
-    
+
     Args:
         base_img: ベース画像（Noneの場合は透明背景）
         image1: 合成する1つ目の画像（必須）
@@ -221,10 +257,11 @@ def create_composite_image(base_img: Optional[Image.Image],
         image3: 合成する3つ目の画像（オプション）
         params: 各画像の配置パラメータ
         text_params: テキスト描画パラメータ（オプション）
+        base_opacity: ベース画像の透明度（0-100、デフォルト100=不透明）
 
     Returns:
         Image.Image: 合成された画像
-        
+
     Raises:
         ValueError: パラメータが無効な場合
         Exception: 合成処理に失敗した場合
@@ -234,15 +271,18 @@ def create_composite_image(base_img: Optional[Image.Image],
         validation_errors = validate_image_parameters(params)
         if validation_errors:
             raise ValueError(f"Invalid parameters: {', '.join(validation_errors)}")
-        
+
         # 画像数をカウント
         image_count = 1  # image1は必須
         if image2: image_count += 1
         if image3: image_count += 1
         logger.info(f"Creating composite with {image_count} images")
-        
+
         # ベース画像の準備
         composite = create_base_image(base_img)
+
+        # ベース画像にopacityを適用
+        composite = apply_base_opacity(composite, base_opacity)
         
         # 画像1の合成（必須）
         logger.info(f"Compositing image1 at ({params['image1']['x']}, {params['image1']['y']})")

@@ -353,7 +353,8 @@ import type { ImageConfig } from '@/types'
 ### Python
 ```python
 # モジュールレベル
-VERSION = os.environ.get('VERSION', '3.1.1')
+# VERSION の値は CDK から環境変数で注入される（package.json 由来、現在のバージョンは product.md を参照）
+VERSION = os.environ.get('VERSION', 'unknown')
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 DEFAULT_CANVAS_SIZE = (1920, 1080)
 ```
@@ -365,3 +366,44 @@ export const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 export const DEFAULT_TIMEOUT = 30000
 export const API_BASE_URL = import.meta.env.VITE_API_URL
 ```
+
+## ドキュメント規約
+
+### history.md の役割
+
+`history.md`（リポジトリルート）は、プロジェクトの **経緯（why／context）** を残すドキュメント。実装の「結果（what）」は git log から復元できるが、「なぜそう判断したか」「どんな背景・代替案・トレードオフがあったか」は commit message では十分記録できない。`history.md` はその欠落を補うために維持する。
+
+#### 役割の書き分け
+
+| ドキュメント | 主な内容 | 粒度 |
+|-------------|---------|------|
+| `git log` / commit message | 結果（what） | コミット単位 |
+| GitHub Releases | リリースノート（GH UI から作成） | リリース単位 |
+| `history.md` | **経緯（why）** | 大きな機能・設計判断単位 |
+
+> `CHANGELOG.md` は採用しない。リリースノートは GitHub Releases、経緯は `history.md` で役割分担する。
+
+#### 更新タイミング
+
+- 新機能の追加・大きな設計変更・後方互換性に関わる判断を行ったとき
+- 単純なバグ修正や微小なリファクタには不要（commit message で十分）
+- **リリース粒度ではなく判断粒度**で書く
+
+#### 書き方
+
+```markdown
+## YYYY-MM-DD: <変更タイトル> (Issue #N)
+
+### <サブセクション>
+- **<コンポーネント名>**: <変更内容と why>
+- **<決定事項>**: <選択した案／代替案を退けた理由>
+
+### テスト
+- <テスト追加内容>
+```
+
+#### 留意点
+
+- リリースノート形式（Keep a Changelog 等）に寄せない
+- 既存履歴は追記方式で更新（過去エントリの大幅な書き換えは避ける）
+- `history.md` で十分な内容を steering / specs に二重化しない（Single Source of Truth）

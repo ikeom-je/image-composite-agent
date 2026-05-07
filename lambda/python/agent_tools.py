@@ -65,6 +65,7 @@ def compose_images(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    base_opacity: int = 100,
     text1: str = "",
     text1_position: str = "左下",
     text1_font_size: int = 48,
@@ -105,7 +106,8 @@ def compose_images(
         image3: 画像3のソース。空文字で省略。
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
-        base_image: ベース画像のソース。"test","transparent",S3キー,HTTP URL。
+        base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
+        base_opacity: ベース画像の透明度（0-100）。0=完全透明、100=不透明。デフォルト100。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。"左上","中央"等の名前、または"x,y"座標。
         text1_font_size: テキスト1のフォントサイズ(px)。
@@ -168,8 +170,17 @@ def compose_images(
 
     # ベース画像
     base_img = None
-    if base_image and base_image != 'transparent':
-        base_img = fetch_image(base_image, 'base')
+    if base_image and base_image not in ('transparent',):
+        if base_image == 'white':
+            base_img = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        elif base_image.startswith('#'):
+            from text_renderer import _parse_color
+            color = _parse_color(base_image)
+            if len(color) == 3:
+                color = (*color, 255)
+            base_img = Image.new('RGBA', (2000, 1000), color)
+        else:
+            base_img = fetch_image(base_image, 'base')
 
     # テキストパラメータの構築
     text_params = {}
@@ -193,9 +204,10 @@ def compose_images(
                 'padding': pad,
             }
 
-    # 合成実行
+    # 合成実行（クランプは apply_base_opacity 側に集約 - Issue #39）
     composite = create_composite_image(base_img, img1, img2, img3, params,
-                                       text_params=text_params if text_params else None)
+                                       text_params=text_params if text_params else None,
+                                       base_opacity=base_opacity)
 
     # S3に保存してCloudFront URLを生成
     from datetime import datetime
@@ -281,6 +293,7 @@ def generate_video(
     image3_position: str = "中央下",
     image3_size: str = "400x400",
     base_image: str = "test",
+    base_opacity: int = 100,
     text1: str = "",
     text1_position: str = "左下",
     text1_font_size: int = 48,
@@ -323,7 +336,8 @@ def generate_video(
         image3: 画像3のソース。空文字で省略。
         image3_position: 画像3の配置位置。
         image3_size: 画像3のサイズ。
-        base_image: ベース画像のソース。
+        base_image: ベース画像のソース。"test","transparent","white","#RRGGBB","#RRGGBBAA",S3キー,HTTP URL。
+        base_opacity: ベース画像の透明度（0-100）。0=完全透明、100=不透明。デフォルト100。
         text1: テキスト1の内容。空文字で省略。
         text1_position: テキスト1の配置位置。
         text1_font_size: テキスト1のフォントサイズ(px)。
@@ -366,13 +380,16 @@ def generate_video(
     sz1 = _resolve_size(image1_size)
 
     # ImageProcessor Lambdaにパラメータを組み立て
+    # キー名は image_processor.parse_image_parameters が期待する camelCase に揃える (Issue #41)
     invoke_params = {
         'image1': image1,
-        'image1_x': str(pos1[0]),
-        'image1_y': str(pos1[1]),
-        'image1_width': str(sz1[0]),
-        'image1_height': str(sz1[1]),
-        'base_image': base_image,
+        'image1X': str(pos1[0]),
+        'image1Y': str(pos1[1]),
+        'image1Width': str(sz1[0]),
+        'image1Height': str(sz1[1]),
+        'baseImage': base_image,
+        # クランプは image_processor 経由で apply_base_opacity 側に集約 (Issue #39)
+        'baseOpacity': str(base_opacity),
         'format': 'png',
         'generate_video': 'true',
         'video_duration': str(duration),
@@ -384,10 +401,10 @@ def generate_video(
         sz2 = _resolve_size(image2_size)
         invoke_params.update({
             'image2': image2,
-            'image2_x': str(pos2[0]),
-            'image2_y': str(pos2[1]),
-            'image2_width': str(sz2[0]),
-            'image2_height': str(sz2[1]),
+            'image2X': str(pos2[0]),
+            'image2Y': str(pos2[1]),
+            'image2Width': str(sz2[0]),
+            'image2Height': str(sz2[1]),
         })
 
     if image3:
@@ -395,10 +412,10 @@ def generate_video(
         sz3 = _resolve_size(image3_size)
         invoke_params.update({
             'image3': image3,
-            'image3_x': str(pos3[0]),
-            'image3_y': str(pos3[1]),
-            'image3_width': str(sz3[0]),
-            'image3_height': str(sz3[1]),
+            'image3X': str(pos3[0]),
+            'image3Y': str(pos3[1]),
+            'image3Width': str(sz3[0]),
+            'image3Height': str(sz3[1]),
         })
 
     # テキストパラメータをinvoke_paramsに追加

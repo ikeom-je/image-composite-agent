@@ -5,14 +5,14 @@ import { test, expect } from '@playwright/test';
  * 実際に存在する機能のみをテスト
  */
 
-const API_BASE_URL = process.env.API_URL || 'http://localhost:3000';
-const UPLOAD_API_URL = `${API_BASE_URL.replace('/images/composite', '')}/upload`;
+const API_COMPOSITE_URL = process.env.API_URL || 'http://localhost:3000/images/composite';
+const UPLOAD_API_URL = process.env.UPLOAD_API_URL || API_COMPOSITE_URL.replace('/images/composite', '/upload');
 
 test.describe('画像選択機能テスト', () => {
   
   test('基本テスト画像の確認', async ({ request }) => {
     // testタイプの画像生成確認
-    const response = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'transparent',
         image1: 'test',
@@ -73,7 +73,7 @@ test.describe('画像選択機能テスト', () => {
     };
 
     // 1画像モード
-    const response1 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response1 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         ...baseParams,
         image1: 'test',
@@ -88,7 +88,7 @@ test.describe('画像選択機能テスト', () => {
     console.log('✓ 1画像モード: 正常');
 
     // 2画像モード
-    const response2 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response2 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         ...baseParams,
         image1: 'test',
@@ -108,7 +108,7 @@ test.describe('画像選択機能テスト', () => {
     console.log('✓ 2画像モード: 正常');
 
     // 3画像モード
-    const response3 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response3 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         ...baseParams,
         image1: 'test',
@@ -147,7 +147,7 @@ test.describe('画像選択機能テスト', () => {
       const s3Image1 = listData.images[0].s3Path;
       
       // S3画像 + テスト画像の合成
-      const response = await request.get(`${API_BASE_URL}/images/composite`, {
+      const response = await request.get(`${API_COMPOSITE_URL}`, {
         params: {
           baseImage: 'transparent',
           image1: s3Image1,
@@ -178,7 +178,7 @@ test.describe('画像選択機能テスト', () => {
 
   test('エラーハンドリング確認', async ({ request }) => {
     // 必須パラメータ不足
-    const response1 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response1 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         canvasWidth: '1920',
@@ -191,7 +191,7 @@ test.describe('画像選択機能テスト', () => {
     console.log('✓ image1未選択時の適切なエラー');
 
     // 存在しないS3パス
-    const response2 = await request.get(`${API_BASE_URL}/images/composite`, {
+    const response2 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 's3://nonexistent-bucket/nonexistent-key.png',
@@ -225,7 +225,7 @@ test.describe('画像選択機能テスト', () => {
 
     // 3画像合成のパフォーマンス
     const startTime2 = Date.now();
-    const compositeResponse = await request.get(`${API_BASE_URL}/images/composite`, {
+    const compositeResponse = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         baseImage: 'test',
         image1: 'test',

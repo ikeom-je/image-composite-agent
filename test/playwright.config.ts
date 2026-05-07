@@ -7,6 +7,8 @@ import path from 'path';
  */
 export default defineConfig({
   testDir: './e2e',
+  // .spec.ts のみを test として認識（コンパイル artifact .spec.js / .spec.d.ts を除外）
+  testMatch: /\.spec\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -22,14 +24,36 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // 専用プロジェクトを持つテストは chromium プロジェクトでは実行しない（重複防止）
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Safari'] },
     },
     {
@@ -44,28 +68,39 @@ export default defineConfig({
       name: 'frontend-tests',
       testMatch: /.*frontend\.spec\.ts/,
       use: {
-        baseURL: 'http://localhost:5173',
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
+      },
+    },
+    {
+      name: 'api-demo-tests',
+      testMatch: /frontend-api\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
       name: 'upload-tests',
       testMatch: /upload-functionality\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
       name: 'selection-tests',
       testMatch: /image-selection\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {
       name: 'integration-tests',
       testMatch: /integration-workflow\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:3000',
       },
     },
     {

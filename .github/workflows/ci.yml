@@ -1,0 +1,131 @@
+# CI パイプライン - ビルド検証・テスト
+# PR作成時 / dev・mainブランチへのpush時に実行
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # -------------------------------------------------------
+  # 1. CDK TypeScript ビルド & テンプレート検証
+  # -------------------------------------------------------
+  cdk-build:
+    name: CDK Build & Synth
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Create dummy ffmpeg layer for synth
+        run: |
+          mkdir -p lambda-layers
+          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
+            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip -
+          fi
+
+      - name: CDK synth (テンプレート検証)
+        run: npx cdk synth --quiet
+        env:
+          CDK_DEFAULT_ACCOUNT: "000000000000"
+          CDK_DEFAULT_REGION: ap-northeast-1
+
+  # -------------------------------------------------------
+  # 2. フロントエンド ビルド & Lint
+  # -------------------------------------------------------
+  frontend-build:
+    name: Frontend Build & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+  # -------------------------------------------------------
+  # 3. Python Lambda 単体テスト
+  # -------------------------------------------------------
+  lambda-unit-tests:
+    name: Lambda Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -r lambda/python/requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s test/lambda -v
+        env:
+          PYTHONPATH: lambda/python
+
+  # -------------------------------------------------------
+  # 4. フロントエンド Vitest 単体テスト
+  # -------------------------------------------------------
+  frontend-unit-tests:
+    name: Frontend Unit Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Vitest
+        run: npx vitest run --reporter=verbose --passWithNoTests
