@@ -252,6 +252,20 @@
 7. WHEN 動画生成中である THEN システムは進行状況インジケーターを表示する
 8. WHEN 動画生成に失敗する THEN システムは適切なエラーメッセージを表示し、静止画像にフォールバックする
 
+### Requirement 20: ベース画像透明度制御機能（baseOpacity）
+
+**User Story:** ユーザーとして、ベース画像の透明度（不透明度）を数値で指定したい。そうすることで、ベース画像を半透明にしてオーバーレイ効果のある合成画像を作成できる。
+
+#### Acceptance Criteria
+
+1. WHEN `baseOpacity`パラメータを省略する THEN デフォルト値100（完全不透明）でベース画像を合成する（後方互換性の維持）
+2. WHEN `baseOpacity=0`を指定する THEN ベース画像が完全透明になり、`baseImage=transparent`と同等の結果になる
+3. WHEN `baseOpacity=50`を指定する THEN ベース画像のアルファチャンネルが50%に乗算され、半透明で合成される
+4. WHEN `baseOpacity`に0未満の値を指定する THEN システムは0にクランプして処理する
+5. WHEN `baseOpacity`に100を超える値を指定する THEN システムは100にクランプして処理する
+6. WHEN `baseOpacity`に非数値の値を指定する THEN システムはデフォルト値100にフォールバックして処理する
+7. WHEN `baseOpacity=100`を指定する THEN 透明度処理をスキップして元のベース画像をそのまま使用する（パフォーマンス最適化）
+
 ### Requirement 19: テキストオーバーレイ機能
 
 **User Story:** ユーザーとして、合成画像にテキストテロップを追加したい。そうすることで、画像に情報やタイトルを重ねた完成度の高いコンテンツを作成できる。
@@ -268,6 +282,38 @@
 8. WHEN テキストと画像を同時に指定する THEN 画像の上にテキストが重ねて描画される（Z-order: 画像→テキスト）
 9. WHEN テキストのみ（image1なし）を指定する THEN 透明背景上にテキストのみ描画される
 10. WHEN 動画生成時にテキストを指定する THEN テロップ付き合成画像がフレームに反映される
+11. WHEN フォント名を省略する THEN デフォルトの `NotoSansJP` が使用され、`NotoSansJP-Regular.ttf` がロードされる
+12. WHEN フォント名に `NotoSansJP` または `NotoSans` を指定する THEN 同一の `NotoSansJP-Regular.ttf` が使用される（エイリアス）
+13. WHEN フォント名に未登録の名前を指定する THEN **第1段フォールバック（ファイル名解決）** として `NotoSansJP-Regular.ttf` をTTFファイル名として採用する
+14. WHEN TTFファイルを検索する THEN 検索パスは `lambda/python/fonts/` → `/opt/fonts`（Lambda Layer）の順で実行される
+15. WHEN すべての検索パスでTTFファイルが見つからない THEN **第2段フォールバック（フォントオブジェクト）** として Pillow組み込みデフォルトフォント（`ImageFont.load_default`）が使用され、警告ログを出力する
+16. WHEN TTFファイルのロードに失敗する（破損ファイル等）THEN 同様に **第2段フォールバック** として Pillow組み込みデフォルトフォントが使用され、警告ログを出力する
+
+> フォントフォールバックの2段階構造:
+> - **第1段（19.13）**: 「未登録フォント名 → `NotoSansJP-Regular.ttf` というファイル名で検索を継続」。`text_renderer.py:_find_font_path` 内の `FONT_FILES.get(font_family, FONT_FILES['NotoSansJP'])` で実装
+> - **第2段（19.15, 19.16）**: 「TTFファイルそのものが利用できない → Pillow組み込みフォントオブジェクトに切り替え」。`text_renderer.py:load_font` の例外処理 + 検索失敗時パスで実装
+
+### Requirement 21: 画像合成デフォルト値の一元管理（composite-default.json）
+
+**User Story:** ユーザーとして、画像合成APIとフロントエンドのデフォルト値が一元管理されており、利用シーンに即した実用的な初期値で素早く合成を開始したい。将来は典型配置パターン（ライブ配信、番組宣伝、字幕など）をプリセットとして再利用できるようにしたい。
+
+#### Acceptance Criteria
+
+1. WHEN フロント起動時 THEN `${baseUrl}/composite-default.json` を fetch して Pinia store に格納する
+2. WHEN Lambda 起動時 THEN `composite-default.json` の値を Lambda 関数バンドルに同梱されたファイル（`lambda/python/composite_defaults.json`）から読み込み利用可能にする（CDK ビルド時にコピー、詳細は `design.md` §6.3, §6.8）
+3. WHEN `image1` のみ指定（`image2`/`image3` 未指定）+ `image{N}_x/y/width/height` 省略 THEN `image_placement.single` のデフォルト（`image1=(1700, 96, 200, 200)`）を適用する **※破壊的変更**（旧: `(100, 100, 400, 300)`）。テキスト有無は本モード判定に影響せず、`text_placeholders` は別軸で常時参照される（AC 21.6, 21.7）
+4. WHEN `image2` を指定し個別座標が省略 THEN `image_placement.double` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`）を適用する **※破壊的変更**（旧: `image1=(100,100,400,300)`, `image2=(600,100,400,300)`）
+5. WHEN `image3` を指定し個別座標が省略 THEN `image_placement.triple` のデフォルト（`image1=(1700, 96, 200, 200)`, `image2=(600, 400, 300, 300)`, `image3=(1520, 700, 300, 300)`）を適用する **※破壊的変更**（旧: `image3=(350, 500, 400, 300)`）
+6. WHEN フロントUIにテキスト入力欄を表示 THEN JSON の `text_placeholders[textN].placeholder` を HTML `placeholder` 属性として反映する（text1="LIVE", text2="Telop text on the bottom", text3="message for the program"）
+7. WHEN フロントUIにテキスト座標・フォントサイズの初期値を設定 THEN JSON の値（text1: x=1800/y=300/40px、text2: x=300/y=900/50px、text3: x=300/y=100/40px）を使用する
+8. WHEN `baseImage` パラメータを省略 THEN `system_default.baseImage`（`#000000`）を適用する **※破壊的変更**（旧: 透明背景）
+9. WHEN `video_format` パラメータを省略 THEN `system_default.video.format`（`MP4`）を適用する **※破壊的変更**（旧: XMF）
+10. WHEN `image{N}_x/y/width/height` を個別に指定 THEN その値が JSON デフォルトより優先される
+11. WHEN `composite-default.json` が読み込めない（ファイル欠損・パース失敗・ネットワーク失敗）THEN エラーログを残し、ハードコードされたフォールバック値で動作継続する。ただしリスク最小化のため、フォールバック時の `baseImage` は AC 21.8 の新仕様（`#000000`）ではなく既存挙動の `transparent` を維持する（詳細は `design.md` §6.9）
+12. WHEN `presets` セクションが空オブジェクト `{}` THEN プリセット機能は無効として扱う（将来拡張用、本要件のスコープ外）
+13. WHEN フロントから API へリクエストを送信 THEN フロントの初期値はそのままパラメータとして送信され、API 側でも同一の JSON デフォルトと整合する
+
+> JSON 構造の詳細とフロー図は `design.md` の「6. デフォルト値一元管理」セクションを参照。
 
 ## 技術的制約
 
@@ -284,10 +330,13 @@
 - テスト期待値画像の正しいPNG形式での管理
 - test/test-resultsディレクトリでのテスト出力ファイル管理
 - ffmpegを使用した動画生成機能（オプション）
+- `baseOpacity`パラメータ（0-100整数）によるベース画像透明度制御
+- `composite-default.json` による画像合成デフォルト値の一元管理（フロント・Lambda 共通参照、`presets` 拡張性確保）
 
 ## 成功基準
 
 1. 2つまたは3つの画像の高品質な合成処理
+16. ベース画像透明度（baseOpacity）による柔軟な半透明合成
 2. 直感的で使いやすいWebインターフェース（v2.3.0テーブルスタイル）
 3. セキュアで拡張可能なクラウドインフラストラクチャ
 4. 包括的なテストカバレッジ
@@ -302,3 +351,4 @@
 13. 期待値画像修正・再生成スクリプトの提供
 14. オプション動画生成機能による魅力的なコンテンツ作成
 15. テキストオーバーレイによる情報付加コンテンツの作成
+17. `composite-default.json` による画像合成デフォルト値の一元管理とプリセット拡張性

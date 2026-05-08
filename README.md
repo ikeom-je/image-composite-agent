@@ -42,6 +42,26 @@
 
 ## 🌐 デプロイ環境
 
+### 3環境構成
+
+単一AWSアカウント内で3環境を運用しています。
+
+| 環境 | ブランチ | デプロイ方式 | 用途 |
+|------|---------|------------|------|
+| **dev** | feature/*, bugfix/* | 手動（ローカルから） | 開発中機能のe2eテスト確認 |
+| **staging** | dev | CI/CD自動 | devブランチの統合テスト |
+| **production** | main | CI/CD自動 | 安定リリース。OSS利用者向け |
+
+```
+feature/* ──PR──▶ dev ──PR──▶ main
+    │               │              │
+    ▼               ▼              ▼
+  dev環境       staging環境   production環境
+  (e2eテスト)  (統合テスト)    (安定リリース)
+```
+
+各環境はCloudFormationスタック名のサフィックス（`-Dev`, `-Staging`, なし）で分離されます。
+
 ### 環境設定
 
 デプロイ後、以下の環境変数またはCloudFormation出力から必要な情報を取得してください：
@@ -83,7 +103,7 @@ curl "${API_URL}?image1=test&image2=test&img1_x=100&img1_y=100&img2_x=300&img2_y
 ### 前提条件
 
 - AWS CLI設定済み（defaultプロファイル使用）
-- Node.js 18以上
+- Node.js 22以上
 - Docker（CDKバンドリング用）
 
 ### AWS設定
@@ -299,7 +319,8 @@ GET /images/composite
 
 | パラメータ | 説明 | デフォルト |
 |-----------|------|-----------|
-| `baseImage` | ベース画像 | 透明背景 |
+| `baseImage` | ベース画像（`test`, `transparent`, `white`, `#RRGGBB`, `#RRGGBBAA`） | 透明背景 |
+| `baseOpacity` | ベース画像の透明度（0〜100、0=完全透明、100=不透明） | `100` |
 | `format` | 出力形式 (`html` or `png`) | `html` |
 | `image1Width` | 1つ目の画像の幅 | 300 |
 | `image1Height` | 1つ目の画像の高さ | 200 |

@@ -37,29 +37,27 @@ npm run build
 npm run synth
 ```
 
-### 4. AWSへのデプロイ
-```bash
-# 初回のみ
-cdk bootstrap
+### 4. dev環境へのデプロイ + e2eテスト（段階的検証）
 
-# デプロイ
-npm run deploy
+バックエンド→APIテスト→フロントエンド→E2Eテストの順に段階的に検証する。
 
-# 環境をセットアップ
-npm run setup-env
+具体的なコマンドは [testing.md](testing.md) の「デプロイ後の検証フロー」を参照。
 
-# テスト画像をアップロード
-cd scripts && ./upload-test-images.sh auto
-```
+### 環境別デプロイ
 
-### 5. 統合テストの実行
-```bash
-# デプロイ後
-npm run test:api
-npm run test:all-e2e
-```
+3環境（dev / staging / production）の構成・スタック名・設定差異は [architecture.md](architecture.md) の「環境戦略」を参照。
 
 ## 機能開発ワークフロー
+
+### ステップ0: 着手前チェック（必須・全エージェント共通）
+
+> 複数のAIエージェント・開発者が並行作業する前提のため、各タスク開始前に下記を必ず確認する。省略すると仕様・規約・運用方針のドリフトが発生する。
+
+1. **`CLAUDE.md` を冒頭から再参照** — 「作業開始前のチェック」「仕様駆動開発ルール」「変更時の更新トリガー」を確認
+2. **仕様書を確認** — `.kiro/specs/<feature>/{requirements.md, design.md, tasks.md}` の該当部分
+3. **タスクに該当する steering ファイルを確認**（[CLAUDE.md の対応表](../../CLAUDE.md#作業開始前のチェック必読全エージェント共通) 参照）
+4. **親Issue / 関連Issue / 進行中PRの状態確認** — `gh issue view <N>` / `gh pr list`
+5. **並行作業の場合は git worktree を作成** — [git.md の「Git Worktree」](git.md#git-worktree) 参照
 
 ### ステップ1: 計画
 - GitHubイシューを作成
@@ -77,46 +75,46 @@ git checkout -b feature/feature-name
 - ユニットテストを追加
 - ドキュメントを更新
 
-### ステップ4: テスト（ローカル + AWS E2E）
+### ステップ4: テスト（ローカル + dev環境 E2E）
+
 ```bash
-# ローカルテスト
+# ローカルビルド・テスト
 npm run build
 npm run test:lambda
 npm run synth
 
-# デプロイ + E2Eテスト
-./scripts/deploy.sh
-CHAT_API_URL=... npx playwright test test/e2e/chat-agent.api.spec.ts --config=test/playwright-api.config.ts
-FRONTEND_URL=... npx playwright test test/e2e/chat-agent.spec.ts --config=test/playwright-chat.config.ts
+# dev環境デプロイ
+ENVIRONMENT=dev ./scripts/deploy.sh
 ```
 
-### ステップ5: コードレビュー
-テストPASS後、実装内容をコードレビューする。レビュー観点:
-- コードが規約に従っている
-- テストが包括的（ユニット + API + E2E）
-- セキュリティ問題なし（IAM最小権限、入力バリデーション）
-- 不要なコード・デバッグコードがない
-- CDK変更がある場合は特に注意してレビュー
+dev環境デプロイ後のe2eテスト手順は [testing.md](testing.md) の「デプロイ後の検証フロー」を参照。
 
-レビューで修正が必要な場合は修正→再テスト→再レビューのサイクルを回す。
+### ステップ5: コードレビュー
+
+テストPASS後、実装内容をコードレビューする。レビュー観点・プロセスの詳細は [git.md](git.md) の「プルリクエストガイドライン」を参照。
 
 ### ステップ6: コミット + Issue コメント
 - テストPASS後にコミット（機能単位で適宜コミット）
 - 該当Issueにコメントとしてコミットハッシュと対応内容を追加
 - コミットハッシュは7桁短縮形、バッククォートなし（GitHubリンク生成のため）
 
-### ステップ7: プルリクエスト
+### ステップ7: プルリクエスト（→ dev）
 - ブランチをプッシュ
-- テンプレートを使用してPRを作成
-- レビューを依頼
-- フィードバックに対応
+- PRを作成（ベースブランチ: `dev`）。タイトル・説明テンプレートは [git.md](git.md) の「プルリクエストガイドライン」参照
+- レビュー → フィードバック対応
 - **devブランチへのマージは指示があるまで行わない**
 
-### ステップ8: マージとデプロイ
+### ステップ8: devへマージ → staging環境で統合テスト
 - 指示を受けてからdevにマージ
-- リリースにタグ付け
-- 本番環境にデプロイ
+- CI/CDがstaging環境に自動デプロイ
+- staging環境でe2e統合テスト実施
 - CloudWatchを監視
+
+### ステップ9: mainへマージ → productionリリース
+- staging環境での統合テスト合格後
+- devからmainへPRを作成
+- CI/CDがproduction環境に自動デプロイ
+- リリースにタグ付け（`v{MAJOR}.{MINOR}.{PATCH}`）
 
 ## バグ修正ワークフロー
 
@@ -134,11 +132,13 @@ git checkout -b bugfix/bug-description
 ```
 
 ### ステップ3: 検証
+
 ```bash
 npm run test:lambda
-npm run deploy
-npm run test:api
+ENVIRONMENT=dev ./scripts/deploy.sh
 ```
+
+APIテスト・E2Eテストの詳細コマンドは [testing.md](testing.md) を参照。
 
 ### ステップ4: デプロイ
 - PRを作成
@@ -148,6 +148,8 @@ npm run test:api
 
 ## デプロイワークフロー
 
+環境戦略（3環境の構成・スタック名・設定差異）は [architecture.md](architecture.md) の「環境戦略」を参照。
+
 ### デプロイ前チェックリスト
 - [ ] すべてのテストが通過
 - [ ] CDK合成が成功
@@ -156,7 +158,7 @@ npm run test:api
 - [ ] バージョンが更新済み（リリースの場合）
 - [ ] 破壊的変更が文書化済み
 
-### デプロイ手順
+### デプロイ手順（手動 / dev環境）
 ```bash
 # 1. ビルド
 npm run build
@@ -165,14 +167,18 @@ npm run build
 npm run synth
 npm run diff
 
-# 3. デプロイ
-npm run deploy
+# 3. dev環境にデプロイ
+ENVIRONMENT=dev ./scripts/deploy.sh
 
-# 4. 検証
-# CloudFormation出力を確認
-# APIエンドポイントをテスト
-# CloudWatchログを確認
+# 4. 検証（e2eテスト）
+npm run test:api
+npm run test:all-e2e
 ```
+
+### CI/CDパイプライン（staging / production）
+- **staging**: devブランチへのマージ時にGitHub Actionsが自動デプロイ + e2eテスト
+- **production**: mainブランチへのマージ時にGitHub Actionsが自動デプロイ
+- ワークフロー定義: `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`
 
 ### デプロイ後
 - スモークテストを実行
@@ -184,15 +190,19 @@ npm run deploy
 ```bash
 # オプション1: コミットをリバートして再デプロイ
 git revert <commit-hash>
-npm run deploy
+ENVIRONMENT=<env> ./scripts/deploy.sh
 
-# オプション2: CloudFormationロールバック
-aws cloudformation rollback-stack --stack-name ImageProcessorApiStack
+# オプション2: CloudFormationロールバック（環境別スタック名に注意）
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack       # production
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Staging
+aws cloudformation rollback-stack --stack-name ImageProcessorApiStack-Dev
 
 # オプション3: 以前のバージョン
 git checkout <previous-tag>
-npm run deploy
+ENVIRONMENT=<env> ./scripts/deploy.sh
 ```
+
+> 注: production / staging は通常CI/CD自動デプロイ。緊急時のみ手動オプションを使用する。
 
 ## リリースワークフロー
 
@@ -202,13 +212,13 @@ npm run deploy
 - PATCH: バグ修正
 
 ### リリース手順
-1. `package.json`のバージョンを更新
+1. `package.json`のバージョンを更新（→ [product.md](product.md) の「バージョン」も更新）
 2. CHANGELOGを更新
 3. リリースブランチを作成
 4. 最終テスト
 5. mainにマージ
-6. リリースにタグ付け: `git tag -a v3.2.0 -m "Release v3.2.0"`
-7. タグをプッシュ: `git push origin v3.2.0`
+6. リリースにタグ付け: `git tag -a v<VERSION> -m "Release v<VERSION>"`
+7. タグをプッシュ: `git push origin v<VERSION>`
 8. 本番環境にデプロイ
 9. リリースノート付きでGitHubリリースを作成
 
@@ -236,22 +246,7 @@ npm run deploy
 
 ## コードレビューワークフロー
 
-### レビュアーチェックリスト
-- [ ] コードが規約に従っている
-- [ ] テストが包括的
-- [ ] セキュリティ問題なし
-- [ ] パフォーマンスが許容範囲
-- [ ] ドキュメントが完全
-- [ ] CDK変更がレビュー済み
-- [ ] 不要な依存関係なし
-
-### レビュープロセス
-1. 自動チェックが通過
-2. 作成者による自己レビュー
-3. ピアレビュー（1名以上の承認）
-4. フィードバックに対応
-5. 最終承認
-6. マージ
+レビュアーチェックリスト・レビュープロセスは [git.md](git.md) の「プルリクエストガイドライン > レビュー基準」を参照。
 
 ## メンテナンスワークフロー
 

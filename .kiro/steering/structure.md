@@ -40,11 +40,54 @@ image-processor-api/
 - `video_generator.py` - 画像からの動画生成
 - `test_image_generator.py` - テスト画像生成
 - `error_handler.py` - 集中エラーハンドリング
+- `composite_defaults.py` - 画像合成デフォルト値の一元管理（Issue #58）。`composite_defaults.json`（CDK ビルド時に同梱、`frontend/public/composite-default.json` がソース）から読み込み、JSON 失敗時は `HARDCODED_FALLBACK` を返す
 - `agent_handler.py` - Chat Agent Lambdaハンドラー（マルチモデル対応）
 - `agent_tools.py` - Strands @tool 定義
 - `agent_prompts.py` - システムプロンプト・座標マッピング
 - `chat_history.py` - DynamoDB会話履歴管理
 - `requirements.txt` - Python依存関係
+
+### Lambda モジュール間の依存関係
+
+#### Chat Agent Lambda（agent_handler の起動経路）
+
+```
+agent_handler.py
+   ├─ agent_tools.py          (compose_images / generate_video / list_uploaded_images / delete_uploaded_image / get_help)
+   │     └─ agent_prompts.py  (resolve_position, resolve_size)
+   ├─ agent_prompts.py        (SYSTEM_PROMPT)
+   └─ chat_history.py         (ChatHistoryManager — DynamoDB)
+```
+
+- `agent_tools._last_media_result` はモジュールグローバル変数。`agent_handler.handle_chat` が呼び出し前にリセット → ツール実行後に取得（コンテキスト超過対策のための受け渡し）。
+- 循環依存はない。`agent_prompts` と `chat_history` は他モジュールに依存しない葉ノード。
+
+#### Image Processor Lambda（image_processor の起動経路）
+
+```
+image_processor.py
+   ├─ image_compositor.py     (create_composite_image, parse_image_parameters, parse_text_parameters)
+   │     ├─ text_renderer.py  (render_text_overlay, load_font)
+   │     └─ composite_defaults.py  (determine_image_mode, get_image_default — JSON デフォルト解決)
+   ├─ composite_defaults.py   (get_base_image_default, get_video_format_default, etc.)
+   ├─ image_fetcher.py        (fetch_images_parallel)
+   ├─ video_generator.py      (generate_video_from_image, get_video_mime_type, get_video_extension — ffmpeg呼び出し)
+   ├─ test_image_generator.py (generate_circle_image, generate_rectangle_image, generate_triangle_image)
+   └─ error_handler.py        (ParameterError, ImageFetchError, ImageProcessingError)
+```
+
+- `text_renderer` は `image_compositor` のみが利用する。直接 `image_processor` から呼ばない。
+- `error_handler` は全モジュールから利用される共通の例外定義。
+- `image_processor` は `upload_manager` を import しない。後者は独立した `UploadManagerFunction` Lambda として動作する（下記参照）。
+
+#### Upload Manager Lambda（upload_manager の起動経路）
+
+```
+upload_manager.py
+   └─ (外部のみ: boto3, PIL, botocore)
+```
+
+S3署名付きURL発行・アップロード済み画像一覧の独立Lambda。プロジェクト内の他Pythonモジュールには依存しない。Image Processor Lambda とは API Gateway 上で別パス（`/upload/*`）にマッピングされる。
 
 フォント:
 - `fonts/NotoSansJP-Regular.ttf` - 日本語フォント（テキストオーバーレイ用）
@@ -99,7 +142,8 @@ frontend/
 ### ストア（Pinia）
 
 - `app.ts` - アプリケーション状態（ローディング、エラー）
-- `config.ts` - 設定管理
+- `config.ts` - デプロイ時設定（API URL / CloudFront URL 等、`config.json` 動的生成）
+- `compositeDefaults.ts` - 画像合成デフォルト値（`composite-default.json` をビルド時に同梱配信、Issue #58）
 - `image.ts` - 画像状態管理
 - `notification.ts` - 通知キュー
 - `chat.ts` - チャット状態管理（セッション、モデル選択）
@@ -178,11 +222,17 @@ test/
 - `playwright-report/` - Playwrightテストレポート
 - `.venv/` - Python仮想環境（ローカル使用時）
 
+## CI/CD（`.github/`）
+
+- `.github/workflows/ci.yml` - CI: ビルド検証 + テスト（4並列ジョブ）
+- `.github/workflows/deploy.yml` - CD: 3環境自動デプロイ + e2eテスト呼び出し
+- `.github/workflows/e2e-test.yml` - デプロイ後e2eテスト（Playwright）
+- `.github/oidc-deploy-role.yml` - OIDC + IAMロール作成用CloudFormationテンプレート
+
 ## ドキュメント
 
 - `README.md` - メインプロジェクトドキュメント（日本語）
+- `CLAUDE.md` - Claude Code開発ガイド
 - `docs/api-testing-guide.md` - APIテストガイド
 - `history.md` - 変更履歴
 - `prompts.md` - 開発プロンプト
-- `AmazonQ.md` - Amazon Q統合メモ
-- `CLAUDE.md` - Claude統合メモ

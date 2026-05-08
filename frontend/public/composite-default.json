@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "system_default": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "baseImage": "#000000",
+    "baseOpacity": 100,
+    "image_placement": {
+      "single": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 }
+      },
+      "double": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 },
+        "image2": { "x": 600, "y": 400, "width": 300, "height": 300 }
+      },
+      "triple": {
+        "image1": { "x": 1700, "y": 96, "width": 200, "height": 200 },
+        "image2": { "x": 600, "y": 400, "width": 300, "height": 300 },
+        "image3": { "x": 1520, "y": 700, "width": 300, "height": 300 }
+      }
+    },
+    "text_placeholders": {
+      "text1": { "placeholder": "LIVE", "x": 1800, "y": 300, "font_size": 40 },
+      "text2": { "placeholder": "Telop text on the bottom", "x": 300, "y": 900, "font_size": 50 },
+      "text3": { "placeholder": "message for the program", "x": 300, "y": 100, "font_size": 40 }
+    },
+    "video": {
+      "format": "MP4",
+      "duration": 3
+    }
+  },
+  "presets": {}
+}

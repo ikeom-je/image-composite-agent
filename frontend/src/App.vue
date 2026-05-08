@@ -42,6 +42,23 @@
           />
         </div>
 
+        <!-- ベース画像透明度 -->
+        <div class="form-group opacity-group">
+          <label class="form-label">ベース画像透明度:</label>
+          <div class="opacity-control">
+            <input
+              type="range"
+              v-model.number="params.baseOpacity"
+              min="0"
+              max="100"
+              step="1"
+              class="opacity-slider"
+              :disabled="params.baseImage === 'transparent'"
+            />
+            <span class="opacity-value">{{ params.baseOpacity }}%</span>
+          </div>
+        </div>
+
         <!-- 画像設定テーブル -->
         <ImageConfigTable
           :image-configs="imageConfigs"
@@ -117,6 +134,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useConfigStore } from '@/stores/config'
+import { useCompositeDefaultsStore } from '@/stores/compositeDefaults'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationSystem from '@/components/NotificationSystem.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
@@ -130,11 +148,13 @@ import axios from 'axios'
 // ストアの使用
 const appStore = useAppStore()
 const configStore = useConfigStore()
+const compositeDefaultsStore = useCompositeDefaultsStore()
 const notificationStore = useNotificationStore()
 
 // パラメータ（1920x1080固定キャンバス）
 const params = ref({
   baseImage: 'test',
+  baseOpacity: 100,
   canvas_width: 1920,
   canvas_height: 1080
 })
@@ -277,6 +297,7 @@ const buildCompositeParams = (enableVideoGeneration: boolean = videoConfig.value
 
   const p: Record<string, string | number | boolean> = {
     baseImage: params.value.baseImage,
+    baseOpacity: params.value.baseOpacity,
     format: 'png',
     image1: imageConfigs.value.image1.source,
     image1X: Math.max(0, Math.min(imageConfigs.value.image1.x, 1920 - imageConfigs.value.image1.width)),
@@ -517,6 +538,7 @@ const copyApiUrl = () => {
 const loadExample = (example: any) => {
   // ベース画像の設定
   params.value.baseImage = example.params.baseImage || 'test'
+  params.value.baseOpacity = example.params.baseOpacity ?? 100
 
   // 画像モードを設定
   let mode = 1
@@ -808,6 +830,47 @@ const getGenerationButtonText = () => {
   }
 }
 
+// composite-default.json から各種 ref に初期値を反映 (Issue #58 / Req 21)
+function applyCompositeDefaults() {
+  const sd = compositeDefaultsStore.systemDefault
+  if (!sd) return
+
+  params.value = {
+    ...params.value,
+    baseImage: sd.baseImage,
+    baseOpacity: sd.baseOpacity,
+    canvas_width: sd.canvas.width,
+    canvas_height: sd.canvas.height,
+  }
+
+  // UI 初期表示は最大構成（triple）の座標を採用。実際の API 送信は image2/3 の source 有無で動く。
+  const triple = sd.image_placement.triple
+  imageConfigs.value.image1 = {
+    ...imageConfigs.value.image1,
+    x: triple.image1.x, y: triple.image1.y, width: triple.image1.width, height: triple.image1.height,
+  }
+  imageConfigs.value.image2 = {
+    ...imageConfigs.value.image2,
+    x: triple.image2.x, y: triple.image2.y, width: triple.image2.width, height: triple.image2.height,
+  }
+  imageConfigs.value.image3 = {
+    ...imageConfigs.value.image3,
+    x: triple.image3.x, y: triple.image3.y, width: triple.image3.width, height: triple.image3.height,
+  }
+
+  videoConfig.value = {
+    ...videoConfig.value,
+    duration: sd.video.duration,
+    format: sd.video.format,
+  }
+
+  // text 各座標・font_size は initial 値のみ反映（placeholder は ImageConfigTable で個別参照）
+  const tps = sd.text_placeholders
+  textConfigs.value.text1 = { ...textConfigs.value.text1, x: tps.text1.x, y: tps.text1.y, fontSize: tps.text1.font_size }
+  textConfigs.value.text2 = { ...textConfigs.value.text2, x: tps.text2.x, y: tps.text2.y, fontSize: tps.text2.font_size }
+  textConfigs.value.text3 = { ...textConfigs.value.text3, x: tps.text3.x, y: tps.text3.y, fontSize: tps.text3.font_size }
+}
+
 // ライフサイクル
 onMounted(async () => {
   try {
@@ -818,6 +881,12 @@ onMounted(async () => {
     if (!configStore.isLoaded) {
       await configStore.loadConfig()
     }
+
+    // 画像合成デフォルト値を読み込み、各 ref に反映
+    if (!compositeDefaultsStore.isLoaded) {
+      await compositeDefaultsStore.loadDefaults()
+    }
+    applyCompositeDefaults()
 
     console.log('[App] Application initialized successfully')
   } catch (error) {
@@ -919,6 +988,32 @@ h2 {
 
 .form-group {
   margin-bottom: 15px;
+}
+
+.opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.opacity-slider {
+  flex: 1;
+  height: 6px;
+  accent-color: #667eea;
+  cursor: pointer;
+}
+
+.opacity-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.opacity-value {
+  min-width: 40px;
+  text-align: right;
+  font-weight: 600;
+  color: #667eea;
+  font-size: 14px;
 }
 
 label {

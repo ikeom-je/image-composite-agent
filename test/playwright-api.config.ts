@@ -15,7 +15,9 @@ export default defineConfig({
   quiet: !process.env.DEBUG,
   timeout: 30000, // 30秒のタイムアウト
   use: {
-    baseURL: process.env.API_URL || 'http://localhost:3000',
+    // API Gatewayのルート（/prod/まで）をbaseURLに設定
+    // 各テストファイルが完全URLを持つため、baseURLはフォールバック用
+    baseURL: process.env.API_URL?.replace(/\/images\/composite$/, '') || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -24,8 +26,7 @@ export default defineConfig({
       name: 'api-tests',
       testMatch: /.*\.api\.spec\.ts/,
       use: {
-        baseURL: process.env.API_URL || 'http://localhost:3000',
-        // timeout: 30000, // プロジェクトレベルで設定
+        baseURL: process.env.API_URL?.replace(/\/images\/composite$/, '') || 'http://localhost:3000',
       },
     },
   ],

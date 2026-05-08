@@ -88,9 +88,10 @@ def validate_required_parameters(query_params: Dict[str, str]) -> list:
     # 動画生成パラメータの検証（オプション）
     generate_video = query_params.get('generate_video', 'false').lower()
     if generate_video == 'true':
-        # 動画生成が有効な場合の追加検証
-        video_duration = query_params.get('video_duration', '3')
-        video_format = query_params.get('video_format', 'XMF')
+        # 動画生成が有効な場合の追加検証（デフォルトは composite_defaults.json から取得）
+        from composite_defaults import get_video_format_default, get_video_duration_default
+        video_duration = query_params.get('video_duration', str(get_video_duration_default()))
+        video_format = query_params.get('video_format') or get_video_format_default()
         
         try:
             duration_int = int(video_duration)
@@ -446,16 +447,30 @@ def handler(event, context):
             )
         
         # パラメータ取得
+        # composite-default.json のデフォルト値を解決（Issue #58 / Req 21）
+        from composite_defaults import (
+            get_base_image_default,
+            get_base_opacity_default,
+            get_video_format_default,
+            get_video_duration_default,
+        )
+
         image1_param = query_params.get('image1')
         image2_param = query_params.get('image2')
         image3_param = query_params.get('image3')  # オプション
-        base_image_param = query_params.get('baseImage')
+        # baseImage 省略時は JSON デフォルト（破壊的変更: 旧=透明 → 新=#000000、AC 21.8）
+        base_image_param = query_params.get('baseImage') or get_base_image_default()
+        try:
+            base_opacity_param = int(query_params.get('baseOpacity', str(get_base_opacity_default())))
+        except (ValueError, TypeError):
+            base_opacity_param = get_base_opacity_default()  # 非数値はデフォルトにフォールバック (Issue #37)
+        # クランプは apply_base_opacity 側に集約 (Issue #39)
         format_param = query_params.get('format', 'png')
-        
-        # 動画生成パラメータ
+
+        # 動画生成パラメータ（破壊的変更: 旧=XMF → 新=MP4、AC 21.9）
         generate_video = query_params.get('generate_video', 'false').lower() == 'true'
-        video_duration = int(query_params.get('video_duration', '3'))
-        video_format = query_params.get('video_format', 'XMF')
+        video_duration = int(query_params.get('video_duration', str(get_video_duration_default())))
+        video_format = query_params.get('video_format') or get_video_format_default()
         
         logger.info(f"🎯 Images to process: image1={image1_param}, image2={image2_param}, image3={image3_param} [Request ID: {request_id}]")
         logger.info(f"🎬 Video generation: enabled={generate_video}, duration={video_duration}s, format={video_format} [Request ID: {request_id}]")
@@ -488,10 +503,30 @@ def handler(event, context):
         # images初期化（テキストのみモード時のUnboundLocalError防止）
         images = {}
 
+        from PIL import Image as PILImage
+
+        # ベース画像の特殊値処理（white / #RRGGBB / #RRGGBBAA）
+        base_is_special = False
+        if base_image_param:
+            if base_image_param == 'white':
+                images['base'] = PILImage.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+                base_is_special = True
+                logger.info(f"🎨 White base image created [Request ID: {request_id}]")
+            elif base_image_param.startswith('#'):
+                from text_renderer import _parse_color
+                color = _parse_color(base_image_param)
+                if len(color) == 3:
+                    color = (*color, 255)
+                images['base'] = PILImage.new('RGBA', (2000, 1000), color)
+                base_is_special = True
+                logger.info(f"🎨 Custom color base image created: {base_image_param} [Request ID: {request_id}]")
+            elif base_image_param == 'transparent':
+                base_is_special = True
+                logger.info(f"🎨 Transparent base image [Request ID: {request_id}]")
+
         # テキストのみリクエスト時のimage1省略対応
         if not image1_param and text_params:
-            from PIL import Image as PILImage
-            images = {'image1': PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))}
+            images['image1'] = PILImage.new('RGBA', (1, 1), (0, 0, 0, 0))
             img_params['image1'] = {'x': 0, 'y': 0, 'width': 1, 'height': 1}
             logger.info(f"📝 Text-only mode: using transparent 1x1 image [Request ID: {request_id}]")
 
@@ -499,9 +534,12 @@ def handler(event, context):
         if image1_param:
             logger.info(f"📥 Starting parallel image fetch... [Request ID: {request_id}]")
             image_paths = {
-                'base': base_image_param,
                 'image1': image1_param,  # 必須
             }
+
+            # ベース画像（特殊値でない場合のみ取得）
+            if base_image_param and not base_is_special:
+                image_paths['base'] = base_image_param
 
             # オプション画像を追加
             if image2_param:
@@ -510,7 +548,7 @@ def handler(event, context):
                 image_paths['image3'] = image3_param
 
             try:
-                images = fetch_images_parallel(image_paths)
+                images.update(fetch_images_parallel(image_paths))
                 logger.info(f"✅ Images fetched: {list(images.keys())} [Request ID: {request_id}]")
             except Exception as e:
                 raise ImageFetchError(
@@ -530,7 +568,8 @@ def handler(event, context):
                 images.get('image2'),  # オプション
                 images.get('image3'),  # オプション
                 img_params,
-                text_params=text_params if text_params else None
+                text_params=text_params if text_params else None,
+                base_opacity=base_opacity_param
             )
         except Exception as e:
             raise ImageProcessingError(

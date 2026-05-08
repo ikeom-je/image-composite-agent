@@ -28,9 +28,12 @@ class TestLambdaOptimization(unittest.TestCase):
         os.environ['LOG_LEVEL'] = 'INFO'
         os.environ['PYTHONPATH'] = '/var/runtime'
     
+    @unittest.skipUnless(
+        __import__('importlib').util.find_spec('psutil') is not None,
+        'psutil not installed'
+    )
     def test_image_processor_memory_efficiency(self):
         """Image Processor Lambda関数のメモリ効率テスト"""
-        # メモリ使用量の測定（簡易版）
         import psutil
         import gc
         

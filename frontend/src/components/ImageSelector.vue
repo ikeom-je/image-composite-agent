@@ -10,6 +10,7 @@
       <option value="">{{ required ? '選択してください' : '選択しない' }}</option>
       <optgroup v-if="imageType === 'base'" label="ベース画像">
         <option value="test">テスト画像（黒背景）</option>
+        <option value="white">白背景</option>
         <option value="transparent">透明背景</option>
       </optgroup>
       <optgroup v-else label="テスト画像">
@@ -210,7 +211,7 @@ const handleSelectionChange = () => {
   
   // base タイプの場合は test/transparent をそのまま emit
   if (props.imageType === 'base') {
-    if (value === 'test' || value === 'transparent') {
+    if (value === 'test' || value === 'transparent' || value === 'white') {
       emit('update:modelValue', value)
       return
     }
@@ -341,8 +342,8 @@ const updateDisplayValue = () => {
     displayValue.value = ''
   } else if (value === 'test') {
     displayValue.value = 'test'
-  } else if (props.imageType === 'base' && value === 'transparent') {
-    displayValue.value = 'transparent'
+  } else if (props.imageType === 'base' && (value === 'transparent' || value === 'white')) {
+    displayValue.value = value
   } else if (value.startsWith('s3://')) {
     const config = configStore.config
     const testBucket = config?.s3BucketNames?.testImages

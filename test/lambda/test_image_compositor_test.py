@@ -16,6 +16,7 @@ from image_compositor import (
     parse_text_parameters,
     validate_text_parameters,
     create_base_image,
+    apply_base_opacity,
     resize_and_convert_image,
     paste_image_with_alpha,
     create_composite_image,
@@ -35,25 +36,40 @@ class TestImageCompositor(unittest.TestCase):
         self.test_image3 = Image.new('RGBA', (100, 100), (0, 0, 255, 255))  # 青
         self.transparent_image = Image.new('RGBA', (100, 100), (255, 255, 255, 128))  # 半透明白
     
-    def test_parse_image_parameters_default(self):
-        """デフォルトパラメータの解析テスト"""
+    def test_parse_image_parameters_default_single_mode(self):
+        """空クエリ → mode=single、image1 のみ JSON デフォルト適用（Issue #58 / AC 21.3）"""
         params = parse_image_parameters({})
-        
-        # デフォルト値の確認
-        self.assertEqual(params['image1']['x'], 1600)
-        self.assertEqual(params['image1']['y'], 20)
-        self.assertEqual(params['image1']['width'], 300)
+
+        # image1 は single モードのデフォルト座標
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertEqual(params['image1']['y'], 96)
+        self.assertEqual(params['image1']['width'], 200)
         self.assertEqual(params['image1']['height'], 200)
-        
-        self.assertEqual(params['image2']['x'], 1600)
-        self.assertEqual(params['image2']['y'], 240)
-        
-        self.assertEqual(params['image3']['x'], 20)
-        self.assertEqual(params['image3']['y'], 20)
-    
-    def test_parse_image_parameters_custom(self):
-        """カスタムパラメータの解析テスト"""
+
+        # image2/image3 は single モードでは含まれない（validate / create_composite_image と整合）
+        self.assertNotIn('image2', params)
+        self.assertNotIn('image3', params)
+
+    def test_parse_image_parameters_default_double_mode(self):
+        """image2 指定 → mode=double、image1+image2 に JSON デフォルト適用（Issue #58 / AC 21.4）"""
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b'})
+
+        self.assertEqual(params['image1'], {'x': 1700, 'y': 96, 'width': 200, 'height': 200})
+        self.assertEqual(params['image2'], {'x': 600, 'y': 400, 'width': 300, 'height': 300})
+        self.assertNotIn('image3', params)
+
+    def test_parse_image_parameters_default_triple_mode(self):
+        """image3 指定 → mode=triple、3画像に JSON デフォルト適用（Issue #58 / AC 21.5）"""
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b', 'image3': 'c'})
+
+        self.assertEqual(params['image1'], {'x': 1700, 'y': 96, 'width': 200, 'height': 200})
+        self.assertEqual(params['image2'], {'x': 600, 'y': 400, 'width': 300, 'height': 300})
+        self.assertEqual(params['image3'], {'x': 1520, 'y': 700, 'width': 300, 'height': 300})
+
+    def test_parse_image_parameters_custom_overrides_default(self):
+        """個別座標指定が JSON デフォルトより優先される（AC 21.10）"""
         query_params = {
+            'image1': 'a', 'image2': 'b', 'image3': 'c',
             'image1X': '100',
             'image1Y': '200',
             'image1Width': '400',
@@ -61,36 +77,44 @@ class TestImageCompositor(unittest.TestCase):
             'image2X': '500',
             'image3Y': '600'
         }
-        
+
         params = parse_image_parameters(query_params)
-        
-        # カスタム値の確認
+
         self.assertEqual(params['image1']['x'], 100)
         self.assertEqual(params['image1']['y'], 200)
         self.assertEqual(params['image1']['width'], 400)
         self.assertEqual(params['image1']['height'], 300)
         self.assertEqual(params['image2']['x'], 500)
         self.assertEqual(params['image3']['y'], 600)
-        
-        # 指定されていない値はデフォルト
-        self.assertEqual(params['image2']['y'], 240)  # デフォルト値
-    
+
+        # 指定されていない image2 のフィールドは triple のデフォルト
+        self.assertEqual(params['image2']['y'], 400)
+        self.assertEqual(params['image2']['width'], 300)
+        self.assertEqual(params['image2']['height'], 300)
+
+    def test_parse_image_parameters_text_does_not_affect_mode(self):
+        """テキスト有無は image_placement モード判定に影響しない（AC 21.3）"""
+        params = parse_image_parameters({'image1': 'a', 'text1': 'LIVE'})
+        # mode='single' のまま、image2 は含まれない
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertNotIn('image2', params)
+
     def test_parse_image_parameters_invalid_values(self):
-        """無効な値の解析テスト"""
+        """無効な値は JSON デフォルトに戻る（safe_int の挙動）"""
         query_params = {
             'image1X': 'invalid',
             'image1Y': '',
             'image1Width': 'abc',
             'image1Height': None
         }
-        
+
         params = parse_image_parameters(query_params)
-        
-        # 無効な値はデフォルトに戻る
-        self.assertEqual(params['image1']['x'], 1600)  # デフォルト値
-        self.assertEqual(params['image1']['y'], 20)    # デフォルト値
-        self.assertEqual(params['image1']['width'], 300)  # デフォルト値
-        self.assertEqual(params['image1']['height'], 200) # デフォルト値
+
+        # 無効値は single モードの image1 デフォルトに戻る
+        self.assertEqual(params['image1']['x'], 1700)
+        self.assertEqual(params['image1']['y'], 96)
+        self.assertEqual(params['image1']['width'], 200)
+        self.assertEqual(params['image1']['height'], 200)
     
     def test_validate_image_parameters_valid(self):
         """有効なパラメータの検証テスト"""
@@ -196,18 +220,20 @@ class TestImageCompositor(unittest.TestCase):
     def test_create_composite_image_2_images(self):
         """2画像合成テスト"""
         params = parse_image_parameters({
+            'image1': 'a', 'image2': 'b',
             'image1X': '50', 'image1Y': '50', 'image1Width': '100', 'image1Height': '100',
             'image2X': '150', 'image2Y': '150', 'image2Width': '100', 'image2Height': '100'
         })
-        
+
         result = create_composite_image(None, self.test_image1, self.test_image2, None, params)
-        
+
         self.assertEqual(result.size, (2000, 1000))
         self.assertEqual(result.mode, 'RGBA')
-    
+
     def test_create_composite_image_3_images(self):
         """3画像合成テスト"""
         params = parse_image_parameters({
+            'image1': 'a', 'image2': 'b', 'image3': 'c',
             'image1X': '50', 'image1Y': '50', 'image1Width': '100', 'image1Height': '100',
             'image2X': '150', 'image2Y': '150', 'image2Width': '100', 'image2Height': '100',
             'image3X': '250', 'image3Y': '250', 'image3Width': '100', 'image3Height': '100'
@@ -223,12 +249,13 @@ class TestImageCompositor(unittest.TestCase):
     def test_create_composite_image_with_base(self):
         """ベース画像ありの合成テスト"""
         base_image = Image.new('RGBA', (1000, 500), (128, 128, 128, 255))  # グレー背景
-        params = parse_image_parameters({})
-        
+        # image2 を渡すので mode=double 相当にして JSON デフォルト座標を使う
+        params = parse_image_parameters({'image1': 'a', 'image2': 'b'})
+
         result = create_composite_image(
             base_image, self.test_image1, self.test_image2, None, params
         )
-        
+
         self.assertEqual(result.size, (2000, 1000))  # キャンバスサイズにリサイズ
         self.assertEqual(result.mode, 'RGBA')
     
@@ -429,6 +456,148 @@ class TestCompositeWithText(unittest.TestCase):
             self.default_params, text_params=text_params
         )
         self.assertEqual(result.mode, 'RGBA')
+
+
+class TestBaseImageColors(unittest.TestCase):
+    """白背景・カスタム色ベース画像のテスト"""
+
+    def test_create_white_base_image(self):
+        """白背景のベース画像が正しく作成される"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        result = create_base_image(white_base)
+        self.assertEqual(result.mode, 'RGBA')
+        # 中央ピクセルが白であることを確認
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (255, 255, 255, 255))
+
+    def test_create_custom_color_base_image(self):
+        """カスタム色（赤）のベース画像が正しく作成される"""
+        red_base = Image.new('RGBA', (2000, 1000), (255, 0, 0, 255))
+        result = create_base_image(red_base)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (255, 0, 0, 255))
+
+    def test_create_custom_color_with_alpha(self):
+        """半透明カスタム色のベース画像が正しく作成される"""
+        semi_transparent = Image.new('RGBA', (2000, 1000), (0, 255, 0, 128))
+        result = create_base_image(semi_transparent)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (0, 255, 0, 128))
+
+    def test_transparent_base_is_default(self):
+        """None指定で透明背景が作成される"""
+        result = create_base_image(None)
+        pixel = result.getpixel((1000, 500))
+        self.assertEqual(pixel, (0, 0, 0, 0))
+
+    def test_white_base_composite_with_image(self):
+        """白背景にimage1を合成できる"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params)
+        self.assertEqual(result.mode, 'RGBA')
+        # 画像が配置されていない領域は白であること
+        pixel = result.getpixel((0, 0))
+        self.assertEqual(pixel, (255, 255, 255, 255))
+        # 画像が配置された領域は赤であること
+        pixel = result.getpixel((100, 100))
+        self.assertEqual(pixel, (255, 0, 0, 255))
+
+
+class TestParseColorForBase(unittest.TestCase):
+    """_parse_colorのベース画像用テスト"""
+
+    def test_parse_hex_6digit(self):
+        """#RRGGBB形式のパース"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('#FF0000'), (255, 0, 0))
+        self.assertEqual(_parse_color('#00FF00'), (0, 255, 0))
+        self.assertEqual(_parse_color('#0000FF'), (0, 0, 255))
+
+    def test_parse_hex_8digit(self):
+        """#RRGGBBAA形式のパース"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('#FF000080'), (255, 0, 0, 128))
+        self.assertEqual(_parse_color('#00FF00FF'), (0, 255, 0, 255))
+
+    def test_parse_invalid_returns_white(self):
+        """無効なカラー文字列は白を返す"""
+        from text_renderer import _parse_color
+        self.assertEqual(_parse_color('invalid'), (255, 255, 255))
+
+
+class TestBaseOpacity(unittest.TestCase):
+    """ベース画像透明度のテスト"""
+
+    def test_opacity_100_unchanged(self):
+        """opacity=100でベース画像が変更されない"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 100)
+        self.assertEqual(result.getpixel((50, 50)), (255, 255, 255, 255))
+
+    def test_opacity_0_fully_transparent(self):
+        """opacity=0で完全透明になる"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 0)
+        self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))
+
+    def test_opacity_50_half_transparent(self):
+        """opacity=50で複数座標(角・中央)のRGB保持・alpha変化を検証する"""
+        base = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        result = apply_base_opacity(base, 50)
+        # 4隅と中央の5座標で検証
+        for x, y in [(0, 0), (99, 0), (0, 99), (99, 99), (50, 50)]:
+            pixel = result.getpixel((x, y))
+            self.assertEqual(pixel[0], 255, f"R保持 at ({x},{y})")
+            self.assertEqual(pixel[1], 0, f"G保持 at ({x},{y})")
+            self.assertEqual(pixel[2], 0, f"B保持 at ({x},{y})")
+            self.assertAlmostEqual(pixel[3], 127, delta=2,
+                                   msg=f"alpha ≈ 127 at ({x},{y})")
+
+    def test_opacity_at_or_above_100_returns_unchanged(self):
+        """opacity>=100は早期リターンしてベース画像をそのまま返す（apply_base_opacity内のクランプ経路）"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, 150)
+        self.assertEqual(result.getpixel((50, 50)), (255, 255, 255, 255))
+
+    def test_opacity_at_or_below_0_returns_fully_transparent(self):
+        """opacity<=0は早期リターンして完全透明画像を返す（apply_base_opacity内のクランプ経路）"""
+        base = Image.new('RGBA', (100, 100), (255, 255, 255, 255))
+        result = apply_base_opacity(base, -10)
+        self.assertEqual(result.getpixel((50, 50)), (0, 0, 0, 0))
+
+    def test_composite_with_opacity(self):
+        """create_composite_imageにbase_opacityを渡して動作する"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params, base_opacity=50)
+        self.assertEqual(result.mode, 'RGBA')
+        # 画像が配置されていない領域は半透明白
+        pixel = result.getpixel((0, 0))
+        self.assertAlmostEqual(pixel[3], 127, delta=2)
+
+    def test_composite_default_opacity(self):
+        """base_opacity省略時はデフォルト100（不透明）"""
+        white_base = Image.new('RGBA', (2000, 1000), (255, 255, 255, 255))
+        test_image = Image.new('RGBA', (100, 100), (255, 0, 0, 255))
+        params = {
+            'image1': {'x': 50, 'y': 50, 'width': 100, 'height': 100},
+            'image2': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+            'image3': {'x': 0, 'y': 0, 'width': 100, 'height': 100},
+        }
+        result = create_composite_image(white_base, test_image, None, None, params)
+        pixel = result.getpixel((0, 0))
+        self.assertEqual(pixel, (255, 255, 255, 255))
 
 
 if __name__ == '__main__':

@@ -22,14 +22,36 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      // 専用プロジェクトを持つテストは chromium プロジェクトでは実行しない（重複防止）
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
+      testIgnore: [
+        /frontend-api\.spec\.ts/,
+        /upload-functionality\.spec\.ts/,
+        /image-selection\.spec\.ts/,
+        /integration-workflow\.spec\.ts/,
+        /chat-agent\.spec\.ts/,
+      ],
       use: { ...devices['Desktop Safari'] },
     },
     {
@@ -48,24 +70,35 @@ export default defineConfig({
       },
     },
     {
+      name: 'api-demo-tests',
+      testMatch: /frontend-api\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+      },
+    },
+    {
       name: 'upload-tests',
       testMatch: /upload-functionality\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
       },
     },
     {
       name: 'selection-tests',
       testMatch: /image-selection\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
       },
     },
     {
       name: 'integration-tests',
       testMatch: /integration-workflow\.spec\.ts/,
       use: {
-        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
       },
     },
     {

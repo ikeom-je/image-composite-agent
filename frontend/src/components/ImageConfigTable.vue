@@ -341,7 +341,7 @@
                 @input="$emit('update-text-config', textKey, 'text', ($event.target as HTMLTextAreaElement).value)"
                 rows="2"
                 class="text-input"
-                placeholder="テキストを入力..."
+                :placeholder="placeholderFor(textKey as 'text1' | 'text2' | 'text3')"
               />
             </div>
             <div class="text-form-row-inline">
@@ -586,6 +586,15 @@
 <script setup lang="ts">
 import { computed, ref, reactive } from 'vue'
 import ImageSelector from './ImageSelector.vue'
+import { useCompositeDefaultsStore } from '@/stores/compositeDefaults'
+
+const compositeDefaultsStore = useCompositeDefaultsStore()
+
+// composite-default.json の placeholder を返す（未ロード時はデフォルトメッセージ）
+function placeholderFor(textKey: 'text1' | 'text2' | 'text3'): string {
+  const tp = compositeDefaultsStore.getTextPlaceholder(textKey)
+  return tp.placeholder || 'テキストを入力...'
+}
 
 // Props
 interface Props {

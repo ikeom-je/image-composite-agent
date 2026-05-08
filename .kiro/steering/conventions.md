@@ -353,7 +353,8 @@ import type { ImageConfig } from '@/types'
 ### Python
 ```python
 # モジュールレベル
-VERSION = os.environ.get('VERSION', '3.1.1')
+# VERSION の値は CDK から環境変数で注入される（package.json 由来、現在のバージョンは product.md を参照）
+VERSION = os.environ.get('VERSION', 'unknown')
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
 DEFAULT_CANVAS_SIZE = (1920, 1080)
 ```

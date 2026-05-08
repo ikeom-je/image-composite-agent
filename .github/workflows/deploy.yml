@@ -1,0 +1,257 @@
+# CD パイプライン - AWS デプロイ（3環境対応）
+# staging: devブランチへのpush時に自動デプロイ
+# production: mainブランチへのpush時に自動デプロイ
+# 手動トリガーで環境・対象を選択可能
+name: Deploy
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "デプロイ先環境"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      target:
+        description: "デプロイ対象"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  # -------------------------------------------------------
+  # 0. 環境名の決定
+  # -------------------------------------------------------
+  resolve-env:
+    name: Resolve Environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.resolve.outputs.env_name }}
+      stack_suffix: ${{ steps.resolve.outputs.stack_suffix }}
+    steps:
+      - id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            ENV="production"
+          elif [ "${{ github.ref_name }}" = "dev" ]; then
+            ENV="staging"
+          else
+            ENV="dev"
+          fi
+
+          case "$ENV" in
+            production) SUFFIX="" ;;
+            staging)    SUFFIX="-Staging" ;;
+            dev)        SUFFIX="-Dev" ;;
+          esac
+
+          echo "env_name=$ENV" >> "$GITHUB_OUTPUT"
+          echo "stack_suffix=$SUFFIX" >> "$GITHUB_OUTPUT"
+          echo "Environment: $ENV (suffix: ${SUFFIX:-none})"
+
+  # -------------------------------------------------------
+  # 1. CI チェック
+  # -------------------------------------------------------
+  ci-check:
+    name: CI Check
+    uses: ./.github/workflows/ci.yml
+
+  # -------------------------------------------------------
+  # 2. バックエンドデプロイ
+  # -------------------------------------------------------
+  deploy-backend:
+    name: Deploy Backend (${{ needs.resolve-env.outputs.env_name }})
+    needs: [resolve-env, ci-check]
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.target == 'all' ||
+      github.event.inputs.target == 'backend'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ needs.resolve-env.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Cache ffmpeg layer
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: lambda-layers/ffmpeg-layer.zip
+          key: ffmpeg-layer-amd64-static-v4.4.2
+
+      - name: Build ffmpeg Lambda layer
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash scripts/create-ffmpeg-layer.sh
+
+      - name: Copy composite-default.json for Lambda bundling
+        # Issue #58 / Req 21.2: composite-default.json を Lambda 同梱用にコピー
+        # frontend/public/ がソース、lambda/python/composite_defaults.json は git 管理外
+        run: |
+          cp frontend/public/composite-default.json lambda/python/composite_defaults.json
+          echo "✅ composite_defaults.json copied for Lambda bundling"
+
+      - name: Deploy ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}
+        run: |
+          STACK="ImageProcessorApiStack${{ needs.resolve-env.outputs.stack_suffix }}"
+          npx cdk deploy "$STACK" -c environment=${{ needs.resolve-env.outputs.env_name }} --require-approval never
+        env:
+          AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
+          ENVIRONMENT: ${{ needs.resolve-env.outputs.env_name }}
+
+  # -------------------------------------------------------
+  # 3. フロントエンドデプロイ
+  # -------------------------------------------------------
+  deploy-frontend:
+    name: Deploy Frontend (${{ needs.resolve-env.outputs.env_name }})
+    needs: [resolve-env, ci-check, deploy-backend]
+    if: >-
+      always() && !cancelled() &&
+      needs.ci-check.result == 'success' &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') &&
+      (github.event_name == 'push' ||
+       github.event.inputs.target == 'all' ||
+       github.event.inputs.target == 'frontend')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ needs.resolve-env.outputs.env_name }}
+    env:
+      STACK_SUFFIX: ${{ needs.resolve-env.outputs.stack_suffix }}
+      ENV_NAME: ${{ needs.resolve-env.outputs.env_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Cache ffmpeg layer
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: lambda-layers/ffmpeg-layer.zip
+          key: ffmpeg-layer-amd64-static-v4.4.2
+
+      - name: Build ffmpeg Lambda layer
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: bash scripts/create-ffmpeg-layer.sh
+
+      - name: Generate config.json
+        run: |
+          mkdir -p frontend/public
+          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          VERSION=$(node -p "require('./package.json').version")
+          BUILD_HASH=${GITHUB_SHA::7}
+          DEBUG=$( [ "$ENV_NAME" = "production" ] && echo "false" || echo "true" )
+          cat > frontend/public/config.json <<EOF
+          {"apiUrl":"${API_URL}","uploadApiUrl":"${UPLOAD_URL}","chatApiUrl":"${CHAT_URL}","cloudfrontUrl":"","version":"${VERSION}","buildHash":"${BUILD_HASH}","environment":"${ENV_NAME}","buildTimestamp":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)","region":"${{ env.AWS_REGION }}","features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":${DEBUG},"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}
+          EOF
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Deploy FrontendStack${{ env.STACK_SUFFIX }}
+        run: |
+          STACK="FrontendStack${STACK_SUFFIX}"
+          npx cdk deploy "$STACK" -c environment=${{ needs.resolve-env.outputs.env_name }} --require-approval never
+        env:
+          ENVIRONMENT: ${{ env.ENV_NAME }}
+
+      - name: Update Lambda CLOUDFRONT_DOMAIN
+        run: |
+          API_STACK="ImageProcessorApiStack${STACK_SUFFIX}"
+          FRONT_STACK="FrontendStack${STACK_SUFFIX}"
+          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
+          if [ -n "$CF_DOMAIN" ]; then
+            # Lambda 関数名は 64 字制限で切り捨てられるため (例: 'Staging' → 'Stagi')、
+            # CFN スタックリソースから物理 ID を直接取得する（名前切り捨て耐性）
+            for FUNC_NAME in $(aws cloudformation list-stack-resources --stack-name "$API_STACK" \
+              --query "StackResourceSummaries[?ResourceType=='AWS::Lambda::Function' && (contains(LogicalResourceId, 'ImageProcessor') || contains(LogicalResourceId, 'AgentFunction'))].PhysicalResourceId" \
+              --output text); do
+              CURRENT_ENV=$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query "Environment.Variables" --output json)
+              UPDATED_ENV=$(echo "$CURRENT_ENV" | python3 -c "import sys,json; d=json.load(sys.stdin); d['CLOUDFRONT_DOMAIN']='${CF_DOMAIN}'; print(json.dumps({'Variables':d}))")
+              aws lambda update-function-configuration --function-name "$FUNC_NAME" --environment "$UPDATED_ENV" --no-cli-pager > /dev/null
+              echo "Updated $FUNC_NAME"
+            done
+            echo "CLOUDFRONT_DOMAIN updated to ${CF_DOMAIN}"
+          fi
+
+  # -------------------------------------------------------
+  # 4. デプロイ後 E2Eテスト
+  # -------------------------------------------------------
+  e2e-test:
+    needs: [resolve-env, deploy-frontend]
+    if: always() && needs.deploy-frontend.result == 'success'
+    uses: ./.github/workflows/e2e-test.yml
+    with:
+      environment: ${{ needs.resolve-env.outputs.env_name }}
+      test_suite: api
+    secrets: inherit
