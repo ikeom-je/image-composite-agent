@@ -6,14 +6,22 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../lambda/python'))
 
-import boto3
-from moto import mock_aws
+try:
+    import boto3
+    from moto import mock_aws
+    _MOTO_AVAILABLE = True
+except ImportError:
+    _MOTO_AVAILABLE = False
+    # フォールバック: moto未インストール時もデコレータ評価でNameErrorを起こさないno-op
+    def mock_aws(cls):
+        return cls
 
 from rules_repository import RulesRepository, DefaultRuleProtected, RuleNotFound
 
 TABLE_NAME = 'TestRulesTable'
 
 
+@unittest.skipIf(not _MOTO_AVAILABLE, "moto/boto3 not installed")
 @mock_aws
 class TestRulesRepository(unittest.TestCase):
     def setUp(self):

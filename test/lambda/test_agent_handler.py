@@ -193,6 +193,9 @@ try:
     _MOTO_AVAILABLE = True
 except ImportError:
     _MOTO_AVAILABLE = False
+    # フォールバック: moto未インストール時もデコレータ評価でNameErrorを起こさないno-op
+    def mock_aws(cls):
+        return cls
 
 
 @unittest.skipIf(not _MOTO_AVAILABLE, "moto/boto3 not installed")
