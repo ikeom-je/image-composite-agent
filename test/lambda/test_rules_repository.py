@@ -6,14 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../lambda/python'))
 
-# 他テスト（test_image_fetcher_test.py 等）が `sys.modules['boto3'] = Mock()` で
-# グローバル置換している場合があるため、ここで本物のboto3を確実に再ロードする
-sys.modules.pop('boto3', None)
-sys.modules.pop('boto3.dynamodb', None)
-sys.modules.pop('boto3.dynamodb.table', None)
-
 try:
-    import boto3
     from moto import mock_aws
     _MOTO_AVAILABLE = True
 except ImportError:
@@ -30,8 +23,28 @@ TABLE_NAME = 'TestRulesTable'
 @unittest.skipIf(not _MOTO_AVAILABLE, "moto/boto3 not installed")
 @mock_aws
 class TestRulesRepository(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # 他テスト（test_image_fetcher_test.py 等）が `sys.modules['boto3'] = Mock()` で
+        # グローバル置換している場合があるため、本物のboto3を再ロード。
+        # tearDownClass で元の状態に戻すことで他テストへの副作用を回避する。
+        cls._saved_boto3_modules = {}
+        for key in list(sys.modules.keys()):
+            if key == 'boto3' or key.startswith('boto3.'):
+                cls._saved_boto3_modules[key] = sys.modules.pop(key)
+        import boto3 as _real_boto3
+        cls._real_boto3 = _real_boto3
+
+    @classmethod
+    def tearDownClass(cls):
+        for key in list(sys.modules.keys()):
+            if key == 'boto3' or key.startswith('boto3.'):
+                del sys.modules[key]
+        for key, value in cls._saved_boto3_modules.items():
+            sys.modules[key] = value
+
     def setUp(self):
-        self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+        self.dynamodb = self._real_boto3.resource('dynamodb', region_name='us-east-1')
         self.dynamodb.create_table(
             TableName=TABLE_NAME,
             KeySchema=[{'AttributeName': 'ruleId', 'KeyType': 'HASH'}],

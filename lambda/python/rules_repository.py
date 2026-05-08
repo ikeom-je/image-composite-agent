@@ -6,10 +6,6 @@ import time
 import uuid
 from typing import Dict, List, Optional
 
-try:
-    import boto3
-except ImportError:
-    boto3 = None
 
 def _get_default_region() -> str:
     """Lambda では AWS_REGION が設定される。ローカル/テストでは AWS_DEFAULT_REGION を使用。"""
@@ -35,7 +31,10 @@ class RulesRepository:
     """RulesTable に対する CRUD 操作を提供する。"""
 
     def __init__(self, table_name: str, region_name: Optional[str] = None):
-        if boto3 is None:
+        # 遅延 import: テスト時に他テストが sys.modules['boto3'] を Mock 化する副作用を回避
+        try:
+            import boto3
+        except ImportError:
             raise RuntimeError('boto3 is not available')
         self.table_name = table_name
         self._region = region_name or _get_default_region()
