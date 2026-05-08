@@ -187,6 +187,12 @@ if __name__ == '__main__':
 
 import json as _json_for_rules
 
+# 他テスト（test_image_fetcher_test.py 等）が `sys.modules['boto3'] = Mock()` で
+# グローバル置換している場合があるため、ここで本物のboto3を確実に再ロードする
+sys.modules.pop('boto3', None)
+sys.modules.pop('boto3.dynamodb', None)
+sys.modules.pop('boto3.dynamodb.table', None)
+
 try:
     import boto3 as _boto3_for_rules
     from moto import mock_aws
