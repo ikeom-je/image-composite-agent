@@ -68,30 +68,39 @@ test.describe('S3アップロード機能包括テスト', () => {
   });
 
   test('サムネイル生成確認', async ({ request }) => {
-    // 画像一覧を取得
-    const listResponse = await request.get(`${UPLOAD_API_URL}/images`, {
-      params: { maxKeys: '1' }
+    // テスト用PNGをアップロード（既存S3データに依存しないよう自己完結）
+    const presignedResponse = await request.post(`${UPLOAD_API_URL}/presigned-url`, {
+      data: {
+        fileName: 'thumbnail-test.png',
+        fileType: 'image/png',
+        fileSize: TEST_PNG_DATA.length
+      }
     });
+    expect(presignedResponse.status()).toBe(200);
+    const presignedData = await presignedResponse.json();
 
+    const uploadResponse = await request.put(presignedData.uploadUrl, {
+      data: TEST_PNG_DATA,
+      headers: { 'Content-Type': 'image/png' }
+    });
+    expect(uploadResponse.status()).toBe(200);
+
+    // S3トリガー → Lambda によるサムネイル生成を待機
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // アップロードした画像をキーで特定してサムネイルを確認
+    const listResponse = await request.get(`${UPLOAD_API_URL}/images`);
     expect(listResponse.status()).toBe(200);
-    
+
     const listData = await listResponse.json();
-    
-    if (listData.images.length > 0) {
-      const image = listData.images[0];
-      expect(image).toHaveProperty('thumbnailUrl');
-      expect(image.thumbnailUrl).toContain('amazonaws.com');
-      // サムネイルは元画像と同じURLの場合がある
-      
-      // サムネイルURLにアクセスして画像が取得できることを確認
-      const thumbnailResponse = await request.get(image.thumbnailUrl);
-      expect(thumbnailResponse.status()).toBe(200);
-      expect(thumbnailResponse.headers()['content-type']).toContain('image/png');
-      
-      const thumbnailData = await thumbnailResponse.text();
-      const thumbnailBuffer = Buffer.from(thumbnailData, 'base64');
-      expect(thumbnailBuffer.length).toBeGreaterThan(0);
-    }
+    const uploadedImage = listData.images.find((img: any) => img.key === presignedData.s3Key);
+    expect(uploadedImage).toBeDefined();
+    expect(uploadedImage).toHaveProperty('thumbnailUrl');
+    expect(uploadedImage.thumbnailUrl).toContain('amazonaws.com');
+
+    const thumbnailResponse = await request.get(uploadedImage.thumbnailUrl);
+    expect(thumbnailResponse.status()).toBe(200);
+    expect(thumbnailResponse.headers()['content-type']).toContain('image/png');
   });
 
   test('複数ファイル形式のサポート確認', async ({ request }) => {
