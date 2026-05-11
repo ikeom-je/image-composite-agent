@@ -24,12 +24,6 @@ export function useRulesApi() {
     return res.data.rules
   }
 
-  async function get(ruleId: string): Promise<Rule> {
-    const endpoint = getRulesEndpoint()
-    const res = await axios.get<{ rule: Rule }>(`${endpoint}/${ruleId}`, { timeout: 15000 })
-    return res.data.rule
-  }
-
   async function create(input: RuleCreateInput): Promise<Rule> {
     const endpoint = getRulesEndpoint()
     const res = await axios.post<{ rule: Rule }>(endpoint, input, {
@@ -63,5 +57,5 @@ export function useRulesApi() {
     return res.data
   }
 
-  return { list, get, create, update, remove, fetchPreview }
+  return { list, create, update, remove, fetchPreview }
 }

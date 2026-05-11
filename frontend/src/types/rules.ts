@@ -27,7 +27,7 @@ export interface RulesPreviewResponse {
   }
 }
 
-export interface RuleDraft {
+export interface PendingTestRule {
   name: string
   prompt: string
 }

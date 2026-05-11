@@ -85,18 +85,58 @@
     </section>
 
     <!-- ルール管理タブ -->
-    <RulesSection v-else-if="activeTab === 'rules'" />
+    <template v-else-if="activeTab === 'rules'">
+      <div class="space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <RuleList @create="onRuleCreate" />
+          </div>
+          <div>
+            <div v-if="!editorRule && !isCreatingRule" class="text-sm text-gray-400 py-12 text-center">
+              左から編集するルールを選択するか、「新規作成」を押してください
+            </div>
+            <RuleEditor
+              v-else
+              :rule="editorRule"
+              :is-new="isCreatingRule"
+              @saved="onRuleSaved"
+              @deleted="onRuleDeleted"
+            />
+          </div>
+        </div>
+        <PromptPreview />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useChatAgent } from '@/composables/useChatAgent'
-import RulesSection from '@/components/settings/RulesSection.vue'
+import RuleList from '@/components/settings/RuleList.vue'
+import RuleEditor from '@/components/settings/RuleEditor.vue'
+import PromptPreview from '@/components/settings/PromptPreview.vue'
+import { useRulesStore } from '@/stores/rules'
 
 const activeTab = ref<'model' | 'rules'>('model')
+
+const rulesStore = useRulesStore()
+const isCreatingRule = ref(false)
+const editorRule = computed(() => (isCreatingRule.value ? null : rulesStore.selectedRule))
+
+function onRuleCreate() {
+  isCreatingRule.value = true
+  rulesStore.select(null)
+}
+function onRuleSaved(ruleId: string) {
+  isCreatingRule.value = false
+  rulesStore.select(ruleId)
+}
+function onRuleDeleted() {
+  isCreatingRule.value = false
+}
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()

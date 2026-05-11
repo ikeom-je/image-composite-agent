@@ -36,8 +36,8 @@ export function useChatAgent() {
         message: trimmed,
         modelId: chatStore.effectiveModelId || undefined,
       }
-      if (chatStore.inlineRulesDraft) {
-        requestBody.inlineRules = [chatStore.inlineRulesDraft]
+      if (chatStore.pendingTestRule) {
+        requestBody.inlineRules = [chatStore.pendingTestRule]
       }
       const response = await axios.post(endpoint, requestBody, {
         headers: { 'Content-Type': 'application/json' },

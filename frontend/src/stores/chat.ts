@@ -4,7 +4,7 @@ import type { ChatMessage, CompositeCommand, ModelInfo } from '@/types/chat'
 
 const SESSION_STORAGE_KEY = 'chat-session-id'
 const MODEL_STORAGE_KEY = 'chat-selected-model'
-const RULE_DRAFT_STORAGE_KEY = '__rule_draft__'
+const PENDING_TEST_RULE_STORAGE_KEY = 'chat-pending-test-rule'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
@@ -19,9 +19,9 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.getItem(MODEL_STORAGE_KEY) || ''
   )
 
-  function loadInlineDraft(): { name: string; prompt: string } | null {
+  function loadPendingTestRule(): { name: string; prompt: string } | null {
     try {
-      const raw = localStorage.getItem(RULE_DRAFT_STORAGE_KEY)
+      const raw = localStorage.getItem(PENDING_TEST_RULE_STORAGE_KEY)
       if (!raw) return null
       const parsed = JSON.parse(raw)
       if (typeof parsed?.name === 'string' && typeof parsed?.prompt === 'string') {
@@ -33,15 +33,20 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  const inlineRulesDraft = ref<{ name: string; prompt: string } | null>(loadInlineDraft())
+  const pendingTestRule = ref<{ name: string; prompt: string } | null>(loadPendingTestRule())
 
-  function refreshInlineDraft() {
-    inlineRulesDraft.value = loadInlineDraft()
+  function setPendingTestRule(rule: { name: string; prompt: string }) {
+    localStorage.setItem(PENDING_TEST_RULE_STORAGE_KEY, JSON.stringify(rule))
+    pendingTestRule.value = rule
   }
 
-  function clearInlineDraft() {
-    localStorage.removeItem(RULE_DRAFT_STORAGE_KEY)
-    inlineRulesDraft.value = null
+  function refreshPendingTestRule() {
+    pendingTestRule.value = loadPendingTestRule()
+  }
+
+  function clearPendingTestRule() {
+    localStorage.removeItem(PENDING_TEST_RULE_STORAGE_KEY)
+    pendingTestRule.value = null
   }
 
   const messageCount = computed(() => messages.value.length)
@@ -142,7 +147,10 @@ export const useChatStore = defineStore('chat', () => {
     defaultModelId,
     selectedModelId,
     effectiveModelId,
-    inlineRulesDraft,
+    pendingTestRule,
+    setPendingTestRule,
+    refreshPendingTestRule,
+    clearPendingTestRule,
     addMessage,
     addLoadingMessage,
     replaceMessage,
@@ -151,7 +159,5 @@ export const useChatStore = defineStore('chat', () => {
     newSession,
     setModels,
     selectModel,
-    refreshInlineDraft,
-    clearInlineDraft,
   }
 })

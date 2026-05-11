@@ -4,7 +4,8 @@ import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useRulesStore } from '@/stores/rules'
-import type { Rule, RuleDraft } from '@/types/rules'
+import { useChatStore } from '@/stores/chat'
+import type { Rule, PendingTestRule } from '@/types/rules'
 
 const props = defineProps<{
   rule: Rule | null
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useRulesStore()
+const chatStore = useChatStore()
 const router = useRouter()
 
 const MAX_CHARS = 10000
@@ -31,8 +33,8 @@ const saving = ref(false)
 const charCount = computed(() => prompt.value.length)
 const overLimit = computed(() => charCount.value > MAX_CHARS)
 const renderedPrompt = computed(() => {
-  const html = marked(prompt.value, { breaks: true, gfm: true })
-  return DOMPurify.sanitize(html as string)
+  const html = marked.parse(prompt.value, { breaks: true, gfm: true, async: false }) as string
+  return DOMPurify.sanitize(html)
 })
 
 function syncFromProps() {
@@ -75,13 +77,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
 })
 
-onBeforeRouteLeave((_to, _from, next) => {
+onBeforeRouteLeave(() => {
   if (store.draftDirty && !window.confirm('未保存の変更があります。破棄して移動しますか？')) {
-    next(false)
-  } else {
-    store.setDraftDirty(false)
-    next()
+    return false
   }
+  store.setDraftDirty(false)
+  return true
 })
 
 const canSave = computed(() =>
@@ -128,8 +129,9 @@ async function onDelete() {
 }
 
 function onTestSend() {
-  const draft: RuleDraft = { name: name.value.trim() || '(無題)', prompt: prompt.value }
-  localStorage.setItem('__rule_draft__', JSON.stringify(draft))
+  const rule: PendingTestRule = { name: name.value.trim() || '(無題)', prompt: prompt.value }
+  chatStore.setPendingTestRule(rule)
+  store.setDraftDirty(false)
   router.push('/chat')
 }
 </script>
@@ -197,7 +199,7 @@ function onTestSend() {
         class="text-xs px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
         @click="onTestSend"
       >
-        このドラフトでテスト送信
+        保存せずに試す
       </button>
       <button
         v-if="rule && !rule.isDefault"

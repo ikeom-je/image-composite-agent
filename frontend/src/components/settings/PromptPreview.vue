@@ -8,8 +8,8 @@ const store = useRulesStore()
 
 const renderedPrompt = computed(() => {
   if (!store.preview) return ''
-  const html = marked(store.preview.fullPrompt, { breaks: true, gfm: true })
-  return DOMPurify.sanitize(html as string)
+  const html = marked.parse(store.preview.fullPrompt, { breaks: true, gfm: true, async: false }) as string
+  return DOMPurify.sanitize(html)
 })
 
 onMounted(() => {
