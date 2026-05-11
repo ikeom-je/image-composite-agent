@@ -1,12 +1,22 @@
 # 🎨 Image Compositor
 
-高性能・アルファチャンネル対応の画像合成 REST API システムです。**3画像同時合成**・**テキストオーバーレイ**・**自然言語チャットエージェント**に対応し、AWS CDK / Lambda / API Gateway で構築されたサーバーレスシステムです。
+## 機能概要
+
+**課題**: 映像制作・放送現場では画像の合成やテロップ挿入が頻繁に必要ですが、従来のツールは専門知識や複雑なパラメータ指定が求められ、ノンエンジニアには敷居が高い状況でした。
+
+**ねらい**: REST API による直接指定と、自然言語で指示できる AI Chat Agent の2通りのアプローチを提供し、エンジニアからノンエンジニアまで直感的に高品質な画像・動画を合成できるようにします。
+
+| 機能 | 概要 | 対象ユーザー |
+|------|------|------------|
+| **画像合成 API** | パラメータで画像・テキストを精密に合成。プログラムから直接呼び出せる REST エンドポイント | エンジニア・自動化ワークフロー |
+| **AI Chat Agent** | 「左上に画像を置いて」など自然言語で合成を指示。Strands Agents SDK + AWS Bedrock（Claude）で動作 | ノンエンジニア・対話的制作 |
+| **動画生成** | 合成結果から MP4・WEBM・AVI 動画を生成。Chat Agent からも呼び出し可能 | 映像制作・放送 |
 
 ## ✨ 主な特徴
 
 - **🎨 3画像同時合成**: 最大3つの画像を同時に合成（2画像との後方互換性完全保持）
 - **📝 テキストオーバーレイ**: 最大3つのテキストテロップを画像上に配置（日本語対応・折り返し・背景矩形）
-- **🤖 Chat Agent**: 自然言語で画像合成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応）
+- **🤖 Chat Agent**: 自然言語で画像合成・動画生成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応）
 - **📁 画像アップロード機能**: ドラッグ&ドロップによる直接 S3 アップロード
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
 - **🔧 柔軟な画像指定**: HTTP URL・S3 パス・テスト画像・アップロード画像に対応
@@ -97,33 +107,35 @@ curl "${API_URL}?image1=s3://${UPLOAD_BUCKET}/uploads/images/base.png&image2=s3:
 GET /images/composite
 ```
 
-### 必須パラメータ
+### パラメータ（画像指定）
+
+`image1`・`image2` を省略してテキストのみのリクエストも可能です。
 
 | パラメータ | 説明 | 例 |
 |-----------|------|-----|
 | `image1` | 1つ目の画像 | `test`, `s3://bucket/key`, `https://example.com/img.png` |
 | `image2` | 2つ目の画像 | `test`, `s3://bucket/key`, `https://example.com/img.png` |
+| `image3` | 3つ目の画像（省略可） | `test`, `s3://bucket/key`, `https://example.com/img.png` |
 
-### オプションパラメータ（画像）
+### オプションパラメータ（配置・形式）
 
 | パラメータ | 説明 | デフォルト |
 |-----------|------|-----------|
-| `image3` | 3つ目の画像（省略可） | - |
-| `baseImage` | ベース画像（`test`, `transparent`, `white`, `#RRGGBB`, `#RRGGBBAA`） | 透明背景 |
+| `baseImage` | ベース画像（`test`, `transparent`, `white`, `#RRGGBB`, `#RRGGBBAA`） | `#000000`（黒） |
 | `baseOpacity` | ベース画像の透明度（0〜100） | `100` |
 | `format` | 出力形式（`html` or `png`） | `html` |
-| `image1Width` | 1つ目の画像の幅 | 300 |
+| `image1Width` | 1つ目の画像の幅 | 200 |
 | `image1Height` | 1つ目の画像の高さ | 200 |
-| `image1X` | 1つ目の画像の X 座標 | 右端から 20px |
-| `image1Y` | 1つ目の画像の Y 座標 | 20 |
+| `image1X` | 1つ目の画像の X 座標 | 1700 |
+| `image1Y` | 1つ目の画像の Y 座標 | 96 |
 | `image2Width` | 2つ目の画像の幅 | 300 |
-| `image2Height` | 2つ目の画像の高さ | 200 |
-| `image2X` | 2つ目の画像の X 座標 | 右端から 20px |
-| `image2Y` | 2つ目の画像の Y 座標 | 1つ目の画像の下 |
+| `image2Height` | 2つ目の画像の高さ | 300 |
+| `image2X` | 2つ目の画像の X 座標 | 600 |
+| `image2Y` | 2つ目の画像の Y 座標 | 400 |
 | `image3Width` | 3つ目の画像の幅 | 300 |
-| `image3Height` | 3つ目の画像の高さ | 200 |
-| `image3X` | 3つ目の画像の X 座標 | 20 |
-| `image3Y` | 3つ目の画像の Y 座標 | 20 |
+| `image3Height` | 3つ目の画像の高さ | 300 |
+| `image3X` | 3つ目の画像の X 座標 | 1520 |
+| `image3Y` | 3つ目の画像の Y 座標 | 700 |
 
 ### オプションパラメータ（テキストオーバーレイ）
 
@@ -143,7 +155,7 @@ GET /images/composite
 | `text1MaxWidth` | 折り返し時の最大幅 (px) | - |
 | `text1Padding` | 背景のパディング (px) | 10 |
 
-> `text2`, `text3` も同じパラメータ体系です。テキストのみ（画像なし）のリクエストも可能です。
+> `text2`, `text3` も同じパラメータ体系です。
 
 ## 📁 S3 画像アップロード
 
@@ -161,6 +173,38 @@ curl -X POST "${UPLOAD_API_URL}/presigned-url" \
 # アップロード済み画像の一覧
 curl "${UPLOAD_API_URL}/images?maxKeys=20"
 ```
+
+## 🤖 Chat Agent
+
+自然言語で画像合成・動画生成を指示できます。AWS Bedrock の Claude（Sonnet 4.5 / Haiku 4.5）をバックエンドに使用し、会話履歴を DynamoDB で管理します。
+
+```bash
+export CHAT_API_URL=$(aws cloudformation describe-stacks \
+  --stack-name ImageProcessorApiStack \
+  --query 'Stacks[0].Outputs[?OutputKey==`ChatApiUrl`].OutputValue' \
+  --output text)
+
+# メッセージを送信（画像合成を自然言語で指示）
+curl -X POST "${CHAT_API_URL}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "テスト画像を左上と右下に配置して合成してください", "sessionId": "my-session-001"}'
+
+# モデルを指定して送信（デフォルト: Claude Sonnet 4.5）
+curl -X POST "${CHAT_API_URL}" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "動画を30秒で生成して", "sessionId": "my-session-001", "modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}'
+
+# 会話履歴を取得
+curl "${CHAT_API_URL}/history/my-session-001"
+
+# 会話履歴を削除
+curl -X DELETE "${CHAT_API_URL}/history/my-session-001"
+
+# 利用可能モデル一覧を取得
+curl "${CHAT_API_URL}/models"
+```
+
+> フロントエンド（`FRONTEND_URL`）の **Chat** タブからブラウザで対話的に利用することもできます。
 
 ## 🚨 トラブルシューティング
 
