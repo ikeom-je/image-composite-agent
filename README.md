@@ -1,53 +1,46 @@
 # 🎨 Image Compositor
 
-画像・映像の合成と動画生成を、REST API および AI Agent ベースの自然言語UIで提供する
-プロダクション対応プラットフォーム（AWS CDK / Lambda / API Gateway / DynamoDB）。
-px 座標・サイズの数値指定や、業界・会社が共有する暗黙知（テロップのセーフゾーン等）
-といった「いちいち説明することがストレスになる作業」を、AI Agent（Amazon Bedrock）が
-自然言語からの座標変換と永続化ルールによる制約注入で吸収し、誰もが直感的に扱える
-自動化合成ワークフローを実現する。
+## 概要
 
-## 🎯 ユーザーストーリーと機能
+映像制作・放送現場では画像の合成やテロップ挿入が頻繁に必要ですが、従来のツールは専門知識や複雑なパラメータ指定が求められ、ノンエンジニアには敷居が高い状況でした。本プロジェクトは REST API による直接指定と、自然言語で指示できる AI Chat Agent の2通りのアプローチを提供し、エンジニアからノンエンジニアまで直感的に高品質な画像・動画を合成できるようにします。
 
-| # | ユーザーがやりたいこと | 提供機能 | 詳細 |
-|---|---|---|---|
-| ① | API を自社アプリに組み込みたい | 画像合成・動画生成 REST API | [image-composition](.kiro/specs/image-composition/) |
-| ② | 配置・サイズを直感的に指示したい | AI Agent による自然言語 UI/UX | [strands-agent](.kiro/specs/strands-agent/) |
-| ③ | 業界・会社の暗黙知を Agent に効かせたい | カスタムルールプロンプト | [custom-rules-prompt](.kiro/specs/custom-rules-prompt/) |
+| 機能 | 概要 | 対象ユーザー |
+|------|------|------------|
+| **画像合成 API** | パラメータで画像・テキストを精密に合成。プログラムから直接呼び出せる REST エンドポイント | エンジニア・自動化ワークフロー |
+| **AI Chat Agent** | 「左上に画像を置いて」など自然言語で合成を指示。Strands Agents SDK + AWS Bedrock マルチモデル対応 | ノンエンジニア・対話的制作 |
+| **動画生成** | 合成結果から MP4・WEBM・AVI 動画を生成。Chat Agent からも呼び出し可能 | 映像制作・放送 |
+| **カスタムルールプロンプト** | 業界・会社の暗黙知をルール化し、Chat Agent の判断に自動注入。標準字幕配置規定をプリセット同梱 | 運用担当・映像制作 |
 
-## ✨ 特徴
+## ✨ 主な特徴
 
-- **画像合成と動画生成の統合API**: 同じパラメータ体系で画像・動画を生成（テキストオーバーレイ・透過対応）
-- **自然言語 → px 変換**: 「左下に小さめ」のような直感表現を AI Agent が座標 (x,y) とサイズ (w,h) に翻訳
-- **マルチモデル動的切替**: Amazon Nova 2 Lite（デフォルト）/ Claude Sonnet 4.5 / Haiku 等をリクエスト単位で選択
-- **暗黙知のルール化と自動注入**: 業界・会社固有のルールを system prompt に動的注入し Agent の判断に制約を作用
-- **業界標準ルールのプリセット同梱**: 字幕・テロップ配置の標準規定をルールとして同梱、即時利用可能
+- **🎨 3画像同時合成**: 最大3つの画像を同時に合成（2画像との後方互換性完全保持）
+- **📝 テキストオーバーレイ**: 最大3つのテキストテロップを画像上に配置（日本語対応・折り返し・背景矩形）
+- **🤖 Chat Agent**: 自然言語で画像合成・動画生成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応、デフォルトは Amazon Nova 2 Lite）
+- **📋 カスタムルールプロンプト**: 業界・会社の暗黙知をルール化して system prompt に自動注入。標準字幕配置規定をプリセット同梱
+- **📁 画像アップロード機能**: ドラッグ&ドロップによる直接 S3 アップロード
+- **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
+- **🔧 柔軟な画像指定**: HTTP URL・S3 パス・テスト画像・アップロード画像に対応
 
 ## 🏗️ アーキテクチャ
 
 ```
-                                                      ┌────────────────────┐
-                                                      │ ImageProcessor      │
-                          ──HTTP─① POST /images/────▶ │ Lambda              │ ──▶ S3 / CloudFront
-                  ┌─────▶          composite          │ (Pillow / ffmpeg)   │
-                  │                                   └─────────▲──────────┘
-                  │                                             │ 内部呼出
-                  │       ┌──────────────┐    ┌────────────┐    │
-                  │       │ ChatPage     │    │ Agent      │    │
-┌───────────┐     │       │ (自然言語UI) │ ──▶│ Lambda     │ ───┘
-│           │ ──②─┴─────▶ └──────────────┘    │ (Strands   │
-│ ユーザー   │             POST /chat          │  + Bedrock)│ ──▶ DDB ChatHistory
-│           │ ──③─┐       (+ ruleIds /        │            │
-└───────────┘     │       inlineRules)        │   ▲ load   │
-                  │                           └───┼────────┘
-                  │       ┌──────────────┐        │
-                  │       │ SettingsPage │        │
-                  └─────▶ │ (ルール管理) │ ──────▶ /chat/rules ──▶ DDB Rules
-                          └──────────────┘                       （system prompt に注入）
+┌──────────────────┐    ┌───────────────────┐    ┌─────────────────┐
+│   API Gateway    │───▶│ Image Processor   │───▶│   Amazon S3     │
+│                  │    │ Lambda (Py 3.12)  │    │  (画像/動画)     │
+│ /images/composite│    │ + Pillow + boto3  │    └────────┬────────┘
+│ /upload          │    └───────────────────┘             │
+│ /chat            │    ┌───────────────────┐    ┌────────▼────────┐
+│                  │───▶│ Agent Lambda      │───▶│  CloudFront     │
+└──────────────────┘    │ (Py 3.12, ARM64)  │    │  Distribution   │
+                        │ Strands Agent SDK │    └────────┬────────┘
+        ┌───────────────┤                   │             │
+        │               └───────────────────┘    ┌────────▼────────┐
+        ▼                        │               │   S3 Bucket     │
+┌───────────────┐       ┌───────▼───────┐       │  Vue.js 3       │
+│   DynamoDB    │       │  AWS Bedrock  │       │  フロントエンド   │
+│ ChatHistory   │       │ Claude 4.5    │       └─────────────────┘
+└───────────────┘       └───────────────┘
 ```
-
-- **環境戦略**: dev / staging / production（[steering/architecture.md](.kiro/steering/architecture.md)）
-- **開発ルール**: [.kiro/steering/](.kiro/steering/) を参照
 
 ## 🚀 前提条件
 
@@ -185,6 +178,8 @@ curl "${UPLOAD_API_URL}/images?maxKeys=20"
 
 自然言語で画像合成・動画生成を指示できます。AWS Bedrock のマルチモデル（Amazon Nova 2 Lite をデフォルト、Claude Sonnet 4.5 / Haiku 等に切替可）をバックエンドに使用し、会話履歴を DynamoDB で管理します。
 
+`Settings` 画面の「ルール」タブから **カスタムルールプロンプト**（業界・会社固有の暗黙知）を編集・有効化すると、`POST /chat` 時に system prompt へ自動注入され Agent の判断に制約として作用します。詳細仕様は [.kiro/specs/custom-rules-prompt/](.kiro/specs/custom-rules-prompt/) を参照。
+
 ```bash
 export CHAT_API_URL=$(aws cloudformation describe-stacks \
   --stack-name ImageProcessorApiStack \
@@ -196,7 +191,7 @@ curl -X POST "${CHAT_API_URL}" \
   -H "Content-Type: application/json" \
   -d '{"message": "テスト画像を左上と右下に配置して合成してください", "sessionId": "my-session-001"}'
 
-# モデルを指定して送信（デフォルト: Claude Sonnet 4.5）
+# モデルを指定して送信（デフォルト: Amazon Nova 2 Lite）
 curl -X POST "${CHAT_API_URL}" \
   -H "Content-Type: application/json" \
   -d '{"message": "動画を30秒で生成して", "sessionId": "my-session-001", "modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}'
