@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-2xl mx-auto p-6">
+  <div class="max-w-5xl mx-auto p-6">
     <div class="flex items-center gap-3 mb-6">
       <router-link to="/chat" class="text-gray-400 hover:text-gray-600 transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -9,8 +9,30 @@
       <h1 class="text-xl font-semibold text-gray-800">Agent 設定</h1>
     </div>
 
-    <!-- モデル選択 -->
-    <section class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
+    <!-- タブ切替 -->
+    <div class="flex border-b border-gray-200 mb-6">
+      <button
+        class="px-4 py-2 text-sm font-medium transition-colors"
+        :class="activeTab === 'model'
+          ? 'text-blue-600 border-b-2 border-blue-500'
+          : 'text-gray-500 hover:text-gray-700'"
+        @click="activeTab = 'model'"
+      >
+        モデル
+      </button>
+      <button
+        class="px-4 py-2 text-sm font-medium transition-colors"
+        :class="activeTab === 'rules'
+          ? 'text-blue-600 border-b-2 border-blue-500'
+          : 'text-gray-500 hover:text-gray-700'"
+        @click="activeTab = 'rules'"
+      >
+        ルール（System Prompt）
+      </button>
+    </div>
+
+    <!-- モデル選択タブ -->
+    <section v-if="activeTab === 'model'" class="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
       <h2 class="text-sm font-medium text-gray-700 mb-3">使用モデル</h2>
       <p class="text-xs text-gray-500 mb-4">チャットで使用するAIモデルを選択してください。</p>
 
@@ -61,6 +83,9 @@
         </label>
       </div>
     </section>
+
+    <!-- ルール管理タブ -->
+    <RulesSection v-else-if="activeTab === 'rules'" />
   </div>
 </template>
 
@@ -69,6 +94,9 @@ import { ref, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useConfigStore } from '@/stores/config'
 import { useChatAgent } from '@/composables/useChatAgent'
+import RulesSection from '@/components/settings/RulesSection.vue'
+
+const activeTab = ref<'model' | 'rules'>('model')
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()
