@@ -117,12 +117,12 @@ Strands Agent の system prompt に外部から **表現規定ルール（カス
 
 ## Req 8: 管理画面ナビゲーション
 
-**説明**: ルール管理画面へのナビゲーションを既存UIに追加する。
+**説明**: ChatPage 配下の既存設定画面（`/chat/settings`）を拡張し、モデル選択とルール管理を同居させる。
 
 **Acceptance Criteria**:
-- AC 8.1: ナビゲーションタブに `Settings` が追加されていること（`Portal | APIDemo | ChatAgent | Settings`）
-- AC 8.2: `/settings` ルートが追加されており、SettingsPageコンポーネントが表示されること
-- AC 8.3: 既存のナビゲーション動作（active状態、レスポンシブ）が維持されていること
+- AC 8.1: 既存の `/chat/settings` ページがタブ式UIに拡張され、「モデル」「ルール（System Prompt）」の2タブを持つこと
+- AC 8.2: 「ルール」タブから RulesSection コンポーネントが表示されること
+- AC 8.3: 既存のモデル選択UI（「モデル」タブ）が後方互換で維持されていること
 
 ---
 
