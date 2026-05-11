@@ -4,6 +4,7 @@ import type { ChatMessage, CompositeCommand, ModelInfo } from '@/types/chat'
 
 const SESSION_STORAGE_KEY = 'chat-session-id'
 const MODEL_STORAGE_KEY = 'chat-selected-model'
+const RULE_DRAFT_STORAGE_KEY = '__rule_draft__'
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
@@ -17,6 +18,31 @@ export const useChatStore = defineStore('chat', () => {
   const selectedModelId = ref<string>(
     localStorage.getItem(MODEL_STORAGE_KEY) || ''
   )
+
+  function loadInlineDraft(): { name: string; prompt: string } | null {
+    try {
+      const raw = localStorage.getItem(RULE_DRAFT_STORAGE_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.name === 'string' && typeof parsed?.prompt === 'string') {
+        return { name: parsed.name, prompt: parsed.prompt }
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  const inlineRulesDraft = ref<{ name: string; prompt: string } | null>(loadInlineDraft())
+
+  function refreshInlineDraft() {
+    inlineRulesDraft.value = loadInlineDraft()
+  }
+
+  function clearInlineDraft() {
+    localStorage.removeItem(RULE_DRAFT_STORAGE_KEY)
+    inlineRulesDraft.value = null
+  }
 
   const messageCount = computed(() => messages.value.length)
 
@@ -116,6 +142,7 @@ export const useChatStore = defineStore('chat', () => {
     defaultModelId,
     selectedModelId,
     effectiveModelId,
+    inlineRulesDraft,
     addMessage,
     addLoadingMessage,
     replaceMessage,
@@ -124,5 +151,7 @@ export const useChatStore = defineStore('chat', () => {
     newSession,
     setModels,
     selectModel,
+    refreshInlineDraft,
+    clearInlineDraft,
   }
 })

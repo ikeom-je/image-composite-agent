@@ -31,18 +31,18 @@ export function useChatAgent() {
 
     try {
       const endpoint = getChatApiEndpoint()
-      const response = await axios.post(
-        endpoint,
-        {
-          sessionId: chatStore.sessionId,
-          message: trimmed,
-          modelId: chatStore.effectiveModelId || undefined,
-        },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 90000,
-        }
-      )
+      const requestBody: Record<string, unknown> = {
+        sessionId: chatStore.sessionId,
+        message: trimmed,
+        modelId: chatStore.effectiveModelId || undefined,
+      }
+      if (chatStore.inlineRulesDraft) {
+        requestBody.inlineRules = [chatStore.inlineRulesDraft]
+      }
+      const response = await axios.post(endpoint, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 90000,
+      })
 
       const { content, media, modelId: respModelId, modelName: respModelName } = response.data.response
 

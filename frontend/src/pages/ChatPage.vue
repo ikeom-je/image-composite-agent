@@ -32,6 +32,9 @@
       </div>
     </div>
 
+    <!-- ドラフトバナー -->
+    <DraftBanner class="mb-2 mx-3 mt-2" />
+
     <!-- メッセージ一覧 -->
     <ChatMessageList :messages="chatStore.messages" />
 
@@ -47,6 +50,7 @@ import { useConfigStore } from '@/stores/config'
 import { useChatAgent } from '@/composables/useChatAgent'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
+import DraftBanner from '@/components/settings/DraftBanner.vue'
 
 const chatStore = useChatStore()
 const configStore = useConfigStore()
@@ -68,6 +72,7 @@ async function onClear() {
 }
 
 onMounted(async () => {
+  chatStore.refreshInlineDraft()
   if (!configStore.isLoaded) {
     await configStore.loadConfig()
   }
