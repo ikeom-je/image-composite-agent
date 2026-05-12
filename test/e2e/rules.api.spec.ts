@@ -47,16 +47,16 @@ test.describe('Rules API テスト', () => {
   // ===== 一覧・デフォルトルール =====
 
   test.describe('GET /chat/rules', () => {
-    test('AC 2.1 / 6.1 / 6.2: デフォルトルール（JAA）が含まれる', async () => {
+    test('AC 2.1 / 6.1 / 6.2: プリセットルールが含まれる', async () => {
       const res = await api.get(`${TEST_CONFIG.chatApiUrl}/rules`)
       expect(res.status()).toBe(200)
       const body = await res.json()
       expect(Array.isArray(body.rules)).toBe(true)
       expect(body.rules.length).toBeGreaterThan(0)
-      const jaa = body.rules.find((r: any) => r.ruleId === DEFAULT_RULE_ID)
-      expect(jaa, 'デフォルトルールが存在すること').toBeDefined()
-      expect(jaa.isDefault).toBe(true)
-      expect(jaa.name).toContain('JAA')
+      const preset = body.rules.find((r: any) => r.ruleId === DEFAULT_RULE_ID)
+      expect(preset, 'デフォルトルールが存在すること').toBeDefined()
+      expect(preset.isDefault).toBe(true)
+      expect(preset.name).toMatch(/字幕|テロップ|業界標準/)
     })
   })
 
