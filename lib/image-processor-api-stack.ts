@@ -736,7 +736,7 @@ else:
         RULES_MAX_PROMPT_CHARS: '10000',
         RULES_MAX_COUNT: '5',
         RULES_MAX_COMBINED_CHARS: '20000',
-        AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+        AGENT_MODEL_ID: process.env.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0',
         BEDROCK_REGION: process.env.BEDROCK_REGION || 'us-east-1',
         S3_RESOURCES_BUCKET: this.resourcesBucket.bucketName,
         S3_UPLOAD_BUCKET: this.uploadBucket.bucketName,

@@ -7,14 +7,16 @@
 | 機能 | 概要 | 対象ユーザー |
 |------|------|------------|
 | **画像合成 API** | パラメータで画像・テキストを精密に合成。プログラムから直接呼び出せる REST エンドポイント | エンジニア・自動化ワークフロー |
-| **AI Chat Agent** | 「左上に画像を置いて」など自然言語で合成を指示。Strands Agents SDK + AWS Bedrock（Claude）で動作 | ノンエンジニア・対話的制作 |
+| **AI Chat Agent** | 「左上に画像を置いて」など自然言語で合成を指示。Strands Agents SDK + AWS Bedrock マルチモデル対応 | ノンエンジニア・対話的制作 |
 | **動画生成** | 合成結果から MP4・WEBM・AVI 動画を生成。Chat Agent からも呼び出し可能 | 映像制作・放送 |
+| **カスタムルールプロンプト** | 業界・会社の暗黙知をルール化し、Chat Agent の判断に自動注入。標準字幕配置規定をプリセット同梱 | 運用担当・映像制作 |
 
 ## ✨ 主な特徴
 
 - **🎨 3画像同時合成**: 最大3つの画像を同時に合成（2画像との後方互換性完全保持）
 - **📝 テキストオーバーレイ**: 最大3つのテキストテロップを画像上に配置（日本語対応・折り返し・背景矩形）
-- **🤖 Chat Agent**: 自然言語で画像合成・動画生成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応）
+- **🤖 Chat Agent**: 自然言語で画像合成・動画生成を指示（Strands Agents SDK + AWS Bedrock マルチモデル対応、デフォルトは Amazon Nova 2 Lite）
+- **📋 カスタムルールプロンプト**: 業界・会社の暗黙知をルール化して system prompt に自動注入。標準字幕配置規定をプリセット同梱
 - **📁 画像アップロード機能**: ドラッグ&ドロップによる直接 S3 アップロード
 - **🎯 アルファチャンネル対応**: 透過情報を保持した高品質な画像合成
 - **🔧 柔軟な画像指定**: HTTP URL・S3 パス・テスト画像・アップロード画像に対応
@@ -174,7 +176,9 @@ curl "${UPLOAD_API_URL}/images?maxKeys=20"
 
 ## 🤖 Chat Agent
 
-自然言語で画像合成・動画生成を指示できます。AWS Bedrock の Claude（Sonnet 4.5 / Haiku 4.5）をバックエンドに使用し、会話履歴を DynamoDB で管理します。
+自然言語で画像合成・動画生成を指示できます。AWS Bedrock のマルチモデル（Amazon Nova 2 Lite をデフォルト、Claude Sonnet 4.5 / Haiku 等に切替可）をバックエンドに使用し、会話履歴を DynamoDB で管理します。
+
+`Settings` 画面の「ルール」タブから **カスタムルールプロンプト**（業界・会社固有の暗黙知）を編集・有効化すると、`POST /chat` 時に system prompt へ自動注入され Agent の判断に制約として作用します。詳細仕様は [.kiro/specs/custom-rules-prompt/](.kiro/specs/custom-rules-prompt/) を参照。
 
 ```bash
 export CHAT_API_URL=$(aws cloudformation describe-stacks \
@@ -187,7 +191,7 @@ curl -X POST "${CHAT_API_URL}" \
   -H "Content-Type: application/json" \
   -d '{"message": "テスト画像を左上と右下に配置して合成してください", "sessionId": "my-session-001"}'
 
-# モデルを指定して送信（デフォルト: Claude Sonnet 4.5）
+# モデルを指定して送信（デフォルト: Amazon Nova 2 Lite）
 curl -X POST "${CHAT_API_URL}" \
   -H "Content-Type: application/json" \
   -d '{"message": "動画を30秒で生成して", "sessionId": "my-session-001", "modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}'
