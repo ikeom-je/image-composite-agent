@@ -172,6 +172,7 @@ jobs:
             --project=upload-tests \
             --project=selection-tests \
             --project=integration-tests \
+            --project=settings-tests \
             --reporter=list
         env:
           API_URL: ${{ needs.resolve-env.outputs.api_url }}

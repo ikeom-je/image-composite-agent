@@ -31,6 +31,7 @@ export default defineConfig({
         /image-selection\.spec\.ts/,
         /integration-workflow\.spec\.ts/,
         /chat-agent\.spec\.ts/,
+        /settings\.spec\.ts/,
       ],
       use: { ...devices['Desktop Chrome'] },
     },
@@ -42,6 +43,7 @@ export default defineConfig({
         /image-selection\.spec\.ts/,
         /integration-workflow\.spec\.ts/,
         /chat-agent\.spec\.ts/,
+        /settings\.spec\.ts/,
       ],
       use: { ...devices['Desktop Firefox'] },
     },
@@ -53,6 +55,7 @@ export default defineConfig({
         /image-selection\.spec\.ts/,
         /integration-workflow\.spec\.ts/,
         /chat-agent\.spec\.ts/,
+        /settings\.spec\.ts/,
       ],
       use: { ...devices['Desktop Safari'] },
     },
@@ -106,6 +109,14 @@ export default defineConfig({
     {
       name: 'chat-agent-tests',
       testMatch: /chat-agent\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
+      },
+    },
+    {
+      name: 'settings-tests',
+      testMatch: /settings\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: process.env.FRONTEND_URL || 'https://frontend.example.com',
