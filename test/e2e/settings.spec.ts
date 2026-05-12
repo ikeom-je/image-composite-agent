@@ -20,7 +20,7 @@ test.describe('Settings ルール管理 UI', () => {
     if (!FRONTEND_URL) test.skip()
     // 残存する localStorage の pending test rule をクリーンアップ
     await page.goto(`${FRONTEND_URL}/`)
-    await page.evaluate(() => localStorage.removeItem('pending-test-rule'))
+    await page.evaluate(() => localStorage.removeItem('chat-pending-test-rule'))
     await page.goto(`${FRONTEND_URL}/chat/settings`)
   })
 
