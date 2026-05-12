@@ -64,9 +64,12 @@ inclusion: auto
 - `/images/composite` - 画像合成
 - `/upload/presigned-url` - アップロードURL取得
 - `/upload/images` - アップロード済み画像一覧
-- `/chat` - Chat Agent（POST: メッセージ送信）
+- `/chat` - Chat Agent（POST: メッセージ送信、 任意フィールド `ruleIds` / `inlineRules` でカスタムルール注入可）
 - `/chat/history` - 会話履歴（GET: 取得、DELETE: 削除）
 - `/chat/models` - 利用可能モデル一覧（GET）
+- `/chat/rules` - カスタムルールプロンプト CRUD（GET一覧 / POST作成）
+- `/chat/rules/{ruleId}` - 個別ルール（GET / PUT / DELETE、 デフォルトルール削除は403）
+- `/chat/rules/preview` - 結合済み system prompt プレビュー（GET、 静的パスを `{ruleId}` より先に定義）
 
 ### `/images/composite` のデフォルト値（Issue #58 / Req 21）
 
@@ -125,9 +128,9 @@ mode 判定は `image2` / `image3` の有無のみで決定（テキスト有無
 - 永続的: S3に保存
 
 ### フロントエンド（Vue.js）
-- Piniaストア: app、config、image、notification、chat
+- Piniaストア: app、config、image、notification、chat、rules
 - ローカル状態: コンポーネントのref/reactive
-- localStorageなし: S3からの動的設定を使用
+- localStorage は原則使用しない（設定は S3 の `config.json` から動的取得）。例外: `chat-session-id` / `chat-selected-model` / `chat-pending-test-rule` の3キーのみ、ユーザー体験継続性のためにブラウザに保持し、`chatStore` 内に I/O を集約
 
 ## エラーハンドリング
 
