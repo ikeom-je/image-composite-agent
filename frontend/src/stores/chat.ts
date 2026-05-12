@@ -122,6 +122,8 @@ export const useChatStore = defineStore('chat', () => {
   function newSession() {
     sessionId.value = crypto.randomUUID()
     messages.value = []
+    // セッションリセット時はテスト送信中のドラフトも消す（AC 12.5）
+    clearPendingTestRule()
   }
 
   function setModels(models: ModelInfo[], defaultId: string) {
