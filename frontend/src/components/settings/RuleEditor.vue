@@ -143,8 +143,9 @@ function onTestSend() {
     </h2>
 
     <div>
-      <label class="block text-xs text-gray-600 mb-1">ルール名（最大100字）</label>
+      <label for="rule-name-input" class="block text-xs text-gray-600 mb-1">ルール名（最大100字）</label>
       <input
+        id="rule-name-input"
         v-model="name"
         type="text"
         maxlength="100"
