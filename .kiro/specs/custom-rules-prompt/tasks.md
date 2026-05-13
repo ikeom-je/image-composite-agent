@@ -163,77 +163,79 @@ _要件: 全Req_
 ### タスク12: spec準備とブランチ準備
 _要件: 8.1-8.3_
 
-- [ ] 12.1 worktree作成: `git worktree add ../image-composite-agent-issue9 -b feature/issue9-rules-admin-ui dev`
-- [ ] 12.2 requirements.md / design.md（フロントエンド設計）を読み返す
-- [ ] 12.3 dev環境のAPI（issue #8）が動作中であることを確認
+- [x] 12.1 worktree作成: `git worktree add ../image-composite-agent-issue9 -b feature/issue9-rules-admin-ui dev`
+- [x] 12.2 requirements.md / design.md（フロントエンド設計）を読み返す
+- [x] 12.3 dev環境のAPI（issue #8）が動作中であることを確認
 
-### タスク13: ナビゲーション追加
+### タスク13: ナビゲーション統合（実装で方針変更）
 _要件: 8.1-8.3_
 
-- [ ] 13.1 `frontend/src/router/index.ts` に `/settings` ルート追加
-- [ ] 13.2 `frontend/src/components/AppShell.vue` のナビゲーションに `Settings` タブ追加
+> 既存 `/chat/settings`（Agent モデル設定）が存在したため、新規ルート追加ではなく **既存ページのタブ式拡張** で対応。AppShell.vue への変更は不要。
+
+- [x] 13.1 既存 `/chat/settings` ルートを利用（新規ルート追加は不要）
+- [x] 13.2 AppShell.vue は変更せず、`/chat/settings` 内のタブ切替で対応
 
 ### タスク14: 型定義 / API クライアント / Pinia store
 _要件: 9.1-9.6, 10.1-10.8, 11.1-11.4_
 
-- [ ] 14.1 `frontend/src/types/rules.ts` 新規作成（`Rule`, `InlineRule`, `RulesPreviewResponse`, `RuleDraft`）
-- [ ] 14.2 `frontend/src/composables/useRulesApi.ts` 新規作成（CRUD + preview、`types/rules.ts` を使用）
-- [ ] 14.3 `frontend/src/stores/rules.ts` 新規作成（Pinia store）
-- [ ] 14.4 fetchAll, create, update, remove, fetchPreview の実装
-- [ ] 14.5 ローディング/エラー状態の管理
+- [x] 14.1 `frontend/src/types/rules.ts` 新規作成（`Rule`, `InlineRule`, `RulesPreviewResponse`, `RuleDraft`）
+- [x] 14.2 `frontend/src/composables/useRulesApi.ts` 新規作成（CRUD + preview、`types/rules.ts` を使用）
+- [x] 14.3 `frontend/src/stores/rules.ts` 新規作成（Pinia store）
+- [x] 14.4 fetchAll, create, update, remove, fetchPreview の実装
+- [x] 14.5 ローディング/エラー状態の管理
 
 ### タスク15: ルール一覧UI
 _要件: 9.1-9.6_
 
-- [ ] 15.1 `frontend/src/pages/SettingsPage.vue` 新規作成（メインレイアウト）
-- [ ] 15.2 `frontend/src/components/settings/RuleList.vue` 新規作成
-- [ ] 15.3 `frontend/src/components/settings/RuleListItem.vue` 新規作成（カード）
-- [ ] 15.4 isActive トグル実装、即時API反映
-- [ ] 15.5 デフォルトルールバッジ表示
-- [ ] 15.6 削除ボタン（デフォルトルールでは非表示）+ 確認ダイアログ
-- [ ] 15.7 「+ 新規作成」ボタン
+- [x] 15.1 `frontend/src/pages/SettingsPage.vue` 新規作成（メインレイアウト）
+- [x] 15.2 `frontend/src/components/settings/RuleList.vue` 新規作成
+- [x] 15.3 `frontend/src/components/settings/RuleListItem.vue` 新規作成（カード）
+- [x] 15.4 isActive トグル実装、即時API反映
+- [x] 15.5 デフォルトルールバッジ表示
+- [x] 15.6 削除ボタン（デフォルトルールでは非表示）+ 確認ダイアログ
+- [x] 15.7 「+ 新規作成」ボタン
 
 ### タスク16: ルール編集UI
 _要件: 10.1-10.8_
 
-- [ ] 16.1 `frontend/src/components/settings/RuleEditor.vue` 新規作成
-- [ ] 16.2 名前/本文/Active のフォーム実装
-- [ ] 16.3 Markdownプレビュートグル（`marked` + `DOMPurify`）
-- [ ] 16.4 文字数カウント表示と上限警告
-- [ ] 16.5 保存ボタン（POST/PUT 自動切替）
-- [ ] 16.6 未保存変更検知（draftDirty 状態管理）
-- [ ] 16.7 `beforeRouteLeave` ガード
-- [ ] 16.8 `beforeunload` ガード
+- [x] 16.1 `frontend/src/components/settings/RuleEditor.vue` 新規作成
+- [x] 16.2 名前/本文/Active のフォーム実装
+- [x] 16.3 Markdownプレビュートグル（`marked` + `DOMPurify`）
+- [x] 16.4 文字数カウント表示と上限警告
+- [x] 16.5 保存ボタン（POST/PUT 自動切替）
+- [x] 16.6 未保存変更検知（draftDirty 状態管理）
+- [x] 16.7 `beforeRouteLeave` ガード
+- [x] 16.8 `beforeunload` ガード
 
 ### タスク17: System prompt プレビュー
 _要件: 11.1-11.4_
 
-- [ ] 17.1 `frontend/src/components/settings/PromptPreview.vue` 新規作成
-- [ ] 17.2 `GET /chat/rules/preview` 呼び出し
-- [ ] 17.3 結合プロンプトの Markdown レンダリング
-- [ ] 17.4 ルール数・文字数の表示
-- [ ] 17.5 ルール変更後のプレビュー再取得
+- [x] 17.1 `frontend/src/components/settings/PromptPreview.vue` 新規作成
+- [x] 17.2 `GET /chat/rules/preview` 呼び出し
+- [x] 17.3 結合プロンプトの Markdown レンダリング
+- [x] 17.4 ルール数・文字数の表示
+- [x] 17.5 ルール変更後のプレビュー再取得
 
 ### タスク18: テスト送信機能
 _要件: 4.1-4.4, 12.1-12.5_
 
-- [ ] 18.1 RuleEditor に「テスト送信」ボタン追加
-- [ ] 18.2 localStorage `__rule_draft__` 保存→`/chat-agent`遷移
-- [ ] 18.3 `frontend/src/components/settings/DraftBanner.vue` 新規作成
-- [ ] 18.4 ChatPage で localStorage 検出→バナー表示
-- [ ] 18.5 ChatPage の useChatAgent.ts 拡張: 送信時に `inlineRules` を含める
-- [ ] 18.6 「解除」ボタン・会話リセットで localStorage 消去
+- [x] 18.1 RuleEditor に「テスト送信」ボタン追加
+- [x] 18.2 localStorage `__rule_draft__` 保存→`/chat-agent`遷移
+- [x] 18.3 `frontend/src/components/settings/DraftBanner.vue` 新規作成
+- [x] 18.4 ChatPage で localStorage 検出→バナー表示
+- [x] 18.5 ChatPage の useChatAgent.ts 拡張: 送信時に `inlineRules` を含める
+- [x] 18.6 「解除」ボタン・会話リセットで localStorage 消去
 
 ### タスク19: フロント単体/E2Eテスト
 _要件: 13.5_
 
-- [ ] 19.1 `test/e2e/settings.spec.ts` 新規作成
-- [ ] 19.2 ナビゲーション表示テスト
-- [ ] 19.3 一覧表示・トグル・削除テスト
-- [ ] 19.4 編集・保存・文字数警告テスト
-- [ ] 19.5 デフォルトルール保護テスト
-- [ ] 19.6 プレビュー表示テスト
-- [ ] 19.7 テスト送信→ChatPageバナー表示テスト
+- [x] 19.1 `test/e2e/settings.spec.ts` 新規作成
+- [x] 19.2 ナビゲーション表示テスト
+- [x] 19.3 一覧表示・トグル・削除テスト
+- [x] 19.4 編集・保存・文字数警告テスト
+- [x] 19.5 デフォルトルール保護テスト
+- [x] 19.6 プレビュー表示テスト
+- [x] 19.7 テスト送信→ChatPageバナー表示テスト
 
 ### タスク20: dev環境でのE2E動作確認
 _要件: 全Req_
@@ -247,7 +249,7 @@ _要件: 全Req_
 _要件: 全Req_
 
 - [ ] 21.1 PR作成前チェックリスト（上部）を実行
-- [ ] 21.2 PRをdevブランチへ向けて作成、issue #9 を参照
+- [x] 21.2 PRをdevブランチへ向けて作成、issue #9 を参照（PR #85）
 - [ ] 21.3 レビュー対応・マージ
 - [ ] 21.4 worktree削除
 

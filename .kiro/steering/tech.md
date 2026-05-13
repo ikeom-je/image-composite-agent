@@ -20,6 +20,7 @@ inclusion: auto
 - 状態管理: Pinia 3.0.3
 - HTTPクライアント: axios 1.11.0
 - スタイリング: Tailwind CSS 4.1.11
+- Markdownレンダリング: marked 18.0.3 + DOMPurify 3.4.2（カスタムルールUIで使用、XSS対策）
 - テスト: Vitest 1.2.0、Playwright 1.53.2
 
 ## インフラストラクチャ
@@ -175,7 +176,9 @@ Lambda関数で使用（共通）:
 - `PATH` - バイナリパス（ffmpegを含む）
 
 Agent Lambda固有:
-- `AGENT_MODEL_ID` - デフォルト推論プロファイルID（例: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`）。`ALLOWED_MODELS` に存在しない値が指定された場合は内部フォールバック値に切り替わる
+- `AGENT_MODEL_ID` - デフォルト推論プロファイルID（実運用デフォルト: `us.amazon.nova-2-lite-v1:0`、CDKフォールバックも Nova 2 Lite。Claude Sonnet 4.5 / Haiku 等への切替も可能）。`ALLOWED_MODELS` に存在しない値が指定された場合は内部フォールバック値に切り替わる
+- `RULES_TABLE` - カスタムルールプロンプトを格納する DynamoDB テーブル名（例: `ImageCompositor-Rules-dev`）
+- `RULES_MAX_PROMPT_CHARS` / `RULES_MAX_COUNT` / `RULES_MAX_COMBINED_CHARS` - ルール本文サイズ・件数・結合後文字数の上限（デフォルト: 10000 / 5 / 20000）
 - `BEDROCK_REGION` - BedrockModel が呼び出すリージョン（デフォルト: `us-east-1`）
 - `CHAT_HISTORY_TABLE` - DynamoDB会話履歴テーブル名（PK=`sessionId`, SK=`timestamp`, TTL=`ttl`）
 
