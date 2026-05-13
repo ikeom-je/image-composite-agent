@@ -207,11 +207,13 @@ jobs:
             --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
           CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+          TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text 2>/dev/null || echo "")
           VERSION=$(node -p "require('./package.json').version")
           BUILD_HASH=${GITHUB_SHA::7}
           DEBUG=$( [ "$ENV_NAME" = "production" ] && echo "false" || echo "true" )
           cat > frontend/public/config.json <<EOF
-          {"apiUrl":"${API_URL}","uploadApiUrl":"${UPLOAD_URL}","chatApiUrl":"${CHAT_URL}","cloudfrontUrl":"","version":"${VERSION}","buildHash":"${BUILD_HASH}","environment":"${ENV_NAME}","buildTimestamp":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)","region":"${{ env.AWS_REGION }}","features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":${DEBUG},"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}
+          {"apiUrl":"${API_URL}","uploadApiUrl":"${UPLOAD_URL}","chatApiUrl":"${CHAT_URL}","cloudfrontUrl":"","version":"${VERSION}","buildHash":"${BUILD_HASH}","environment":"${ENV_NAME}","buildTimestamp":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)","region":"${{ env.AWS_REGION }}","s3BucketNames":{"testImages":"${TEST_IMAGES_BUCKET}"},"features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":${DEBUG},"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}
           EOF
 
       - name: Build frontend
