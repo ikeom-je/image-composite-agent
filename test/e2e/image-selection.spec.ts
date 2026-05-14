@@ -42,6 +42,37 @@ test.describe('画像選択・モード切替（/api ページ）', () => {
     await expect(generateButton).toContainText('3画像を合成');
   });
 
+  // PR #91 regression: image2 セレクタで shape テスト画像（circle/rectangle/triangle）を
+  // 選んで合成ボタンを押した時、composite API が 200 を返すこと。
+  // config.json の s3BucketNames.testImages が欠落すると ImageSelector.vue が
+  // 旧 fallback `s3://test-bucket/...` を組み立てて 404 になる回帰を検知する。
+  test('image2 で shape テスト画像を選択して合成→ composite API は 200', async ({ page }) => {
+    const modeButtons = page.locator('.mode-buttons button');
+    await modeButtons.filter({ hasText: '2画像' }).click();
+    await expect(modeButtons.filter({ hasText: '2画像' })).toHaveClass(/active/);
+
+    const image2Select = page.locator('td.image2-cell select.form-select-compact');
+    await expect(image2Select).toBeVisible();
+    await image2Select.selectOption('triangle');
+    await expect(image2Select).toHaveValue('triangle');
+
+    // baseURL は FRONTEND_URL のため、CloudFront ではなく API Gateway を直接叩く。
+    // URL 一致は path のみで判定（環境別 API ホストに左右されない）。
+    const compositePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/images/composite') && resp.request().method() === 'GET',
+      { timeout: 20000 },
+    );
+    await page.locator('button.generate-button').click();
+    const response = await compositePromise;
+
+    expect(response.status()).toBe(200);
+    const image2Param = new URL(response.url()).searchParams.get('image2') || '';
+    expect(image2Param.startsWith('s3://')).toBe(true);
+    expect(image2Param).toContain('triangle_green.png');
+    // 旧 fallback `test-bucket` でないこと
+    expect(image2Param).not.toContain('s3://test-bucket/');
+  });
+
   test('数値入力フィールドが正しく動作する', async ({ page }) => {
     // 位置・サイズ設定テーブル内の number input
     const numberInputs = page.locator('table.config-table input[type="number"]');
