@@ -8,6 +8,9 @@ import { test, expect } from '@playwright/test';
 // API_URLは /images/composite パス込みの完全URL
 const API_COMPOSITE_URL = process.env.API_URL || 'http://localhost:3000/images/composite';
 const UPLOAD_API_URL = process.env.UPLOAD_API_URL || API_COMPOSITE_URL.replace('/images/composite', '/upload');
+// フロントが ImageSelector.vue から組み立てる shape 画像 s3:// パスの regression テスト用。
+// CFN Output TestImagesBucketName を deploy.yml / e2e-test.yml が env として渡す。
+const TEST_IMAGES_BUCKET = process.env.TEST_IMAGES_BUCKET || '';
 
 test.describe('画像選択機能包括テスト', () => {
   
@@ -93,7 +96,7 @@ test.describe('画像選択機能包括テスト', () => {
     expect(response1.status()).toBe(200);
     console.log('✓ 1画像モード: 正常');
 
-    // 2画像モード
+    // 2画像モード（両方とも Lambda shorthand 'test' なので必ず 200）
     const response2 = await request.get(`${API_COMPOSITE_URL}`, {
       params: {
         ...baseParams,
@@ -110,7 +113,7 @@ test.describe('画像選択機能包括テスト', () => {
       }
     });
 
-    expect([200, 403, 404]).toContain(response2.status());
+    expect(response2.status()).toBe(200);
     console.log('✓ 2画像モード: 正常');
 
     // 3画像モード
@@ -271,6 +274,71 @@ test.describe('画像選択機能包括テスト', () => {
       
       console.log(`✓ ${selection.description} (${selection.type}): パス設定正常`);
     }
+  });
+
+  // PR #91 regression: フロント ImageSelector.vue が組み立てる shape 画像 s3:// パスを
+  // 直接 API に投げて 200 を期待する。config.json の s3BucketNames.testImages 欠落で
+  // 旧 fallback `s3://test-bucket/...` に落ちると 404 になる回帰を検知する。
+  test('shape テスト画像（circle / rectangle / triangle）の s3:// パス合成', async ({ request }) => {
+    test.skip(!TEST_IMAGES_BUCKET, 'TEST_IMAGES_BUCKET env 未設定のためスキップ');
+
+    const shapes: Array<{ name: string; file: string }> = [
+      { name: 'circle', file: 'circle_red.png' },
+      { name: 'rectangle', file: 'rectangle_blue.png' },
+      { name: 'triangle', file: 'triangle_green.png' },
+    ];
+
+    for (const shape of shapes) {
+      const s3Path = `s3://${TEST_IMAGES_BUCKET}/images/${shape.file}`;
+      const response = await request.get(`${API_COMPOSITE_URL}`, {
+        params: {
+          baseImage: 'transparent',
+          image1: 'test',
+          image1X: '100',
+          image1Y: '100',
+          image1Width: '400',
+          image1Height: '300',
+          image2: s3Path,
+          image2X: '600',
+          image2Y: '100',
+          image2Width: '400',
+          image2Height: '300',
+          canvasWidth: '1920',
+          canvasHeight: '1080',
+          format: 'png',
+        },
+      });
+
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('image/png');
+      console.log(`✓ ${shape.name} (${s3Path}): 200 OK`);
+    }
+  });
+
+  // PR #91 regression: 旧バグ条件（config 欠落時の fallback 'test-bucket'）を
+  // 直接再現し 404 が返ることを確認する。修正が将来逆戻りした場合に検知できる。
+  test('旧 fallback `s3://test-bucket/...` は 404 を返す（regression 確認）', async ({ request }) => {
+    const response = await request.get(`${API_COMPOSITE_URL}`, {
+      params: {
+        baseImage: 'transparent',
+        image1: 'test',
+        image1X: '100',
+        image1Y: '100',
+        image1Width: '400',
+        image1Height: '300',
+        image2: 's3://test-bucket/images/circle_red.png',
+        image2X: '600',
+        image2Y: '100',
+        image2Width: '400',
+        image2Height: '300',
+        canvasWidth: '1920',
+        canvasHeight: '1080',
+        format: 'png',
+      },
+    });
+
+    expect(response.status()).toBe(404);
+    console.log('✓ 旧 fallback bucket: 404 を確実に返す');
   });
 
   test('未選択状態のエラーハンドリング', async ({ request }) => {
