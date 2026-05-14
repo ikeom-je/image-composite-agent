@@ -57,6 +57,7 @@ jobs:
       api_url: ${{ steps.urls.outputs.api_url }}
       frontend_url: ${{ steps.urls.outputs.frontend_url }}
       chat_api_url: ${{ steps.urls.outputs.chat_api_url }}
+      test_images_bucket: ${{ steps.urls.outputs.test_images_bucket }}
     steps:
       - id: resolve
         run: |
@@ -92,14 +93,19 @@ jobs:
           CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" \
             --output text 2>/dev/null || echo "")
+          TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" \
+            --output text 2>/dev/null || echo "")
 
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           echo "frontend_url=$FRONTEND_URL" >> "$GITHUB_OUTPUT"
           echo "chat_api_url=$CHAT_URL" >> "$GITHUB_OUTPUT"
+          echo "test_images_bucket=$TEST_IMAGES_BUCKET" >> "$GITHUB_OUTPUT"
 
           echo "API_URL: $API_URL"
           echo "FRONTEND_URL: $FRONTEND_URL"
           echo "CHAT_API_URL: $CHAT_URL"
+          echo "TEST_IMAGES_BUCKET: $TEST_IMAGES_BUCKET"
 
   # -------------------------------------------------------
   # 2. API統合テスト（Playwright）
@@ -130,6 +136,7 @@ jobs:
         run: npx playwright test --config=test/playwright-api.config.ts --project=api-tests --reporter=list
         env:
           API_URL: ${{ needs.resolve-env.outputs.api_url }}
+          TEST_IMAGES_BUCKET: ${{ needs.resolve-env.outputs.test_images_bucket }}
           CI: true
 
       - name: Upload test results
@@ -177,6 +184,7 @@ jobs:
         env:
           API_URL: ${{ needs.resolve-env.outputs.api_url }}
           FRONTEND_URL: ${{ needs.resolve-env.outputs.frontend_url }}
+          TEST_IMAGES_BUCKET: ${{ needs.resolve-env.outputs.test_images_bucket }}
           CI: true
 
       - name: Upload test results
