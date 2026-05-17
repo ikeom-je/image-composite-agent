@@ -58,19 +58,19 @@ test.describe('画像選択・モード切替（/api ページ）', () => {
     // selectedS3ImageDisplay computed が新たな option を追加するため、
     // select の HTML value は最終的に s3:// パス全文になる（実装仕様）。
     // 本テストの目的は「フロントが正しい s3:// パスを組み立てて合成 API が 200 を返す」
-    // ことなので、select の内部値は検証せず、composite レスポンス URL の image2 パラメータで検証する。
+    // ことなので、select の内部値は検証せず、composite リクエスト body の image2 で検証する。
 
-    // baseURL は FRONTEND_URL のため、CloudFront ではなく API Gateway を直接叩く。
-    // URL 一致は path のみで判定（環境別 API ホストに左右されない）。
+    // App.vue:380 が axios.post で送るため method は POST、image2 は body 内。
     const compositePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/images/composite') && resp.request().method() === 'GET',
+      (resp) => resp.url().includes('/images/composite') && resp.request().method() === 'POST',
       { timeout: 20000 },
     );
     await page.locator('button.generate-button').click();
     const response = await compositePromise;
 
     expect(response.status()).toBe(200);
-    const image2Param = new URL(response.url()).searchParams.get('image2') || '';
+    const body = response.request().postDataJSON();
+    const image2Param = String(body?.image2 ?? '');
     expect(image2Param.startsWith('s3://')).toBe(true);
     expect(image2Param).toContain('triangle_green.png');
     // 旧 fallback `test-bucket` でないこと

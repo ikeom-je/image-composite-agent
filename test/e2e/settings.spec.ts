@@ -72,7 +72,10 @@ test.describe('Settings ルール管理 UI', () => {
 
   test('AC 9.4: デフォルトルールには削除ボタンが表示されない', async ({ page }) => {
     await page.getByRole('button', { name: 'ルール（System Prompt）' }).click()
-    const presetCard = page.locator('div', { hasText: PRESET_RULE_NAME }).first()
+    // RuleListItem.vue は <div class="rounded-lg border p-4 ..."> を card root として描画する。
+    // 単に `div hasText` だと外側リストコンテナ全体にヒットし、他カードの削除ボタンが
+    // 残量に含まれて E2E rule 蓄積時に偽 fail を起こすため card 単位に narrowing する。
+    const presetCard = page.locator('div.rounded-lg', { hasText: PRESET_RULE_NAME }).first()
     await presetCard.waitFor({ timeout: 10000 })
     await expect(presetCard.getByRole('button', { name: '削除' })).toHaveCount(0)
   })
