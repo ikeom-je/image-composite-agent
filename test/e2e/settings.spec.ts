@@ -72,8 +72,62 @@ test.describe('Settings ルール管理 UI', () => {
 
   test('AC 9.4: デフォルトルールには削除ボタンが表示されない', async ({ page }) => {
     await page.getByRole('button', { name: 'ルール（System Prompt）' }).click()
-    const presetCard = page.locator('div', { hasText: PRESET_RULE_NAME }).first()
+    // RuleListItem.vue は <div class="rounded-lg border p-4 ..."> を card root として描画する。
+    // 単に `div hasText` だと外側リストコンテナ全体にヒットし、他カードの削除ボタンが
+    // 残量に含まれて E2E rule 蓄積時に偽 fail を起こすため card 単位に narrowing する。
+    const presetCard = page.locator('div.rounded-lg', { hasText: PRESET_RULE_NAME }).first()
     await presetCard.waitFor({ timeout: 10000 })
     await expect(presetCard.getByRole('button', { name: '削除' })).toHaveCount(0)
+  })
+})
+
+// PR #81 動作レビューで判明した課題に対応する追加テスト:
+// Chat 画面から /chat/settings への遷移ボタンが UI 上に存在しないため、
+// 設定画面への到達手段が URL 直打ちのみだった。本テストでは ChatPage に
+// 追加した歯車ボタンを経由した正規ルートでの「画面遷移 + 設定反映」を検証する。
+test.describe('Chat ↔ Settings 画面遷移と設定反映', () => {
+  test.beforeEach(async ({ page }) => {
+    if (!FRONTEND_URL) test.skip()
+    await page.goto(`${FRONTEND_URL}/`)
+    await page.evaluate(() => localStorage.removeItem('chat-pending-test-rule'))
+  })
+
+  test('/chat の設定ボタン押下で /chat/settings に遷移する', async ({ page }) => {
+    await page.goto(`${FRONTEND_URL}/chat`)
+    await expect(page).toHaveURL(/\/chat$/)
+
+    const settingsLink = page.getByRole('link', { name: 'Agent設定' })
+    await expect(settingsLink).toBeVisible()
+    await settingsLink.click()
+
+    await expect(page).toHaveURL(/\/chat\/settings$/)
+    await expect(page.getByRole('heading', { name: 'Agent 設定' })).toBeVisible()
+  })
+
+  test('Chat→Settings→ルール作成→戻る→再度Settingsで保存内容が反映される', async ({ page }) => {
+    // 1) /chat から設定ボタンで遷移
+    await page.goto(`${FRONTEND_URL}/chat`)
+    await page.getByRole('link', { name: 'Agent設定' }).click()
+    await expect(page).toHaveURL(/\/chat\/settings$/)
+
+    // 2) ルールタブ → 新規作成 → 保存
+    await page.getByRole('button', { name: 'ルール（System Prompt）' }).click()
+    await page.getByText(PRESET_RULE_NAME).first().waitFor({ timeout: 10000 })
+    await page.getByRole('button', { name: '+ 新規作成' }).click()
+    const ruleName = `e2e-nav-${Date.now()}`
+    await page.getByLabel('ルール名（最大100字）').fill(ruleName)
+    await page.locator('textarea').first().fill('## ナビゲーションE2E本文\n- 項目1')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect(page.getByText(ruleName)).toBeVisible({ timeout: 10000 })
+
+    // 3) SettingsPage の戻る矢印で /chat に戻る
+    await page.locator('a[href="/chat"]').first().click()
+    await expect(page).toHaveURL(/\/chat$/)
+
+    // 4) 再度 /chat の設定ボタンで /chat/settings に戻り、ルールタブで保存内容が残ること
+    await page.getByRole('link', { name: 'Agent設定' }).click()
+    await expect(page).toHaveURL(/\/chat\/settings$/)
+    await page.getByRole('button', { name: 'ルール（System Prompt）' }).click()
+    await expect(page.getByText(ruleName)).toBeVisible({ timeout: 10000 })
   })
 })
