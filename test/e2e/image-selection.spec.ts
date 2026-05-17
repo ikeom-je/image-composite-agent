@@ -54,7 +54,11 @@ test.describe('画像選択・モード切替（/api ページ）', () => {
     const image2Select = page.locator('td.image2-cell select.form-select-compact');
     await expect(image2Select).toBeVisible();
     await image2Select.selectOption('triangle');
-    await expect(image2Select).toHaveValue('triangle');
+    // triangle 選択後、ImageSelector.vue は s3:// パスを emit し
+    // selectedS3ImageDisplay computed が新たな option を追加するため、
+    // select の HTML value は最終的に s3:// パス全文になる（実装仕様）。
+    // 本テストの目的は「フロントが正しい s3:// パスを組み立てて合成 API が 200 を返す」
+    // ことなので、select の内部値は検証せず、composite レスポンス URL の image2 パラメータで検証する。
 
     // baseURL は FRONTEND_URL のため、CloudFront ではなく API Gateway を直接叩く。
     // URL 一致は path のみで判定（環境別 API ホストに左右されない）。
