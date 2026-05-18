@@ -1,0 +1,3 @@
+# テスト時のみの依存関係（Lambdaパッケージには含めない）
+# CI: pip install -r lambda/python/requirements.txt -r lambda/python/requirements-test.txt
+moto>=5.0.0

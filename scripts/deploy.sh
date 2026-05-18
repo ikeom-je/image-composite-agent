@@ -55,13 +55,15 @@ update_lambda_cloudfront_domain() {
 # バックエンドスタックの出力からconfig.jsonを生成
 generate_config() {
   echo "📝 config.json 生成中..."
-  local API_URL UPLOAD_URL CHAT_URL CF_DOMAIN
+  local API_URL UPLOAD_URL CHAT_URL CF_DOMAIN TEST_IMAGES_BUCKET
   API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
   UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
   CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text 2>/dev/null || echo "")
+  TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+    --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text 2>/dev/null || echo "")
   CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text 2>/dev/null || echo "")
 
@@ -86,6 +88,9 @@ generate_config() {
   "environment": "${ENV}",
   "buildTimestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
   "region": "$(aws configure get region 2>/dev/null || echo 'ap-northeast-1')",
+  "s3BucketNames": {
+    "testImages": "${TEST_IMAGES_BUCKET}"
+  },
   "features": {
     "enableS3Upload": true,
     "enable3ImageComposition": true,

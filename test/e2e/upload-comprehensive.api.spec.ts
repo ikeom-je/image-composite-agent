@@ -86,7 +86,10 @@ test.describe('S3アップロード機能包括テスト', () => {
     expect(uploadResponse.status()).toBe(200);
 
     // S3トリガー → Lambda によるサムネイル生成を待機
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // 15s に拡張: production で稀にフォールバック URL（元画像）が返り content-type
+    // 不一致になる事象（issue #82）の暫定対応。Lambda コールドスタート + S3 整合性
+    // ウィンドウを吸収。根本対応（polling 化）は同 issue で別途検討。
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
     // アップロードした画像をキーで特定してサムネイルを確認
     const listResponse = await request.get(`${UPLOAD_API_URL}/images`);
