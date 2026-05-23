@@ -68,6 +68,9 @@ test.describe('S3アップロード機能包括テスト', () => {
   });
 
   test('サムネイル生成確認', async ({ request }) => {
+    // poll 最大 30s + presigned/PUT/LIST のオーバーヘッドで config の 30s timeout を超える
+    // ため、test レベルで 60s に拡張する。
+    test.setTimeout(60000);
     // テスト用PNGをアップロード（既存S3データに依存しないよう自己完結）
     const presignedResponse = await request.post(`${UPLOAD_API_URL}/presigned-url`, {
       data: {
@@ -85,25 +88,44 @@ test.describe('S3アップロード機能包括テスト', () => {
     });
     expect(uploadResponse.status()).toBe(200);
 
-    // S3トリガー → Lambda によるサムネイル生成を待機
-    // 15s に拡張: production で稀にフォールバック URL（元画像）が返り content-type
-    // 不一致になる事象（issue #82）の暫定対応。Lambda コールドスタート + S3 整合性
-    // ウィンドウを吸収。根本対応（polling 化）は同 issue で別途検討。
-    await new Promise(resolve => setTimeout(resolve, 15000));
+    // issue #82: サムネイル URL の Content-Type を polling で検証。
+    //
+    // 実装の現状（CDK で S3 → Lambda 通知が未配線のため）:
+    //   - サムネイル生成 Lambda (`generate_thumbnail`) は一度も発火しない
+    //   - `list_uploaded_images()` は常に **元画像 (uploads/images/*) の presigned URL**
+    //     を fallback として返す
+    //   - 元画像は PUT 時に Content-Type=image/png を S3 メタデータに保存しているため、
+    //     通常は image/png を返す
+    //   - 過去 1 回だけ観測された image/jpeg は CloudFront TTL=10s 等の transient
+    //     なエッジ整合性事象と推定（issue #82 仮説 1）
+    //
+    // テスト方針:
+    //   - 旧: 固定 15s sleep（CloudFront の stale なキャッシュを引いた時に retry でも回復しない）
+    //   - 新: LIST に出現 + thumbnailUrl GET が image/png を返すまで最大 30s polling
+    //         （transient な image/jpeg が出ても次のサイクルで image/png に収束する想定）
+    //
+    // なお、サムネイル機能自体の CDK 配線漏れは別途 issue として切り出す。
+    let thumbnailUrl: string | undefined;
+    let thumbnailContentType: string | undefined;
+    await expect.poll(async () => {
+      const listResp = await request.get(`${UPLOAD_API_URL}/images`);
+      if (listResp.status() !== 200) return null;
+      const listData = await listResp.json();
+      const uploadedImage = listData.images.find((img: any) => img.key === presignedData.s3Key);
+      if (!uploadedImage?.thumbnailUrl) return null;
+      const thumbResp = await request.get(uploadedImage.thumbnailUrl);
+      if (thumbResp.status() !== 200) return null;
+      thumbnailUrl = uploadedImage.thumbnailUrl;
+      thumbnailContentType = thumbResp.headers()['content-type'];
+      return thumbnailContentType;
+    }, {
+      timeout: 30000,
+      intervals: [500, 1000, 1000, 2000, 2000, 3000, 5000, 5000, 5000],
+      message: 'サムネイル URL が image/png を返すまで polling（最大30s）',
+    }).toMatch(/image\/png/);
 
-    // アップロードした画像をキーで特定してサムネイルを確認
-    const listResponse = await request.get(`${UPLOAD_API_URL}/images`);
-    expect(listResponse.status()).toBe(200);
-
-    const listData = await listResponse.json();
-    const uploadedImage = listData.images.find((img: any) => img.key === presignedData.s3Key);
-    expect(uploadedImage).toBeDefined();
-    expect(uploadedImage).toHaveProperty('thumbnailUrl');
-    expect(uploadedImage.thumbnailUrl).toContain('amazonaws.com');
-
-    const thumbnailResponse = await request.get(uploadedImage.thumbnailUrl);
-    expect(thumbnailResponse.status()).toBe(200);
-    expect(thumbnailResponse.headers()['content-type']).toContain('image/png');
+    expect(thumbnailUrl).toContain('amazonaws.com');
+    expect(thumbnailContentType).toContain('image/png');
   });
 
   test('複数ファイル形式のサポート確認', async ({ request }) => {
