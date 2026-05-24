@@ -13,13 +13,30 @@ import { EnvironmentConfig, envName, envExport } from './environment';
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
 const VERSION = packageJson.version;
 
+export interface FrontendStackProps extends cdk.StackProps {
+  envConfig: EnvironmentConfig;
+  /**
+   * PR preview モード用: ImageProcessorApiStack の参照に使う EnvironmentConfig。
+   * 省略時は envConfig を使用（通常 dev/staging/production）。
+   * PR preview では `-Dev` (共有バックエンド) を指す config を渡す想定。
+   */
+  importEnvConfig?: EnvironmentConfig;
+  /**
+   * Basic 認証を CloudFront Function で適用する場合に指定。
+   * PR preview 等の限定公開用途を想定し、credentials はインラインで CF Function に
+   * 埋め込まれる（CF Function は size 10KB 上限の sync JS）。
+   */
+  basicAuth?: { user: string; pass: string };
+}
+
 export class FrontendStack extends cdk.Stack {
   public readonly distribution: cloudfront.Distribution;
   public readonly frontendBucket: s3.Bucket;
 
-  constructor(scope: Construct, id: string, props: cdk.StackProps & { envConfig: EnvironmentConfig }) {
+  constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
     const envConfig = props.envConfig;
+    const importConfig = props.importEnvConfig ?? envConfig;
 
     // --- S3バケット ---
     this.frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
@@ -28,8 +45,9 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- クロススタック参照 ---
-    const resourcesBucketName = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketName', envConfig));
-    const resourcesBucketArn = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketArn', envConfig));
+    // PR preview モード時は共有 dev backend を参照するため importConfig を使う
+    const resourcesBucketName = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketName', importConfig));
+    const resourcesBucketArn = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketArn', importConfig));
 
     // リソースバケットの参照（generated-images/videos配信用）
     const resourcesBucket = s3.Bucket.fromBucketAttributes(this, 'ResourcesBucket', {
@@ -46,10 +64,40 @@ export class FrontendStack extends cdk.Stack {
     }));
 
     // リソースバケット用OAI: ApiStack側で作成・権限付与済み、IDをimportして使用
-    const resourcesOAIId = cdk.Fn.importValue(envExport('FrontendResourcesOAIId', envConfig));
+    const resourcesOAIId = cdk.Fn.importValue(envExport('FrontendResourcesOAIId', importConfig));
     const resourcesOAI = cloudfront.OriginAccessIdentity.fromOriginAccessIdentityId(
       this, 'ResourcesOAI', resourcesOAIId
     );
+
+    // --- Basic Auth CloudFront Function (PR preview 用) ---
+    // CF Function は viewer-request 時に同期実行される軽量 JS。Basic Auth ヘッダ未一致時は
+    // 401 を即返す。credentials はインライン埋め込み（PR preview の限定公開用途のため
+    // 高度な秘匿化は不要）。本番 distribution には付与しない。
+    let viewerRequestFn: cloudfront.Function | undefined;
+    if (props.basicAuth) {
+      const credsB64 = Buffer.from(`${props.basicAuth.user}:${props.basicAuth.pass}`).toString('base64');
+      const fnCode = `function handler(event) {
+  var request = event.request;
+  var headers = request.headers;
+  var expected = 'Basic ${credsB64}';
+  if (!headers.authorization || headers.authorization.value !== expected) {
+    return {
+      statusCode: 401,
+      statusDescription: 'Unauthorized',
+      headers: { 'www-authenticate': { value: 'Basic realm="PR Preview"' } },
+    };
+  }
+  return request;
+}`;
+      viewerRequestFn = new cloudfront.Function(this, 'PreviewBasicAuthFunction', {
+        functionName: envName('frontend-preview-basicauth', envConfig),
+        code: cloudfront.FunctionCode.fromInline(fnCode),
+      });
+    }
+    const fnAssociations = viewerRequestFn ? [{
+      function: viewerRequestFn,
+      eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+    }] : undefined;
 
     // --- ResponseHeadersPolicy ---
     // index.html / config用: no-cache
@@ -95,6 +143,7 @@ export class FrontendStack extends cdk.Stack {
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: shortCachePolicy,
         responseHeadersPolicy: noCachePolicy,
+        functionAssociations: fnAssociations,
       },
       additionalBehaviors: {
         // アセット（JS/CSS）→ 60秒キャッシュ
@@ -105,6 +154,7 @@ export class FrontendStack extends cdk.Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: shortCachePolicy,
           responseHeadersPolicy: noCachePolicy,
+          functionAssociations: fnAssociations,
         },
         // 合成画像（リソースバケット）
         'generated-images/*': {
@@ -114,6 +164,7 @@ export class FrontendStack extends cdk.Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: shortCachePolicy,
           responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
+          functionAssociations: fnAssociations,
         },
         // 動画（リソースバケット）
         'generated-videos/*': {
@@ -131,6 +182,7 @@ export class FrontendStack extends cdk.Stack {
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           }),
           responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
+          functionAssociations: fnAssociations,
         },
       },
       // SPA: 404/403 → index.html

@@ -104,6 +104,28 @@ dev環境デプロイ後のe2eテスト手順は [testing.md](testing.md) の「
 - レビュー → フィードバック対応
 - **devブランチへのマージは指示があるまで行わない**
 
+#### PR Preview（UI 変更を含む PR の実機レビュー） — issue #87
+
+`frontend/` 配下の変更を含む PR で UI 動作確認が必要な場合、PR に `preview` ラベルを付与すると ephemeral preview 環境が自動で立ち上がる:
+
+```
+PR open / push / label "preview" 追加
+  ↓ .github/workflows/pr-preview.yml
+  ├ build frontend (config.json は共有 dev backend を指す)
+  ├ cdk deploy FrontendStack-Dev-Pr<num>（CloudFront + S3、Basic Auth 付き）
+  └ PR コメントに URL + Basic Auth credentials を自動投稿
+```
+
+レビュアーは PR コメントの URL と credentials で実機にアクセスして UI を確認できる。`preview` ラベルを外す or PR を close すると自動 destroy。さらに 7 日 idle のスタックは日次 cleanup ワークフローで自動削除される。
+
+**前提**:
+- `ImageProcessorApiStack-Dev`（共有 dev backend）が存在すること
+- repo secrets: `AWS_DEPLOY_ROLE_ARN`, `PR_PREVIEW_BASIC_AUTH_USER`, `PR_PREVIEW_BASIC_AUTH_PASS`
+
+**スコープ**:
+- frontend stack のみ deploy（backend は共有 dev を参照）
+- backend 変更を含む PR は staging まで進めて確認する
+
 ### ステップ8: devへマージ → staging環境で統合テスト
 - 指示を受けてからdevにマージ
 - CI/CDがstaging環境に自動デプロイ

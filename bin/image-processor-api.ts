@@ -4,12 +4,9 @@ import * as cdk from 'aws-cdk-lib';
 import { ImageProcessorApiStack } from '../lib/image-processor-api-stack';
 import { ImageCompositeViewerStack } from '../lib/image-composite-viewer-stack';
 import { FrontendStack } from '../lib/frontend-stack';
-import { resolveEnvironment } from '../lib/environment';
+import { resolveEnvironment, EnvironmentConfig } from '../lib/environment';
 
 const app = new cdk.App();
-
-// 環境設定を解決（-c environment=dev|staging|production）
-const envConfig = resolveEnvironment(app);
 
 // AWS環境設定（defaultプロファイルを使用）
 const env = {
@@ -17,39 +14,83 @@ const env = {
   region: process.env.CDK_DEFAULT_REGION,
 };
 
-// タグの設定
-const tags = {
-  Project: 'ImageProcessorAPI',
-  Version: 'v2',
-  Environment: envConfig.name,
-};
+// PR preview モード（issue #87）:
+//   -c previewPr=<num> を渡すと、共有 dev backend を参照する単独 frontend stack
+//   `FrontendStack-Dev-Pr<num>` のみを作成する。バックエンドは作成しない。
+//   credentials は -c previewBasicAuthUser=<u> -c previewBasicAuthPass=<p> で渡す。
+const previewPr = app.node.tryGetContext('previewPr') as string | undefined;
 
-// バックエンドスタックをデプロイ
-const apiStack = new ImageProcessorApiStack(app, `ImageProcessorApiStack${envConfig.suffix}`, {
-  description: 'Advanced Image Composition REST API with Alpha Channel Support',
-  env,
-  tags,
-  envConfig,
-});
+if (previewPr) {
+  const previewUser = app.node.tryGetContext('previewBasicAuthUser') as string | undefined;
+  const previewPass = app.node.tryGetContext('previewBasicAuthPass') as string | undefined;
+  if (!previewUser || !previewPass) {
+    throw new Error('previewBasicAuthUser/previewBasicAuthPass context が必須です');
+  }
+  if (!/^\d+$/.test(previewPr)) {
+    throw new Error(`previewPr は数値のみ。received: ${previewPr}`);
+  }
 
-// フロントエンドスタックをデプロイ（旧）
-const viewerStack = new ImageCompositeViewerStack(app, `ImageCompositeViewerStack${envConfig.suffix}`, {
-  description: 'Frontend Viewer for Image Composition REST API',
-  env,
-  tags,
-  apiEndpoint: apiStack.apiEndpoint,
-  uploadApiEndpoint: apiStack.uploadApiEndpoint,
-  envConfig,
-});
+  // PR preview stack 用の envConfig (-Dev-Pr<num> サフィックス)
+  const previewSuffix = `-Dev-Pr${previewPr}`;
+  const previewResourceSuffix = `-dev-pr${previewPr}`;
+  const previewEnvConfig: EnvironmentConfig = {
+    name: 'dev',
+    suffix: previewSuffix,
+    resourceSuffix: previewResourceSuffix,
+    isProduction: false,
+  };
+  // 参照先（共有 dev backend）の envConfig
+  const sharedDevConfig: EnvironmentConfig = {
+    name: 'dev',
+    suffix: '-Dev',
+    resourceSuffix: '-dev',
+    isProduction: false,
+  };
 
-// スタック間の依存関係を設定（フロントエンドはバックエンドに依存）
-viewerStack.addDependency(apiStack);
+  new FrontendStack(app, `FrontendStack${previewSuffix}`, {
+    description: `PR #${previewPr} Preview Frontend (shared dev backend)`,
+    env,
+    tags: {
+      Project: 'ImageProcessorAPI',
+      Version: 'v2',
+      Environment: 'dev',
+      PreviewPR: previewPr,
+    },
+    envConfig: previewEnvConfig,
+    importEnvConfig: sharedDevConfig,
+    basicAuth: { user: previewUser, pass: previewPass },
+  });
+} else {
+  // 通常モード: backend + frontend を envConfig.suffix で作成
+  const envConfig = resolveEnvironment(app);
+  const tags = {
+    Project: 'ImageProcessorAPI',
+    Version: 'v2',
+    Environment: envConfig.name,
+  };
 
-// 新フロントエンドスタック（独立デプロイ対応）
-const frontendStack = new FrontendStack(app, `FrontendStack${envConfig.suffix}`, {
-  description: 'Frontend for Image Compositor (independent deploy)',
-  env,
-  tags,
-  envConfig,
-});
-frontendStack.addDependency(apiStack);
+  const apiStack = new ImageProcessorApiStack(app, `ImageProcessorApiStack${envConfig.suffix}`, {
+    description: 'Advanced Image Composition REST API with Alpha Channel Support',
+    env,
+    tags,
+    envConfig,
+  });
+
+  const viewerStack = new ImageCompositeViewerStack(app, `ImageCompositeViewerStack${envConfig.suffix}`, {
+    description: 'Frontend Viewer for Image Composition REST API',
+    env,
+    tags,
+    apiEndpoint: apiStack.apiEndpoint,
+    uploadApiEndpoint: apiStack.uploadApiEndpoint,
+    envConfig,
+  });
+  viewerStack.addDependency(apiStack);
+
+  const frontendStack = new FrontendStack(app, `FrontendStack${envConfig.suffix}`, {
+    description: 'Frontend for Image Compositor (independent deploy)',
+    env,
+    tags,
+    envConfig,
+  });
+  frontendStack.addDependency(apiStack);
+}
