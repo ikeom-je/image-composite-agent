@@ -1,0 +1,267 @@
+# PR Preview - 短命 frontend stack を CloudFront + S3 でデプロイ
+# issue #87: PR レビュアーが UI を実機で確認するための ephemeral preview
+#
+# 仕様:
+#   - ラベル "preview" 付与時 / "preview" 付きの synchronize / reopen で deploy
+#   - PR close (merge 含む) で destroy
+#   - PR コメントに URL を自動投稿
+#   - frontend のみ deploy (backend は共有 dev を参照)
+#   - 認証は dev/main と同じく無し（URL は CloudFront ドメインの難読性に依存）
+#
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, labeled, unlabeled, synchronize, reopened, closed]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  AWS_REGION: ap-northeast-1
+  PREVIEW_LABEL: preview
+  SHARED_DEV_API_STACK: ImageProcessorApiStack-Dev
+  SHARED_DEV_FRONTEND_STACK: FrontendStack-Dev
+
+jobs:
+  # 共通: ラベル状態を解決
+  resolve:
+    name: Resolve preview state
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.r.outputs.pr_number }}
+      stack_name: ${{ steps.r.outputs.stack_name }}
+      should_deploy: ${{ steps.r.outputs.should_deploy }}
+      should_destroy: ${{ steps.r.outputs.should_destroy }}
+    steps:
+      - id: r
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          # PR の現在ラベル一覧 (closed 時もそのまま参照可)
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
+        run: |
+          STACK="FrontendStack-Dev-Pr${PR_NUM}"
+          echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
+          echo "stack_name=${STACK}" >> "$GITHUB_OUTPUT"
+
+          # deploy 条件: preview ラベルが付いた状態で {opened, labeled, synchronize, reopened}
+          if [ "$ACTION" = "closed" ]; then
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "should_destroy=true" >> "$GITHUB_OUTPUT"
+          elif [ "$ACTION" = "unlabeled" ]; then
+            # preview ラベルが外された場合のみ destroy
+            REMOVED="${{ github.event.label.name }}"
+            if [ "$REMOVED" = "preview" ]; then
+              echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+              echo "should_destroy=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+              echo "should_destroy=false" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$HAS_LABEL" = "true" ]; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            echo "should_destroy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            echo "should_destroy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "Stack: $STACK / Action: $ACTION / has-label: $HAS_LABEL"
+
+  # frontend を build → CDK deploy → PR に URL コメント
+  deploy:
+    name: Deploy preview
+    needs: resolve
+    if: needs.resolve.outputs.should_deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Cache ffmpeg layer
+        id: ffmpeg-cache
+        uses: actions/cache@v4
+        with:
+          path: lambda-layers/ffmpeg-layer.zip
+          key: ffmpeg-layer-amd64-static-v4.4.2
+
+      - name: Build ffmpeg Lambda layer (dummy if cache miss)
+        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p lambda-layers
+          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
+            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip - >/dev/null
+          fi
+
+      - name: Generate config.json (point to shared dev backend)
+        run: |
+          mkdir -p frontend/public
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
+          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text)
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text)
+          TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text 2>/dev/null || echo "")
+          VERSION=$(node -p "require('./package.json').version")
+          BUILD_HASH=${GITHUB_SHA::7}
+          cat > frontend/public/config.json <<EOF
+          {"apiUrl":"${API_URL}","uploadApiUrl":"${UPLOAD_URL}","chatApiUrl":"${CHAT_URL}","cloudfrontUrl":"","version":"${VERSION}","buildHash":"${BUILD_HASH}-pr${{ needs.resolve.outputs.pr_number }}","environment":"pr-preview","buildTimestamp":"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)","region":"${{ env.AWS_REGION }}","s3BucketNames":{"testImages":"${TEST_IMAGES_BUCKET}"},"features":{"enableS3Upload":true,"enable3ImageComposition":true,"enableDebugMode":true,"enableAnalytics":true,"enableCaching":true,"enableErrorReporting":true}}
+          EOF
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+
+      - name: Deploy ${{ needs.resolve.outputs.stack_name }}
+        run: |
+          npx cdk deploy "${{ needs.resolve.outputs.stack_name }}" \
+            -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
+            --require-approval never
+
+      - name: Get preview URL
+        id: url
+        run: |
+          URL=$(aws cloudformation describe-stacks \
+            --stack-name "${{ needs.resolve.outputs.stack_name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" \
+            --output text)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.url.outputs.url }}';
+            const sha = '${{ github.event.pull_request.head.sha }}'.slice(0, 7);
+            const body = [
+              '## PR Preview Deployed',
+              '',
+              `**URL**: ${url}`,
+              '',
+              `Build: \`${sha}\` / Backend: \`${process.env.SHARED_DEV_API_STACK}\` を共有`,
+              '',
+              '> 認証なし（dev/main と同等）。URL は CloudFront ドメインの難読性に依存します。',
+              '> このプレビューは PR close で自動削除されます。`preview` ラベルを外すと即時 destroy できます。',
+              '> 7 日 idle のスタックは日次 cleanup で削除されます。',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+            const existing = comments.find(c =>
+              c.user.type === 'Bot' && c.body && c.body.startsWith('## PR Preview Deployed')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
+        env:
+          SHARED_DEV_API_STACK: ${{ env.SHARED_DEV_API_STACK }}
+
+  destroy:
+    name: Destroy preview
+    needs: resolve
+    if: needs.resolve.outputs.should_destroy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check stack exists
+        id: check
+        run: |
+          if aws cloudformation describe-stacks --stack-name "${{ needs.resolve.outputs.stack_name }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Stack ${{ needs.resolve.outputs.stack_name }} not found — skip destroy"
+          fi
+
+      - name: Build dummy ffmpeg (for cdk synth)
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          mkdir -p lambda-layers
+          [ -f lambda-layers/ffmpeg-layer.zip ] || (echo "dummy" | zip lambda-layers/ffmpeg-layer.zip - >/dev/null)
+
+      - name: Destroy ${{ needs.resolve.outputs.stack_name }}
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          npx cdk destroy "${{ needs.resolve.outputs.stack_name }}" \
+            -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
+            --force
+
+      - name: Comment destroyed on PR
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## PR Preview Destroyed',
+              '',
+              `\`${{ needs.resolve.outputs.stack_name }}\` を削除しました。`,
+              '',
+              '再度プレビューが必要な場合は `preview` ラベルを再度付与してください。',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });

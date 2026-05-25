@@ -13,13 +13,24 @@ import { EnvironmentConfig, envName, envExport } from './environment';
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
 const VERSION = packageJson.version;
 
+export interface FrontendStackProps extends cdk.StackProps {
+  envConfig: EnvironmentConfig;
+  /**
+   * PR preview モード用: ImageProcessorApiStack の参照に使う EnvironmentConfig。
+   * 省略時は envConfig を使用（通常 dev/staging/production）。
+   * PR preview では `-Dev` (共有バックエンド) を指す config を渡す想定。
+   */
+  importEnvConfig?: EnvironmentConfig;
+}
+
 export class FrontendStack extends cdk.Stack {
   public readonly distribution: cloudfront.Distribution;
   public readonly frontendBucket: s3.Bucket;
 
-  constructor(scope: Construct, id: string, props: cdk.StackProps & { envConfig: EnvironmentConfig }) {
+  constructor(scope: Construct, id: string, props: FrontendStackProps) {
     super(scope, id, props);
     const envConfig = props.envConfig;
+    const importConfig = props.importEnvConfig ?? envConfig;
 
     // --- S3バケット ---
     this.frontendBucket = new s3.Bucket(this, 'FrontendBucket', {
@@ -28,8 +39,9 @@ export class FrontendStack extends cdk.Stack {
     });
 
     // --- クロススタック参照 ---
-    const resourcesBucketName = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketName', envConfig));
-    const resourcesBucketArn = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketArn', envConfig));
+    // PR preview モード時は共有 dev backend を参照するため importConfig を使う
+    const resourcesBucketName = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketName', importConfig));
+    const resourcesBucketArn = cdk.Fn.importValue(envExport('ImageProcessorResourcesBucketArn', importConfig));
 
     // リソースバケットの参照（generated-images/videos配信用）
     const resourcesBucket = s3.Bucket.fromBucketAttributes(this, 'ResourcesBucket', {
@@ -46,7 +58,7 @@ export class FrontendStack extends cdk.Stack {
     }));
 
     // リソースバケット用OAI: ApiStack側で作成・権限付与済み、IDをimportして使用
-    const resourcesOAIId = cdk.Fn.importValue(envExport('FrontendResourcesOAIId', envConfig));
+    const resourcesOAIId = cdk.Fn.importValue(envExport('FrontendResourcesOAIId', importConfig));
     const resourcesOAI = cloudfront.OriginAccessIdentity.fromOriginAccessIdentityId(
       this, 'ResourcesOAI', resourcesOAIId
     );
@@ -105,7 +117,7 @@ export class FrontendStack extends cdk.Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: shortCachePolicy,
           responseHeadersPolicy: noCachePolicy,
-        },
+          },
         // 合成画像（リソースバケット）
         'generated-images/*': {
           origin: new origins.S3Origin(resourcesBucket, { originAccessIdentity: resourcesOAI }),
@@ -114,7 +126,7 @@ export class FrontendStack extends cdk.Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: shortCachePolicy,
           responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
-        },
+          },
         // 動画（リソースバケット）
         'generated-videos/*': {
           origin: new origins.S3Origin(resourcesBucket, { originAccessIdentity: resourcesOAI }),
@@ -131,7 +143,7 @@ export class FrontendStack extends cdk.Stack {
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
           }),
           responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
-        },
+          },
       },
       // SPA: 404/403 → index.html
       errorResponses: [
