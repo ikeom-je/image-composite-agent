@@ -17,15 +17,10 @@ const env = {
 // PR preview モード（issue #87）:
 //   -c previewPr=<num> を渡すと、共有 dev backend を参照する単独 frontend stack
 //   `FrontendStack-Dev-Pr<num>` のみを作成する。バックエンドは作成しない。
-//   credentials は -c previewBasicAuthUser=<u> -c previewBasicAuthPass=<p> で渡す。
+//   認証は dev/main と同じく無し（CloudFront URL の難読性に依存）。
 const previewPr = app.node.tryGetContext('previewPr') as string | undefined;
 
 if (previewPr) {
-  const previewUser = app.node.tryGetContext('previewBasicAuthUser') as string | undefined;
-  const previewPass = app.node.tryGetContext('previewBasicAuthPass') as string | undefined;
-  if (!previewUser || !previewPass) {
-    throw new Error('previewBasicAuthUser/previewBasicAuthPass context が必須です');
-  }
   if (!/^\d+$/.test(previewPr)) {
     throw new Error(`previewPr は数値のみ。received: ${previewPr}`);
   }
@@ -58,7 +53,6 @@ if (previewPr) {
     },
     envConfig: previewEnvConfig,
     importEnvConfig: sharedDevConfig,
-    basicAuth: { user: previewUser, pass: previewPass },
   });
 } else {
   // 通常モード: backend + frontend を envConfig.suffix で作成

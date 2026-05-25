@@ -4,9 +4,9 @@
 # 仕様:
 #   - ラベル "preview" 付与時 / "preview" 付きの synchronize / reopen で deploy
 #   - PR close (merge 含む) で destroy
-#   - PR コメントに URL + Basic Auth credentials を自動投稿
+#   - PR コメントに URL を自動投稿
 #   - frontend のみ deploy (backend は共有 dev を参照)
-#   - Basic Auth credentials は repository secrets で管理
+#   - 認証は dev/main と同じく無し（URL は CloudFront ドメインの難読性に依存）
 #
 name: PR Preview
 
@@ -144,8 +144,6 @@ jobs:
         run: |
           npx cdk deploy "${{ needs.resolve.outputs.stack_name }}" \
             -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
-            -c previewBasicAuthUser="${{ secrets.PR_PREVIEW_BASIC_AUTH_USER }}" \
-            -c previewBasicAuthPass="${{ secrets.PR_PREVIEW_BASIC_AUTH_PASS }}" \
             --require-approval never
 
       - name: Get preview URL
@@ -162,20 +160,15 @@ jobs:
         with:
           script: |
             const url = '${{ steps.url.outputs.url }}';
-            const user = '${{ secrets.PR_PREVIEW_BASIC_AUTH_USER }}';
-            const pass = '${{ secrets.PR_PREVIEW_BASIC_AUTH_PASS }}';
             const sha = '${{ github.event.pull_request.head.sha }}'.slice(0, 7);
             const body = [
               '## PR Preview Deployed',
               '',
               `**URL**: ${url}`,
               '',
-              '### Basic Auth credentials',
-              `- User: \`${user}\``,
-              `- Pass: \`${pass}\``,
-              '',
               `Build: \`${sha}\` / Backend: \`${process.env.SHARED_DEV_API_STACK}\` を共有`,
               '',
+              '> 認証なし（dev/main と同等）。URL は CloudFront ドメインの難読性に依存します。',
               '> このプレビューは PR close で自動削除されます。`preview` ラベルを外すと即時 destroy できます。',
               '> 7 日 idle のスタックは日次 cleanup で削除されます。',
             ].join('\n');
@@ -252,8 +245,6 @@ jobs:
         run: |
           npx cdk destroy "${{ needs.resolve.outputs.stack_name }}" \
             -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
-            -c previewBasicAuthUser="placeholder" \
-            -c previewBasicAuthPass="placeholder" \
             --force
 
       - name: Comment destroyed on PR

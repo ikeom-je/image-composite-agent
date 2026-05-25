@@ -74,7 +74,7 @@ npm run test:all-e2e
 
 - CI/CDパイプライン（`deploy.yml`）がデプロイ後に `e2e-test.yml` を自動呼び出し
 - 手動トリガー: Actions → E2E Test → Run workflow → 環境・テストスイート選択
-- **PR Preview**（`pr-preview.yml`）: `preview` ラベル付きの PR で frontend を ephemeral デプロイ → PR コメントに URL + Basic Auth credentials を投稿。PR close / ラベル解除で自動 destroy（issue #87）
+- **PR Preview**（`pr-preview.yml`）: `preview` ラベル付きの PR で frontend を ephemeral デプロイ → PR コメントに URL を投稿。認証なし (dev/main と同等)。PR close / ラベル解除で自動 destroy（issue #87）
 - **Stale Preview Cleanup**（`cleanup-stale-previews.yml`）: 日次 cron (UTC 18:00) で 7 日 idle の `FrontendStack-Dev-Pr*` を destroy
 
 ## テストコマンド

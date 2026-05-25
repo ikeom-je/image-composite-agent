@@ -98,8 +98,6 @@ jobs:
                 PR_NUM=$(echo "$STACK" | sed -E 's/^FrontendStack-Dev-Pr([0-9]+).*$/\1/')
                 npx cdk destroy "$STACK" \
                   -c previewPr="$PR_NUM" \
-                  -c previewBasicAuthUser="placeholder" \
-                  -c previewBasicAuthPass="placeholder" \
                   --force
                 DESTROYED=$((DESTROYED + 1))
               fi

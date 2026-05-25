@@ -112,15 +112,17 @@ dev環境デプロイ後のe2eテスト手順は [testing.md](testing.md) の「
 PR open / push / label "preview" 追加
   ↓ .github/workflows/pr-preview.yml
   ├ build frontend (config.json は共有 dev backend を指す)
-  ├ cdk deploy FrontendStack-Dev-Pr<num>（CloudFront + S3、Basic Auth 付き）
-  └ PR コメントに URL + Basic Auth credentials を自動投稿
+  ├ cdk deploy FrontendStack-Dev-Pr<num>（CloudFront + S3）
+  └ PR コメントに URL を自動投稿
 ```
 
-レビュアーは PR コメントの URL と credentials で実機にアクセスして UI を確認できる。`preview` ラベルを外す or PR を close すると自動 destroy。さらに 7 日 idle のスタックは日次 cleanup ワークフローで自動削除される。
+レビュアーは PR コメントの URL から実機にアクセスして UI を確認できる。`preview` ラベルを外す or PR を close すると自動 destroy。さらに 7 日 idle のスタックは日次 cleanup ワークフローで自動削除される。
+
+**認証**: dev/main と同様に無し。CloudFront ドメインの難読性に依存（限定共有用途）。
 
 **前提**:
 - `ImageProcessorApiStack-Dev`（共有 dev backend）が存在すること
-- repo secrets: `AWS_DEPLOY_ROLE_ARN`, `PR_PREVIEW_BASIC_AUTH_USER`, `PR_PREVIEW_BASIC_AUTH_PASS`
+- repo secrets: `AWS_DEPLOY_ROLE_ARN`
 
 **スコープ**:
 - frontend stack のみ deploy（backend は共有 dev を参照）

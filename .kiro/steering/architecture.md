@@ -25,7 +25,7 @@ inclusion: auto
 - **dev**: デバッグモード有効、ログレベルDEBUG
 - **staging**: デバッグモード無効、ログレベルINFO、本番同等設定
 - **production**: デバッグモード無効、ログレベルINFO、最適化済み
-- **PR preview**: `FrontendStack-Dev-Pr<num>` のみ独立、API URL は dev backend を共有。CloudFront Function による Basic Auth 付き。PR close または 7日 idle で自動 destroy（issue #87）
+- **PR preview**: `FrontendStack-Dev-Pr<num>` のみ独立、API URL は dev backend を共有。認証なし (dev/main と同等、URL 難読性に依存)。PR close または 7日 idle で自動 destroy（issue #87）
 
 ## サーバーレス原則
 
