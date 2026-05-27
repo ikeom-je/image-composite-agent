@@ -13,7 +13,7 @@ inclusion: auto
 | dev | `-Dev` | feature/*, bugfix/* | 手動（ローカルから） |
 | staging | `-Staging` | dev | CI/CD自動 |
 | production | (なし) | main | CI/CD自動 |
-| **PR preview** | `-Dev-Pr<num>` | PR ブランチ（`preview` ラベル） | CI/CD自動（frontend のみ、共有 dev backend を参照） |
+| **PR preview** | `-Dev-Pr<num>` | PR ブランチ（`preview` ラベル） | CI/CD自動（backend + frontend 両方、per-PR で完全独立） |
 
 ### 環境分離方式
 - CloudFormationスタック名にサフィックスを付与して同一アカウント内でリソースを分離
@@ -25,7 +25,7 @@ inclusion: auto
 - **dev**: デバッグモード有効、ログレベルDEBUG
 - **staging**: デバッグモード無効、ログレベルINFO、本番同等設定
 - **production**: デバッグモード無効、ログレベルINFO、最適化済み
-- **PR preview**: `FrontendStack-Dev-Pr<num>` のみ独立、API URL は dev backend を共有。認証なし (dev/main と同等、URL 難読性に依存)。PR close または 7日 idle で自動 destroy（issue #87）
+- **PR preview**: `ImageProcessorApiStack-Dev-Pr<num>` + `FrontendStack-Dev-Pr<num>` を per-PR で完全独立に作成。frontend は自身の per-PR backend を参照するため front + back の full E2E が実行可能。認証なし (dev/main と同等、URL 難読性に依存)。PR close または 7日 idle で frontend → backend の順で自動 destroy（issue #87）
 
 ## サーバーレス原則
 

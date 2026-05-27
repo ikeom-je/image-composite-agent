@@ -1,11 +1,12 @@
-# PR Preview - 短命 frontend stack を CloudFront + S3 でデプロイ
-# issue #87: PR レビュアーが UI を実機で確認するための ephemeral preview
+# PR Preview - 短命 backend + frontend stack をデプロイ
+# issue #87: PR レビュアーが UI + API を実機で確認するための ephemeral preview
 #
 # 仕様:
 #   - ラベル "preview" 付与時 / "preview" 付きの synchronize / reopen で deploy
-#   - PR close (merge 含む) で destroy
+#   - backend (`ImageProcessorApiStack-Dev-Pr<num>`) + frontend (`FrontendStack-Dev-Pr<num>`)
+#     両方を per-PR で作成。frontend は自身の per-PR backend を参照する
+#   - PR close (merge 含む) で両スタック destroy（frontend → backend の順）
 #   - PR コメントに URL を自動投稿
-#   - frontend のみ deploy (backend は共有 dev を参照)
 #   - 認証は dev/main と同じく無し（URL は CloudFront ドメインの難読性に依存）
 #
 name: PR Preview
@@ -25,10 +26,9 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
+  PYTHON_VERSION: "3.12"
   AWS_REGION: ap-northeast-1
   PREVIEW_LABEL: preview
-  SHARED_DEV_API_STACK: ImageProcessorApiStack-Dev
-  SHARED_DEV_FRONTEND_STACK: FrontendStack-Dev
 
 jobs:
   # 共通: ラベル状態を解決
@@ -37,7 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pr_number: ${{ steps.r.outputs.pr_number }}
-      stack_name: ${{ steps.r.outputs.stack_name }}
+      api_stack: ${{ steps.r.outputs.api_stack }}
+      frontend_stack: ${{ steps.r.outputs.frontend_stack }}
       should_deploy: ${{ steps.r.outputs.should_deploy }}
       should_destroy: ${{ steps.r.outputs.should_destroy }}
     steps:
@@ -48,9 +49,11 @@ jobs:
           # PR の現在ラベル一覧 (closed 時もそのまま参照可)
           HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'preview') }}
         run: |
-          STACK="FrontendStack-Dev-Pr${PR_NUM}"
+          API_STACK="ImageProcessorApiStack-Dev-Pr${PR_NUM}"
+          FRONTEND_STACK="FrontendStack-Dev-Pr${PR_NUM}"
           echo "pr_number=${PR_NUM}" >> "$GITHUB_OUTPUT"
-          echo "stack_name=${STACK}" >> "$GITHUB_OUTPUT"
+          echo "api_stack=${API_STACK}" >> "$GITHUB_OUTPUT"
+          echo "frontend_stack=${FRONTEND_STACK}" >> "$GITHUB_OUTPUT"
 
           # deploy 条件: preview ラベルが付いた状態で {opened, labeled, synchronize, reopened}
           if [ "$ACTION" = "closed" ]; then
@@ -74,15 +77,15 @@ jobs:
             echo "should_destroy=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "Stack: $STACK / Action: $ACTION / has-label: $HAS_LABEL"
+          echo "Stacks: $API_STACK + $FRONTEND_STACK / Action: $ACTION / has-label: $HAS_LABEL"
 
-  # frontend を build → CDK deploy → PR に URL コメント
+  # backend + frontend を build → CDK deploy → PR に URL コメント
   deploy:
     name: Deploy preview
     needs: resolve
     if: needs.resolve.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,6 +95,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install root dependencies
         run: npm ci
@@ -112,24 +119,36 @@ jobs:
           path: lambda-layers/ffmpeg-layer.zip
           key: ffmpeg-layer-amd64-static-v4.4.2
 
-      - name: Build ffmpeg Lambda layer (dummy if cache miss)
+      - name: Build ffmpeg Lambda layer
         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p lambda-layers
-          if [ ! -f lambda-layers/ffmpeg-layer.zip ]; then
-            echo "dummy" | zip lambda-layers/ffmpeg-layer.zip - >/dev/null
-          fi
+        run: bash scripts/create-ffmpeg-layer.sh
 
-      - name: Generate config.json (point to shared dev backend)
+      - name: Copy composite-default.json for Lambda bundling
+        # frontend/public/ がソース、lambda/python/composite_defaults.json は git 管理外
+        run: |
+          cp frontend/public/composite-default.json lambda/python/composite_defaults.json
+          echo "✅ composite_defaults.json copied for Lambda bundling"
+
+      - name: Deploy backend ${{ needs.resolve.outputs.api_stack }}
+        run: |
+          npx cdk deploy "${{ needs.resolve.outputs.api_stack }}" \
+            -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
+            --require-approval never
+        env:
+          AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
+          ENVIRONMENT: dev
+
+      - name: Generate config.json (point to per-PR backend)
         run: |
           mkdir -p frontend/public
-          API_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+          API_STACK="${{ needs.resolve.outputs.api_stack }}"
+          API_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
-          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+          UPLOAD_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='UploadApiUrl'].OutputValue" --output text)
-          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+          CHAT_URL=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='ChatApiUrl'].OutputValue" --output text)
-          TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$SHARED_DEV_API_STACK" \
+          TEST_IMAGES_BUCKET=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
             --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text 2>/dev/null || echo "")
           VERSION=$(node -p "require('./package.json').version")
           BUILD_HASH=${GITHUB_SHA::7}
@@ -140,33 +159,60 @@ jobs:
       - name: Build frontend
         run: cd frontend && npm ci && npm run build
 
-      - name: Deploy ${{ needs.resolve.outputs.stack_name }}
+      - name: Deploy frontend ${{ needs.resolve.outputs.frontend_stack }}
         run: |
-          npx cdk deploy "${{ needs.resolve.outputs.stack_name }}" \
+          npx cdk deploy "${{ needs.resolve.outputs.frontend_stack }}" \
             -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
             --require-approval never
+
+      - name: Update Lambda CLOUDFRONT_DOMAIN
+        run: |
+          API_STACK="${{ needs.resolve.outputs.api_stack }}"
+          FRONT_STACK="${{ needs.resolve.outputs.frontend_stack }}"
+          CF_DOMAIN=$(aws cloudformation describe-stacks --stack-name "$FRONT_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='DistributionDomain'].OutputValue" --output text)
+          if [ -n "$CF_DOMAIN" ]; then
+            # Lambda 関数名は 64 字制限で切り詰められるため CFN スタックリソースから物理 ID を取得
+            for FUNC_NAME in $(aws cloudformation list-stack-resources --stack-name "$API_STACK" \
+              --query "StackResourceSummaries[?ResourceType=='AWS::Lambda::Function' && (contains(LogicalResourceId, 'ImageProcessor') || contains(LogicalResourceId, 'AgentFunction'))].PhysicalResourceId" \
+              --output text); do
+              CURRENT_ENV=$(aws lambda get-function-configuration --function-name "$FUNC_NAME" --query "Environment.Variables" --output json)
+              UPDATED_ENV=$(echo "$CURRENT_ENV" | python3 -c "import sys,json; d=json.load(sys.stdin); d['CLOUDFRONT_DOMAIN']='${CF_DOMAIN}'; print(json.dumps({'Variables':d}))")
+              aws lambda update-function-configuration --function-name "$FUNC_NAME" --environment "$UPDATED_ENV" --no-cli-pager > /dev/null
+              echo "Updated $FUNC_NAME"
+            done
+          fi
 
       - name: Get preview URL
         id: url
         run: |
           URL=$(aws cloudformation describe-stacks \
-            --stack-name "${{ needs.resolve.outputs.stack_name }}" \
+            --stack-name "${{ needs.resolve.outputs.frontend_stack }}" \
             --query "Stacks[0].Outputs[?OutputKey=='FrontendUrl'].OutputValue" \
             --output text)
+          API_URL=$(aws cloudformation describe-stacks \
+            --stack-name "${{ needs.resolve.outputs.api_stack }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" --output text)
           echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
 
       - name: Comment preview URL on PR
         uses: actions/github-script@v7
         with:
           script: |
             const url = '${{ steps.url.outputs.url }}';
+            const apiUrl = '${{ steps.url.outputs.api_url }}';
             const sha = '${{ github.event.pull_request.head.sha }}'.slice(0, 7);
+            const apiStack = '${{ needs.resolve.outputs.api_stack }}';
+            const frontStack = '${{ needs.resolve.outputs.frontend_stack }}';
             const body = [
               '## PR Preview Deployed',
               '',
-              `**URL**: ${url}`,
+              `**Frontend URL**: ${url}`,
+              `**API URL**: ${apiUrl}`,
               '',
-              `Build: \`${sha}\` / Backend: \`${process.env.SHARED_DEV_API_STACK}\` を共有`,
+              `Build: \`${sha}\``,
+              `Stacks: \`${apiStack}\` + \`${frontStack}\``,
               '',
               '> 認証なし（dev/main と同等）。URL は CloudFront ドメインの難読性に依存します。',
               '> このプレビューは PR close で自動削除されます。`preview` ラベルを外すと即時 destroy できます。',
@@ -195,8 +241,6 @@ jobs:
                 body,
               });
             }
-        env:
-          SHARED_DEV_API_STACK: ${{ env.SHARED_DEV_API_STACK }}
 
   destroy:
     name: Destroy preview
@@ -224,38 +268,57 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Check stack exists
+      - name: Check stacks exist
         id: check
         run: |
-          if aws cloudformation describe-stacks --stack-name "${{ needs.resolve.outputs.stack_name }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
+          FRONT_EXISTS=false
+          API_EXISTS=false
+          if aws cloudformation describe-stacks --stack-name "${{ needs.resolve.outputs.frontend_stack }}" >/dev/null 2>&1; then
+            FRONT_EXISTS=true
+          fi
+          if aws cloudformation describe-stacks --stack-name "${{ needs.resolve.outputs.api_stack }}" >/dev/null 2>&1; then
+            API_EXISTS=true
+          fi
+          echo "front_exists=$FRONT_EXISTS" >> "$GITHUB_OUTPUT"
+          echo "api_exists=$API_EXISTS" >> "$GITHUB_OUTPUT"
+          if [ "$FRONT_EXISTS" = "false" ] && [ "$API_EXISTS" = "false" ]; then
+            echo "any_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Neither stack exists — skip destroy"
           else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Stack ${{ needs.resolve.outputs.stack_name }} not found — skip destroy"
+            echo "any_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build dummy ffmpeg (for cdk synth)
-        if: steps.check.outputs.exists == 'true'
+      - name: Build dummy ffmpeg (for cdk destroy synth)
+        if: steps.check.outputs.any_exists == 'true'
         run: |
           mkdir -p lambda-layers
           [ -f lambda-layers/ffmpeg-layer.zip ] || (echo "dummy" | zip lambda-layers/ffmpeg-layer.zip - >/dev/null)
 
-      - name: Destroy ${{ needs.resolve.outputs.stack_name }}
-        if: steps.check.outputs.exists == 'true'
+      - name: Destroy frontend ${{ needs.resolve.outputs.frontend_stack }}
+        if: steps.check.outputs.front_exists == 'true'
         run: |
-          npx cdk destroy "${{ needs.resolve.outputs.stack_name }}" \
+          npx cdk destroy "${{ needs.resolve.outputs.frontend_stack }}" \
+            -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
+            --force
+
+      - name: Destroy backend ${{ needs.resolve.outputs.api_stack }}
+        if: steps.check.outputs.api_exists == 'true'
+        run: |
+          npx cdk destroy "${{ needs.resolve.outputs.api_stack }}" \
             -c previewPr="${{ needs.resolve.outputs.pr_number }}" \
             --force
 
       - name: Comment destroyed on PR
-        if: steps.check.outputs.exists == 'true'
+        if: steps.check.outputs.any_exists == 'true'
         uses: actions/github-script@v7
         with:
           script: |
+            const apiStack = '${{ needs.resolve.outputs.api_stack }}';
+            const frontStack = '${{ needs.resolve.outputs.frontend_stack }}';
             const body = [
               '## PR Preview Destroyed',
               '',
-              `\`${{ needs.resolve.outputs.stack_name }}\` を削除しました。`,
+              `\`${apiStack}\` + \`${frontStack}\` を削除しました。`,
               '',
               '再度プレビューが必要な場合は `preview` ラベルを再度付与してください。',
             ].join('\n');

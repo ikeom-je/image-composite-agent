@@ -1,9 +1,10 @@
-# Stale PR Preview Cleanup - 7 日 idle の FrontendStack-Dev-Pr* を destroy
+# Stale PR Preview Cleanup - 7 日 idle の preview スタックを destroy
 # issue #87: PR preview の孤児スタック防止
 #
 # 仕様:
 #   - 日次 cron (UTC 18:00 = JST 03:00) で実行
-#   - LastUpdatedTime > 7 日前の FrontendStack-Dev-Pr<num> を destroy
+#   - 対象: `FrontendStack-Dev-Pr<num>` と `ImageProcessorApiStack-Dev-Pr<num>`
+#   - LastUpdatedTime > 7 日前の PR 番号セットを stale 判定し、frontend → backend の順で destroy
 #   - 対応する PR が open + preview ラベル付きでも 7 日経てば destroy（label 再付与で再 deploy 可能）
 #   - 手動 workflow_dispatch にも対応
 #
@@ -72,40 +73,65 @@ jobs:
           echo "Dry run: $DRY_RUN"
           echo ""
 
-          # FrontendStack-Dev-Pr* 一覧を取得
-          STACKS=$(aws cloudformation list-stacks \
+          # frontend / backend preview stack 一覧を取得し、PR 番号でまとめる
+          FRONT_STACKS=$(aws cloudformation list-stacks \
             --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
             --query "StackSummaries[?starts_with(StackName, 'FrontendStack-Dev-Pr')].StackName" \
             --output text || echo "")
+          API_STACKS=$(aws cloudformation list-stacks \
+            --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE UPDATE_ROLLBACK_COMPLETE \
+            --query "StackSummaries[?starts_with(StackName, 'ImageProcessorApiStack-Dev-Pr')].StackName" \
+            --output text || echo "")
 
-          if [ -z "$STACKS" ]; then
+          if [ -z "$FRONT_STACKS" ] && [ -z "$API_STACKS" ]; then
             echo "No PR preview stacks found."
             exit 0
           fi
 
-          DESTROYED=0
-          KEPT=0
-          for STACK in $STACKS; do
-            LAST_UPDATED=$(aws cloudformation describe-stacks --stack-name "$STACK" \
-              --query "Stacks[0].LastUpdatedTime || Stacks[0].CreationTime" --output text)
-            LAST_EPOCH=$(date -u -d "$LAST_UPDATED" +%s)
-            AGE_DAYS=$(( ( $(date -u +%s) - LAST_EPOCH ) / 86400 ))
+          # 全 preview stack の PR 番号セットを抽出（frontend と backend をマージ）
+          PR_NUMS=$(
+            { echo "$FRONT_STACKS" | tr '\t' '\n' | sed -nE 's/^FrontendStack-Dev-Pr([0-9]+).*$/\1/p';
+              echo "$API_STACKS"   | tr '\t' '\n' | sed -nE 's/^ImageProcessorApiStack-Dev-Pr([0-9]+).*$/\1/p'; \
+            } | sort -u | grep -v '^$' || true
+          )
 
-            if [ $LAST_EPOCH -lt $THRESHOLD_EPOCH ]; then
-              echo "  [STALE  ${AGE_DAYS}d] $STACK"
+          DESTROYED_GROUPS=0
+          KEPT_GROUPS=0
+          for PR_NUM in $PR_NUMS; do
+            FRONT="FrontendStack-Dev-Pr${PR_NUM}"
+            API="ImageProcessorApiStack-Dev-Pr${PR_NUM}"
+
+            # 各 stack の LastUpdated を取得（存在しない場合は 0）
+            LATEST=0
+            for STACK in "$FRONT" "$API"; do
+              LU=$(aws cloudformation describe-stacks --stack-name "$STACK" \
+                --query "Stacks[0].LastUpdatedTime || Stacks[0].CreationTime" --output text 2>/dev/null || echo "")
+              if [ -n "$LU" ]; then
+                EPOCH=$(date -u -d "$LU" +%s)
+                if [ "$EPOCH" -gt "$LATEST" ]; then
+                  LATEST=$EPOCH
+                fi
+              fi
+            done
+            AGE_DAYS=$(( ( $(date -u +%s) - LATEST ) / 86400 ))
+
+            if [ "$LATEST" -lt "$THRESHOLD_EPOCH" ]; then
+              echo "  [STALE  ${AGE_DAYS}d] PR #${PR_NUM} (frontend + backend)"
               if [ "$DRY_RUN" != "true" ]; then
-                # PR 番号を stack 名から抽出
-                PR_NUM=$(echo "$STACK" | sed -E 's/^FrontendStack-Dev-Pr([0-9]+).*$/\1/')
-                npx cdk destroy "$STACK" \
-                  -c previewPr="$PR_NUM" \
-                  --force
-                DESTROYED=$((DESTROYED + 1))
+                # frontend → backend の順で destroy（依存方向）
+                if aws cloudformation describe-stacks --stack-name "$FRONT" >/dev/null 2>&1; then
+                  npx cdk destroy "$FRONT" -c previewPr="$PR_NUM" --force
+                fi
+                if aws cloudformation describe-stacks --stack-name "$API" >/dev/null 2>&1; then
+                  npx cdk destroy "$API" -c previewPr="$PR_NUM" --force
+                fi
+                DESTROYED_GROUPS=$((DESTROYED_GROUPS + 1))
               fi
             else
-              echo "  [keep   ${AGE_DAYS}d] $STACK"
-              KEPT=$((KEPT + 1))
+              echo "  [keep   ${AGE_DAYS}d] PR #${PR_NUM}"
+              KEPT_GROUPS=$((KEPT_GROUPS + 1))
             fi
           done
 
           echo ""
-          echo "Summary: destroyed=$DESTROYED, kept=$KEPT"
+          echo "Summary: destroyed_pr_groups=$DESTROYED_GROUPS, kept_pr_groups=$KEPT_GROUPS"

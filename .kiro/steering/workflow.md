@@ -104,29 +104,31 @@ dev環境デプロイ後のe2eテスト手順は [testing.md](testing.md) の「
 - レビュー → フィードバック対応
 - **devブランチへのマージは指示があるまで行わない**
 
-#### PR Preview（UI 変更を含む PR の実機レビュー） — issue #87
+#### PR Preview（実機レビュー + full E2E） — issue #87
 
-`frontend/` 配下の変更を含む PR で UI 動作確認が必要な場合、PR に `preview` ラベルを付与すると ephemeral preview 環境が自動で立ち上がる:
+UI/API いずれかの変更を含む PR で実機確認が必要な場合、PR に `preview` ラベルを付与すると per-PR の独立 ephemeral 環境（backend + frontend）が自動で立ち上がる:
 
 ```
 PR open / push / label "preview" 追加
   ↓ .github/workflows/pr-preview.yml
-  ├ build frontend (config.json は共有 dev backend を指す)
+  ├ cdk deploy ImageProcessorApiStack-Dev-Pr<num>（API + Lambda + DDB + S3）
+  ├ config.json を per-PR backend の URL で生成 + frontend build
   ├ cdk deploy FrontendStack-Dev-Pr<num>（CloudFront + S3）
-  └ PR コメントに URL を自動投稿
+  ├ Lambda CLOUDFRONT_DOMAIN を per-PR Distribution に更新
+  └ PR コメントに Frontend URL + API URL を自動投稿
 ```
 
-レビュアーは PR コメントの URL から実機にアクセスして UI を確認できる。`preview` ラベルを外す or PR を close すると自動 destroy。さらに 7 日 idle のスタックは日次 cleanup ワークフローで自動削除される。
+レビュアーは PR コメントの URL から実機にアクセスし、front + backend を含む full E2E を実行できる。`preview` ラベルを外す or PR を close すると frontend → backend の順で自動 destroy。さらに 7 日 idle のスタックは日次 cleanup ワークフローで自動削除される。
 
 **認証**: dev/main と同様に無し。CloudFront ドメインの難読性に依存（限定共有用途）。
 
 **前提**:
-- `ImageProcessorApiStack-Dev`（共有 dev backend）が存在すること
 - repo secrets: `AWS_DEPLOY_ROLE_ARN`
+- `AWS_DEPLOY_ROLE_ARN` が `ImageProcessorApiStack-Dev-Pr*` / `FrontendStack-Dev-Pr*` の create/update/delete 権限を持つこと
 
 **スコープ**:
-- frontend stack のみ deploy（backend は共有 dev を参照）
-- backend 変更を含む PR は staging まで進めて確認する
+- backend + frontend の両方を per-PR で独立に作成（共有 backend は使わない）
+- backend 変更を含む PR でも full E2E が可能
 
 ### ステップ8: devへマージ → staging環境で統合テスト
 - 指示を受けてからdevにマージ
