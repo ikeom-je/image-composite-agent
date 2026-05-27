@@ -15,8 +15,9 @@ const env = {
 };
 
 // PR preview モード（issue #87）:
-//   -c previewPr=<num> を渡すと、共有 dev backend を参照する単独 frontend stack
-//   `FrontendStack-Dev-Pr<num>` のみを作成する。バックエンドは作成しない。
+//   -c previewPr=<num> を渡すと、`ImageProcessorApiStack-Dev-Pr<num>` +
+//   `FrontendStack-Dev-Pr<num>` の両スタックを per-PR で作成する。
+//   frontend は自身の per-PR backend を参照する（共有 dev backend は使わない）。
 //   認証は dev/main と同じく無し（CloudFront URL の難読性に依存）。
 const previewPr = app.node.tryGetContext('previewPr') as string | undefined;
 
@@ -34,26 +35,29 @@ if (previewPr) {
     resourceSuffix: previewResourceSuffix,
     isProduction: false,
   };
-  // 参照先（共有 dev backend）の envConfig
-  const sharedDevConfig: EnvironmentConfig = {
-    name: 'dev',
-    suffix: '-Dev',
-    resourceSuffix: '-dev',
-    isProduction: false,
+  const previewTags = {
+    Project: 'ImageProcessorAPI',
+    Version: 'v2',
+    Environment: 'dev',
+    PreviewPR: previewPr,
   };
 
-  new FrontendStack(app, `FrontendStack${previewSuffix}`, {
-    description: `PR #${previewPr} Preview Frontend (shared dev backend)`,
+  // backend (per-PR)
+  const previewApiStack = new ImageProcessorApiStack(app, `ImageProcessorApiStack${previewSuffix}`, {
+    description: `PR #${previewPr} Preview Backend`,
     env,
-    tags: {
-      Project: 'ImageProcessorAPI',
-      Version: 'v2',
-      Environment: 'dev',
-      PreviewPR: previewPr,
-    },
+    tags: previewTags,
     envConfig: previewEnvConfig,
-    importEnvConfig: sharedDevConfig,
   });
+
+  // frontend (per-PR) — 自身の per-PR backend を参照（importEnvConfig 省略で envConfig 自身を使う）
+  const previewFrontendStack = new FrontendStack(app, `FrontendStack${previewSuffix}`, {
+    description: `PR #${previewPr} Preview Frontend`,
+    env,
+    tags: previewTags,
+    envConfig: previewEnvConfig,
+  });
+  previewFrontendStack.addDependency(previewApiStack);
 } else {
   // 通常モード: backend + frontend を envConfig.suffix で作成
   const envConfig = resolveEnvironment(app);
