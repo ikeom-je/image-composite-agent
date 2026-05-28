@@ -193,3 +193,21 @@ Image Compositorの全機能を自然言語で操作できるAIチャットエ�
 - AC 13.5: 環境変数 `AGENT_MODEL_ID` が許可リスト外の場合は警告ログを出力し、`us.anthropic.claude-sonnet-4-5-20250929-v1:0` にフォールバックすること
 - AC 13.6: レスポンスに使用したモデル情報（`modelId`, `modelName`）を含めること
 - AC 13.7: モデルアクセスが未有効化（`AccessDeniedException`）の場合、403で日本語エラーメッセージとモデル名を返却すること
+
+
+---
+
+## Req 14: 相対配置・サイズ指示の解釈（issue #19）
+
+**説明**: 「画像の下にテキスト」「テキスト幅と同じ画像サイズ」のような、要素間の相対関係でユーザーが指示する位置・サイズを正しく解釈する。LLM 側で計算するが、テキスト寸法のみ `estimate_text_size` ツール（既存 `text_renderer.py` の Pillow `textbbox` を流用）で確定値を得る。
+
+**設計方針 — プロンプトチューニング前提**: 相対位置の計算式は SYSTEM_PROMPT のガイドで近似的に与えるのみで、画素単位の厳密な見た目一致は保証しない。Preview 環境（per-PR ephemeral）で実画面確認 → SYSTEM_PROMPT 微調整 → 再 deploy → 再確認のループで人間の許容範囲に収束させる。
+
+**Acceptance Criteria** (Preview 環境での chat UI 経由で人間検証):
+- AC 14.1: 「画像の下にテキスト」で `テキスト Y = 画像 Y + 画像 H + 20px` の位置にテキストが配置される
+- AC 14.2: 「テキスト幅と同じサイズの画像」で画像 width = `estimate_text_size` 結果の width が反映される
+- AC 14.3: 「横に並べて」「縦に並べて」で要素が水平/垂直に整列される（マージン 20px）
+- AC 14.4: 複合指示（位置 + サイズの相対指定）が順序立てて解釈される（issue #19 のライブテロップ例）
+- AC 14.5: 絶対座標指定 (`x=100,y=200` 等) と既存 POSITION_MAP 名前指定の挙動が変わらない（後方互換）
+- AC 14.6: `estimate_text_size(text, font_size)` ツールが Noto Sans JP の `textbbox` で `{"width", "height", "line_height"}` を返す
+- AC 14.7: テキスト寸法に依存しない配置（POSITION_MAP 名 / 絶対座標）では `estimate_text_size` が呼び出されない

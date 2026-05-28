@@ -105,3 +105,18 @@ _要件: 2.7, 2.8, 3.5_
 - [x] 11.2 generate_video ツールにtext1〜text3パラメータ追加
 - [x] 11.3 agent_prompts.py にテキストオーバーレイガイダンス追加
 - [x] 11.4 自然言語位置指定でテロップ配置（POSITION_MAP流用）
+
+## タスク12: 相対配置・サイズ指示の解釈（Req 14 / issue #19）
+_要件: 14.1-14.7_
+
+- [ ] 12.1 `lambda/python/agent_tools.py` に `estimate_text_size` ツール追加（`text_renderer.load_font` + `calculate_text_bbox` 流用）
+- [ ] 12.2 `test/lambda/test_estimate_text_size.py` で代表値 (font_size=24/48/72、日本語/英字/混在/空文字/改行) を検証
+- [ ] 12.3 `lambda/python/agent_prompts.py` の SYSTEM_PROMPT に以下を追記:
+  - 「## 相対配置の解釈」（9 種の式）
+  - 「## サイズ関係の解釈」（6 パターン）
+  - ツール使用ガイドに「### estimate_text_size を使うべきケース」
+  - 末尾「## 複合指示の解釈例」
+- [ ] 12.4 PR open + `preview` ラベルで per-PR ephemeral 環境を deploy
+- [ ] 12.5 Preview 環境の /chat で AC 14.1-14.7 を人間検証
+- [ ] 12.6 ズレあれば SYSTEM_PROMPT を調整 → push で再 deploy → 再検証を iterate
+- [ ] 12.7 dev へ PR merge（stack 自動 destroy）

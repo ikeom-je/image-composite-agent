@@ -586,6 +586,36 @@ def delete_uploaded_image(image_key: str) -> dict:
 
 
 @tool
+def estimate_text_size(text: str, font_size: int = 48) -> dict:
+    """テキストの描画サイズ (width, height, line_height) を Noto Sans JP の実測 textbbox で推定する。
+
+    用途: 「テキスト幅と同じサイズの画像」「テキストの下に画像」のような
+    要素間の相対指示でテキストの描画寸法に依存する場合、compose_images 呼び出し
+    **前**にこのツールを呼び出してテキストの実寸を取得する。
+    compose_images と同じフォントの textbbox 計算なので合成時の描画ズレなし。
+
+    呼び出し条件:
+      - 「テキスト幅と同じ画像」: 画像 width = 戻り値["width"]
+      - 「テキストの下に画像」: 画像 Y = テキスト Y + 戻り値["height"] + マージン
+      - 「テキスト B を画像 A の下に中央揃え」: B の絶対 X 計算に B.width が必要
+      - 名前位置（「左上」等）や絶対座標で直接配置するだけの時は **不要**
+
+    Args:
+        text: 計測対象のテキスト（空文字 / 改行入り可）
+        font_size: フォントサイズ px（デフォルト 48、compose_images の text*_font_size と同値を渡す）
+
+    Returns:
+        {"width": int, "height": int, "line_height": int}
+        - width / height: textbbox の実描画範囲（px）
+        - line_height: font_size × 1.2（CSS 慣例、複数行配置時の参考）
+    """
+    from text_renderer import load_font, calculate_text_bbox
+    font = load_font(font_family='NotoSansJP', font_size=font_size)
+    w, h = calculate_text_bbox(text, font)
+    return {"width": int(w), "height": int(h), "line_height": int(font_size * 1.2)}
+
+
+@tool
 def get_help(topic: str = "") -> str:
     """画像合成システムの使い方やヘルプ情報を取得します。
 
