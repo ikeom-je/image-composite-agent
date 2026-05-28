@@ -86,6 +86,9 @@ jobs:
     if: needs.resolve.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 既存 deploy role の OIDC trust policy を再利用するため staging 環境扱い
+    # （AWS_DEPLOY_ROLE_ARN は environment claim を要求する）
+    environment: staging
     steps:
       - uses: actions/checkout@v4
         with:
@@ -248,6 +251,7 @@ jobs:
     if: needs.resolve.outputs.should_destroy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: staging
     steps:
       - uses: actions/checkout@v4
 
