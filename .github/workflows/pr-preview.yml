@@ -260,6 +260,50 @@ jobs:
               });
             }
 
+      # --- E2E (per-PR backend + frontend に対して) ---
+      # 不整合を deploy 直後に検出するため deploy.yml 同様 API + Frontend E2E を実行。
+      # URL コメントは E2E 前に投稿済みなので、E2E 失敗でも URL は PR で見れる。
+
+      - name: Get TEST_IMAGES_BUCKET (for E2E)
+        id: bucket
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks --stack-name "${{ needs.resolve.outputs.api_stack }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text 2>/dev/null || echo "")
+          echo "test_images_bucket=$BUCKET" >> "$GITHUB_OUTPUT"
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run API E2E against per-PR backend
+        run: npx playwright test --config=test/playwright-api.config.ts --project=api-tests --reporter=list
+        env:
+          API_URL: ${{ steps.url.outputs.api_url }}
+          TEST_IMAGES_BUCKET: ${{ steps.bucket.outputs.test_images_bucket }}
+          CI: true
+
+      - name: Run Frontend E2E against per-PR preview
+        run: |
+          npx playwright test --config=test/playwright.config.ts \
+            --project=api-demo-tests \
+            --project=upload-tests \
+            --project=selection-tests \
+            --project=integration-tests \
+            --project=settings-tests \
+            --reporter=list
+        env:
+          API_URL: ${{ steps.url.outputs.api_url }}
+          FRONTEND_URL: ${{ steps.url.outputs.url }}
+          TEST_IMAGES_BUCKET: ${{ steps.bucket.outputs.test_images_bucket }}
+          CI: true
+
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-e2e-results-pr${{ needs.resolve.outputs.pr_number }}
+          path: test/test-results/
+          retention-days: 7
+
   destroy:
     name: Destroy preview
     needs: resolve
