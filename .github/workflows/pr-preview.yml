@@ -141,6 +141,21 @@ jobs:
           AGENTMODEL: ${{ vars.AGENTMODEL || 'us.amazon.nova-2-lite-v1:0' }}
           ENVIRONMENT: dev
 
+      - name: Upload test images to per-PR TestImagesBucket
+        # CDK は TestImagesBucket を空で作成するため、APIDemo の shape 画像選択
+        # (circle/rectangle/triangle) が指す s3:// パスが 404 になる。
+        # dev/staging/prod では scripts/upload-test-images.sh を別途実行している
+        # 運用に揃え、preview workflow でも backend deploy 直後に投入する。
+        run: |
+          API_STACK="${{ needs.resolve.outputs.api_stack }}"
+          BUCKET=$(aws cloudformation describe-stacks --stack-name "$API_STACK" \
+            --query "Stacks[0].Outputs[?OutputKey=='TestImagesBucketName'].OutputValue" --output text)
+          if [ -n "$BUCKET" ]; then
+            bash scripts/upload-test-images.sh "$BUCKET"
+          else
+            echo "⚠️  TestImagesBucketName output が空。upload skip"
+          fi
+
       - name: Generate config.json (point to per-PR backend)
         run: |
           mkdir -p frontend/public
