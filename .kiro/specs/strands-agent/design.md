@@ -585,6 +585,33 @@ function newSession() {
 - **チューニング前提**: 計算式は近似で、見た目の厳密性は保証しない。Preview 環境（per-PR ephemeral）で実画面確認 → SYSTEM_PROMPT 微調整 → 再 deploy → 再確認のループで収束させる
 - **後方互換性**: 既存の POSITION_MAP 名前指定 / 絶対座標指定の挙動は無変更
 
+### 13.2-pre `calculate_relative_position` ツール（Nova 等の暗算ミス対策）
+
+Nova 2 Lite は SYSTEM_PROMPT の相対配置公式を諳んじることができても、
+tool-call コンテキストでの基本算数を誤る（実機検証で「290 + 500 + 20」を
+832 と回答する事象を観測）。プロンプト強化では限界があるため、相対配置の
+算術自体をツール化して LLM の暗算依存を排除する。
+
+```python
+@tool
+def calculate_relative_position(
+    ref_x, ref_y, ref_width, ref_height,
+    direction: str,    # 下/上/右/左/横並び/縦並び/中央/真下中央/真上中央/x揃え/y揃え（別名対応）
+    target_width=0, target_height=0,
+    margin=20,
+) -> dict:  # {"x": int, "y": int}
+```
+
+- direction 別名: 「下/下部/真下/下に」「上/上部/真上/上に」「右/右側/右に」「左/左側/左に」等
+- target_width/height は中央揃え系・「上」「左」など B 寸法が必要な direction で指定
+- 画面外（負値含む）も生値で返す（compose_images 側で clamp する設計）
+- 未知 direction は `{"error": ..., "x": ref_x, "y": ref_y}` を返してフォールバック
+
+LLM ワークフロー:
+  ① テキスト寸法依存なら `estimate_text_size` を呼ぶ
+  ② `calculate_relative_position(ref_*, direction, target_*)` で (x, y) を取得
+  ③ 取得値を "x,y" 文字列で compose_images の image*_position / text*_position に渡す
+
 ### 13.2 `estimate_text_size` ツール
 
 ```python
