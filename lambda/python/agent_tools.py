@@ -96,6 +96,13 @@ def compose_images(
 ) -> dict:
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
+    呼び出し前の必須手順（相対配置・サイズ指示が含まれる場合）:
+      ① テキスト寸法に依存するなら estimate_text_size を呼び実寸を取得
+      ② SYSTEM_PROMPT「## 相対配置の解釈」の公式を**文字通り**適用して x/y を計算
+         例: 「Aの下に」 → y = A.y + A.height + 20
+      ③ 算出した値を image*_position / text*_position に "x,y" 形式で渡す
+      ④ ヒューリスティックな推定（「下 ≈ y を少し増やす」等）は禁止
+
     Args:
         image1: 画像1のソース。"test"でテスト画像、アップロード済み画像のファイル名（例: "338b77e1-xxx.jpeg"）、HTTP URLを指定可能。必須。アップロード済み画像を使う場合はlist_uploaded_imagesで取得したfilenameをそのまま指定してください。
         image1_position: 画像1の配置位置。"左上","中央","右下"等の名前、または"x,y"座標。
