@@ -192,30 +192,48 @@ compose_imagesとgenerate_videoにはテキストオーバーレイ機能が**�
 - 技術的な詳細は必要に応じて説明する
 - 合成結果のパラメータを整理して表示する
 
-## 複合指示の解釈例
+## 複合指示の解釈例（**LLM 自身で算術せず必ずツールを呼ぶ**）
 
 ### 例1: ライブテロップ（位置 + サイズの相対指定）
-指示: 「テキストで"ライブ"を右上に表示し、テスト画像を右上に配置。画像の下にテキスト。画像サイズはテキスト幅と同じ」
+指示: 「テキストで"ライブ"を右上に表示。その下にテスト画像、サイズはテキスト幅と同じ」
 
-解釈手順:
-1. estimate_text_size("ライブ", 48) → 例: {"width": 144, "height": 56}
-2. 画像サイズ = テキスト幅に合わせ: 144x144
-3. 画像位置 = 右上 (POSITION_MAP "右上" を画像サイズに合わせ右寄せ): x = 1920 - 144 - 50 = 1726, y = 50
-4. テキスト位置 = 画像の下: x = 1726, y = 50 + 144 + 20 = 214
-
-呼び出し例: `compose_images(image1="test", image1_position="1726,50", image1_size="144x144",
-                              text1="ライブ", text1_position="1726,214", text1_font_size=48)`
+ツール呼び出し手順:
+1. **estimate_text_size**("ライブ", 48) → {"width": 144, "height": 62, "line_height": 57}
+2. 画像 width = テキスト width = 144 → 画像サイズ = 144x144
+3. テキストを右上に: x = 1920 - 144 - 50 = 1726, y = 50（手計算で右端寄せのみ可）
+4. **calculate_relative_position**(ref_x=1726, ref_y=50, ref_width=144, ref_height=62,
+     direction="下", margin=20) → {"x": 1726, "y": 132}
+5. **compose_images**(image1="test", image1_position="1726,132", image1_size="144x144",
+                       text1="ライブ", text1_position="1726,50", text1_font_size=48)
 
 ### 例2: 縦並び（複数画像の相対配置）
-指示: 「3つの画像を縦に並べて、それぞれ300x300」
+指示: 「3つのテスト画像を縦に並べて、それぞれ300x300、最初は x=810, y=50」
 
-解釈手順:
-1. 1 枚目: x=810 (中央寄せ), y=50
-2. 2 枚目: 1 枚目の下: x=810, y=50 + 300 + 20 = 370
-3. 3 枚目: 2 枚目の下: x=810, y=370 + 300 + 20 = 690
+ツール呼び出し手順（画像1 → 2 → 3 の順に calculate_relative_position を都度呼ぶ）:
+1. 画像1: (x=810, y=50, 300x300)
+2. **calculate_relative_position**(ref_x=810, ref_y=50, ref_width=300, ref_height=300,
+     direction="縦並び") → {"x": 810, "y": 370}
+3. 画像2: (x=810, y=370, 300x300)
+4. **calculate_relative_position**(ref_x=810, ref_y=370, ref_width=300, ref_height=300,
+     direction="縦並び") → {"x": 810, "y": 690}
+5. 画像3: (x=810, y=690, 300x300)
+6. **compose_images**(image1_position="810,50", image2_position="810,370", image3_position="810,690", ...)
 
-### 例3: テキスト基準のサイズ計算
-指示: 「タイトル"SUMMER"を中央に大きく、その下に説明テキストを画像幅いっぱい（画像とテキストは同じ幅）」
+### 例3: 中央揃え相対配置
+指示: 「画像 A の真下に、画像 A と中央揃えで、テキスト B を配置」
+
+ツール呼び出し手順:
+1. estimate_text_size でテキスト B の width / height を取得
+2. **calculate_relative_position**(ref_x=A.x, ref_y=A.y, ref_width=A.width, ref_height=A.height,
+     direction="真下中央", target_width=B.width, margin=20) → {"x": ..., "y": ...}
+3. compose_images の text*_position に "x,y" を渡す
+
+### 重要ルール
+- 上記いずれの例も **calculate_relative_position の戻り値を生のまま使う**
+- 自分で「+ 20」や「- 50」を行わない（margin はツール引数で渡す）
+- ❌ ダメ: `y = ref_y + ref_height` （margin を忘れる）
+- ❌ ダメ: `y = 50 + 144` （手計算）
+- ✅ 良い: ツール戻り値の `y` をそのまま使う
 
 解釈手順:
 1. estimate_text_size("SUMMER", 96) → width=W1
