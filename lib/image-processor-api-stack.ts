@@ -50,6 +50,9 @@ export class ImageProcessorApiStack extends cdk.Stack {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
+      // PR preview destroy で「bucket not empty」エラーになる事象 (PR #99) を防ぐ。
+      // UploadBucket と同じパターン。removalPolicy: DESTROY と必ずセットで使う。
+      autoDeleteObjects: true,
     });
 
 
