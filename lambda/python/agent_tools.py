@@ -96,6 +96,13 @@ def compose_images(
 ) -> dict:
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
+    呼び出し前の必須手順（相対配置・サイズ指示が含まれる場合）:
+      ① テキスト寸法に依存するなら estimate_text_size を呼び実寸を取得
+      ② **必ず calculate_relative_position(ref_*, direction, target_*) を呼んで (x, y) を取得**
+         （LLM 自身で算術しない。Nova 等の暗算ミスを回避する設計）
+      ③ ②で得た x, y を image*_position / text*_position に "x,y" 形式で渡す
+      ④ ヒューリスティックな推定（「下 ≈ y を少し増やす」等）は禁止
+
     Args:
         image1: 画像1のソース。"test"でテスト画像、アップロード済み画像のファイル名（例: "338b77e1-xxx.jpeg"）、HTTP URLを指定可能。必須。アップロード済み画像を使う場合はlist_uploaded_imagesで取得したfilenameをそのまま指定してください。
         image1_position: 画像1の配置位置。"左上","中央","右下"等の名前、または"x,y"座標。
@@ -583,6 +590,128 @@ def delete_uploaded_image(image_key: str) -> dict:
     except Exception as e:
         logger.error(f"Failed to delete image: {e}")
         return {'success': False, 'error': str(e)}
+
+
+_RELATIVE_DIRECTION_ALIASES = {
+    '下': '下', '下部': '下', '真下': '下', '下に': '下',
+    '上': '上', '上部': '上', '真上': '上', '上に': '上',
+    '右': '右', '右側': '右', '右に': '右',
+    '左': '左', '左側': '左', '左に': '左',
+    '横並び': '横並び', '横に並べて': '横並び', '横に並べる': '横並び',
+    '縦並び': '縦並び', '縦に並べて': '縦並び', '縦に並べる': '縦並び',
+    '中央': '中央', '中心': '中央',
+    '真下中央': '真下中央', '下中央': '真下中央',
+    '真上中央': '真上中央', '上中央': '真上中央',
+    'x揃え': 'x揃え', 'X揃え': 'x揃え', '左端揃え': 'x揃え',
+    'y揃え': 'y揃え', 'Y揃え': 'y揃え', '上端揃え': 'y揃え',
+}
+
+
+@tool
+def calculate_relative_position(
+    ref_x: int,
+    ref_y: int,
+    ref_width: int,
+    ref_height: int,
+    direction: str,
+    target_width: int = 0,
+    target_height: int = 0,
+    margin: int = 20,
+) -> dict:
+    """参照要素 A を基準に配置対象 B の (x, y) を確定的に計算する。
+
+    LLM の暗算ミスを避けるため相対配置の算術をツール側で実行する。
+    compose_images / generate_video の image*_position / text*_position に
+    渡す "x,y" 文字列の元になる値を返す。
+
+    direction:
+      - "下" / "下部" / "真下" → y = ref_y + ref_height + margin, x = ref_x
+      - "真下中央" → y = ref_y + ref_height + margin, x = ref_x + ref_width//2 - target_width//2
+      - "上" / "上部" / "真上" → y = ref_y - target_height - margin, x = ref_x
+      - "真上中央" → y = ref_y - target_height - margin, x = ref_x + ref_width//2 - target_width//2
+      - "右" / "右側" → x = ref_x + ref_width + margin, y = ref_y
+      - "左" / "左側" → x = ref_x - target_width - margin, y = ref_y
+      - "横並び" → y = ref_y, x = ref_x + ref_width + margin（A の右に水平整列）
+      - "縦並び" → x = ref_x, y = ref_y + ref_height + margin（A の下に垂直整列）
+      - "中央" → A の中心に B 中央を合わせる
+      - "x揃え" → x = ref_x（左端揃えのみ、y は ref_y を返すが通常別途指定）
+      - "y揃え" → y = ref_y
+
+    target_width / target_height は中央揃え系・「上」「左」など B の寸法が
+    計算に必要な direction のときに指定する。それ以外は 0 でよい。
+
+    Args:
+        ref_x, ref_y, ref_width, ref_height: 参照要素 A のサイズ・位置
+        direction: 上記いずれかの相対位置キーワード
+        target_width: 配置対象 B の幅（中央揃え系・「左」で必須）
+        target_height: 配置対象 B の高さ（「上」「真上中央」で必須）
+        margin: 隣接マージン px、デフォルト 20
+
+    Returns:
+        {"x": int, "y": int}: 配置対象 B の左上座標。
+        座標がキャンバス (1920x1080) からはみ出る場合も生値で返す
+        （compose_images 側で clamp する）。
+    """
+    key = _RELATIVE_DIRECTION_ALIASES.get(direction.strip())
+    if key is None:
+        return {"error": f"unknown direction: {direction!r}", "x": ref_x, "y": ref_y}
+
+    if key == '下':
+        return {"x": int(ref_x), "y": int(ref_y + ref_height + margin)}
+    if key == '真下中央':
+        return {"x": int(ref_x + ref_width // 2 - target_width // 2),
+                "y": int(ref_y + ref_height + margin)}
+    if key == '上':
+        return {"x": int(ref_x), "y": int(ref_y - target_height - margin)}
+    if key == '真上中央':
+        return {"x": int(ref_x + ref_width // 2 - target_width // 2),
+                "y": int(ref_y - target_height - margin)}
+    if key == '右':
+        return {"x": int(ref_x + ref_width + margin), "y": int(ref_y)}
+    if key == '左':
+        return {"x": int(ref_x - target_width - margin), "y": int(ref_y)}
+    if key == '横並び':
+        return {"x": int(ref_x + ref_width + margin), "y": int(ref_y)}
+    if key == '縦並び':
+        return {"x": int(ref_x), "y": int(ref_y + ref_height + margin)}
+    if key == '中央':
+        return {"x": int(ref_x + ref_width // 2 - target_width // 2),
+                "y": int(ref_y + ref_height // 2 - target_height // 2)}
+    if key == 'x揃え':
+        return {"x": int(ref_x), "y": int(ref_y)}
+    if key == 'y揃え':
+        return {"x": int(ref_x), "y": int(ref_y)}
+    return {"error": "unreachable", "x": ref_x, "y": ref_y}
+
+
+@tool
+def estimate_text_size(text: str, font_size: int = 48) -> dict:
+    """テキストの描画サイズ (width, height, line_height) を Noto Sans JP の実測 textbbox で推定する。
+
+    用途: 「テキスト幅と同じサイズの画像」「テキストの下に画像」のような
+    要素間の相対指示でテキストの描画寸法に依存する場合、compose_images 呼び出し
+    **前**にこのツールを呼び出してテキストの実寸を取得する。
+    compose_images と同じフォントの textbbox 計算なので合成時の描画ズレなし。
+
+    呼び出し条件:
+      - 「テキスト幅と同じ画像」: 画像 width = 戻り値["width"]
+      - 「テキストの下に画像」: 画像 Y = テキスト Y + 戻り値["height"] + マージン
+      - 「テキスト B を画像 A の下に中央揃え」: B の絶対 X 計算に B.width が必要
+      - 名前位置（「左上」等）や絶対座標で直接配置するだけの時は **不要**
+
+    Args:
+        text: 計測対象のテキスト（空文字 / 改行入り可）
+        font_size: フォントサイズ px（デフォルト 48、compose_images の text*_font_size と同値を渡す）
+
+    Returns:
+        {"width": int, "height": int, "line_height": int}
+        - width / height: textbbox の実描画範囲（px）
+        - line_height: font_size × 1.2（CSS 慣例、複数行配置時の参考）
+    """
+    from text_renderer import load_font, calculate_text_bbox
+    font = load_font(font_family='NotoSansJP', font_size=font_size)
+    w, h = calculate_text_bbox(text, font)
+    return {"width": int(w), "height": int(h), "line_height": int(font_size * 1.2)}
 
 
 @tool

@@ -38,6 +38,8 @@ jobs:
     name: Cleanup stale previews
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 既存 deploy role の OIDC trust policy を再利用するため staging 環境扱い
+    environment: staging
     steps:
       - uses: actions/checkout@v4
 

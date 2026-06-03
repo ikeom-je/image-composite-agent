@@ -27,8 +27,12 @@ test.describe('Settings ルール管理 UI', () => {
   test('AC 8.x / 9.x: タブ切替でルール一覧が表示され、プリセットルールが含まれる', async ({ page }) => {
     await page.getByRole('button', { name: 'ルール（System Prompt）' }).click()
     await expect(page.getByRole('heading', { name: 'ルール一覧' })).toBeVisible()
-    await expect(page.getByText(PRESET_RULE_NAME)).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('デフォルト').first()).toBeVisible()
+    // preset name は RuleListItem の card と System Prompt preview の両方に出現する。
+    // テスト意図は「ルール一覧の card に preset が含まれる」なので card root
+    // (RuleListItem.vue の rounded-lg クラス) で narrowing する（AC 9.4 と同パターン）。
+    const presetCard = page.locator('div.rounded-lg', { hasText: PRESET_RULE_NAME }).first()
+    await expect(presetCard).toBeVisible({ timeout: 10000 })
+    await expect(presetCard.getByText('デフォルト')).toBeVisible()
   })
 
   test('AC 10.x: 新規作成 → 保存 → 一覧に反映', async ({ page }) => {

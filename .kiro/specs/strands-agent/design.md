@@ -574,3 +574,87 @@ function newSession() {
 4. **レート制限**: API Gateway使用量プラン適用
 5. **DynamoDB TTL**: 7日で自動削除（データ蓄積防止）
 6. **ログ**: シークレットをログに出力しない
+
+---
+
+## 13. 相対配置・サイズ指示の解釈（Req 14 / issue #19）
+
+### 13.1 設計の原則
+
+- **計算は LLM、寸法のみツール**: 相対座標は LLM (Bedrock) が SYSTEM_PROMPT の式から導く。Nova / Claude 系で 1 桁の足し算引き算は実用十分。テキスト寸法のみ `estimate_text_size` ツールで確定値を取得し、layout 計算のズレを抑える
+- **チューニング前提**: 計算式は近似で、見た目の厳密性は保証しない。Preview 環境（per-PR ephemeral）で実画面確認 → SYSTEM_PROMPT 微調整 → 再 deploy → 再確認のループで収束させる
+- **後方互換性**: 既存の POSITION_MAP 名前指定 / 絶対座標指定の挙動は無変更
+
+### 13.2-pre `calculate_relative_position` ツール（Nova 等の暗算ミス対策）
+
+Nova 2 Lite は SYSTEM_PROMPT の相対配置公式を諳んじることができても、
+tool-call コンテキストでの基本算数を誤る（実機検証で「290 + 500 + 20」を
+832 と回答する事象を観測）。プロンプト強化では限界があるため、相対配置の
+算術自体をツール化して LLM の暗算依存を排除する。
+
+```python
+@tool
+def calculate_relative_position(
+    ref_x, ref_y, ref_width, ref_height,
+    direction: str,    # 下/上/右/左/横並び/縦並び/中央/真下中央/真上中央/x揃え/y揃え（別名対応）
+    target_width=0, target_height=0,
+    margin=20,
+) -> dict:  # {"x": int, "y": int}
+```
+
+- direction 別名: 「下/下部/真下/下に」「上/上部/真上/上に」「右/右側/右に」「左/左側/左に」等
+- target_width/height は中央揃え系・「上」「左」など B 寸法が必要な direction で指定
+- 画面外（負値含む）も生値で返す（compose_images 側で clamp する設計）
+- 未知 direction は `{"error": ..., "x": ref_x, "y": ref_y}` を返してフォールバック
+
+LLM ワークフロー:
+  ① テキスト寸法依存なら `estimate_text_size` を呼ぶ
+  ② `calculate_relative_position(ref_*, direction, target_*)` で (x, y) を取得
+  ③ 取得値を "x,y" 文字列で compose_images の image*_position / text*_position に渡す
+
+### 13.2 `estimate_text_size` ツール
+
+```python
+# lambda/python/agent_tools.py
+@tool
+def estimate_text_size(text: str, font_size: int = 48) -> dict:
+    """テキストの描画サイズを推定する（Noto Sans JP の textbbox 実測）。
+    用途: 相対配置で「テキスト幅と同じ画像サイズ」「テキストの下に画像」のような
+    指示時、compose_images 呼び出し前にテキスト寸法を取得するため。
+    Returns: {"width": int, "height": int, "line_height": int}
+    """
+    from text_renderer import load_font, calculate_text_bbox
+    font = load_font(font_family='NotoSansJP', font_size=font_size)
+    w, h = calculate_text_bbox(text, font)
+    return {"width": w, "height": h, "line_height": int(font_size * 1.2)}
+```
+
+- 既存 `text_renderer.load_font` + `calculate_text_bbox` を流用（新規ロジックなし）
+- `line_height` は CSS 慣例 `font_size × 1.2` を採用
+- 空文字 / 改行入りテキストは Pillow `textbbox` が処理
+
+### 13.3 SYSTEM_PROMPT 拡張箇所
+
+`agent_prompts.py` の SYSTEM_PROMPT に以下を追加:
+
+1. **「## 相対配置の解釈」**（既存「## 位置の解釈ガイド」直後）— 9 種の相対位置語彙と式
+2. **「## サイズ関係の解釈」** — 「テキスト幅と同じ」「画面の半分」等 6 パターンと式
+3. **「## ツール使用ガイド」内に「### estimate_text_size を使うべきケース」追加** — 呼び出し条件（テキスト寸法が他要素計算に必要な時のみ）
+4. **末尾「## 複合指示の解釈例」** — issue #19 のライブテロップ例 + 縦並び例 + テキスト基準サイズ例
+
+### 13.4 Lambda Layer 影響
+
+- `agent_tools.py` は既存 Lambda layer に同梱されている。`text_renderer.py` を import するため、layer 構成変更は不要
+- Pillow / NotoSansJP は既に同梱（compose_images で使用中）
+
+### 13.5 検証フロー
+
+```
+1. PR open + preview ラベル付与
+   → ImageProcessorApiStack-Dev-Pr<num> + FrontendStack-Dev-Pr<num> ephemeral deploy
+2. PR コメントの Frontend URL の /chat にアクセス
+3. AC 14.1-14.7 を chat 経由で指示し期待挙動を人間が確認
+4. ズレがあれば SYSTEM_PROMPT を調整 → push → 同 stack が update
+5. AC 全て許容範囲まで iterate
+6. dev に PR merge → stack auto-destroy
+```

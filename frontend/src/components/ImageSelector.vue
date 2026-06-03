@@ -393,25 +393,36 @@ const formatFileSize = (bytes: number): string => {
 watch(() => props.modelValue, updateDisplayValue, { immediate: true })
 
 // Lifecycle
-onMounted(() => {
+onMounted(async () => {
   updateDisplayValue()
-  // 初期S3画像読み込み
+  // config.json の load 完了を待ってから初回 S3 画像取得を行う
+  // (未ロード時に呼ぶと configStore.uploadApiUrl の fallback が
+  //  CloudFront 上の存在しない /api/* を返し APIDemo 初回ロード時の
+  //  「API エンドポイントエラー」を引き起こすため)
+  if (!configStore.isLoaded) {
+    try {
+      await configStore.loadConfig()
+    } catch (e) {
+      console.warn('[ImageSelector] config 読み込み失敗、S3 画像取得をスキップ:', e)
+      return
+    }
+  }
   loadS3Images()
-  
+
   // アップロード完了イベントをリッスン
   const handleS3ImagesUpdated = (event: CustomEvent) => {
     console.log('[ImageSelector] S3 images updated event received:', event.detail)
     // 画像一覧を更新
     loadS3Images()
   }
-  
+
   window.addEventListener('s3-images-updated', handleS3ImagesUpdated as EventListener)
-  
+
   // クリーンアップ
   const cleanup = () => {
     window.removeEventListener('s3-images-updated', handleS3ImagesUpdated as EventListener)
   }
-  
+
   // Vue 3のunmountedフックでクリーンアップ
   onUnmounted(cleanup)
 })
