@@ -211,3 +211,23 @@ Image Compositorの全機能を自然言語で操作できるAIチャットエ�
 - AC 14.5: 絶対座標指定 (`x=100,y=200` 等) と既存 POSITION_MAP 名前指定の挙動が変わらない（後方互換）
 - AC 14.6: `estimate_text_size(text, font_size)` ツールが Noto Sans JP の `textbbox` で `{"width", "height", "line_height"}` を返す
 - AC 14.7: テキスト寸法に依存しない配置（POSITION_MAP 名 / 絶対座標）では `estimate_text_size` が呼び出されない
+
+---
+
+## Req 15: プリセット機能 — typical 配置パターンと Agent 連携（issue #59）
+
+**説明**: ライブ配信・番組宣伝・字幕などの**典型配置パターン**を `composite-default.json` の `presets` セクションに事前定義し、Chat Agent から名前で呼び出して compose_images に適用できるようにする。LLM の暗算依存を避け、典型シナリオは一発で完成系を作れるようにする。
+
+**設計方針**:
+- 適用は **Lambda 側で merge**（`compose_images(preset="live", ...)`）
+- **α 方針**: ユーザー明示引数が常に preset 値より優先される（preset は default 値だけを埋める）
+- **曖昧時の逆質問**: 「Live風で」等の表現で preset 名が複数候補ある時、LLM は推測せずユーザーに確認
+
+**Acceptance Criteria**:
+- AC 15.1: `composite-default.json` の `presets` に `live` / `promo` / `subtitle` の 3 種が定義されている
+- AC 15.2: `compose_images(preset="live")` で preset の base_image / position / text 等が default に適用される
+- AC 15.3: `compose_images(preset="live", text1="緊急")` で text1 はユーザー指定の "緊急" になる（preset の "LIVE" を上書き）
+- AC 15.4: 未知 preset 名は `{"success": False, "error": "unknown preset: ..."}` を返し、合成は実行されない
+- AC 15.5: `list_presets()` ツールが `{"presets": [{"name", "description"}, ...]}` を返す
+- AC 15.6: SYSTEM_PROMPT の指示により、Nova が「Live風で」等の曖昧表現で preset 候補をユーザーに確認する（推測呼び出ししない）
+- AC 15.7: 既存の preset 未指定呼び出しは挙動無変更（後方互換）
