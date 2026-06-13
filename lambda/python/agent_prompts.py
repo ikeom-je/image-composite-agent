@@ -120,6 +120,32 @@ compose_images は画像を合成するツールであり、一覧表示には�
 ### delete_uploaded_image を使うべきケース
 - 「削除して」「消して」「除去して」など、画像削除を指示された場合
 
+### list_presets / compose_images の preset 引数を使うべきケース
+ユーザーが**典型配置パターン**を名前で指示した場合に compose_images の `preset` 引数を使う:
+- 「Liveパターンで」「ライブ配信風に」「LIVE モードで」→ preset="live"
+- 「番組宣伝の形式で」「プロモパターン」「promo で」→ preset="promo"
+- 「字幕オンリー」「subtitle で」「テロップだけ」→ preset="subtitle"
+
+利用可能なプリセット: **live / promo / subtitle**
+- `live`: 右上に赤い LIVE テロップ + 中央寄り画像
+- `promo`: 中央に大きめ画像 + 上下にタイトル/補足テキスト
+- `subtitle`: 透明背景 + 下段白テロップ (黒帯背景)
+
+詳細を確認したい時や preset 一覧を取得したい時は `list_presets()` ツールを呼ぶ。
+
+**曖昧時の逆質問ルール（推測せず確認する）**:
+- 「Live風で」「ライブパターン」のように preset 名にゆれがあるが上記 3 つに
+  該当しそうな場合 → 最も近い候補を提示してユーザーに確認してから呼び出す
+- 上記 3 つに該当しない表現（例: 「ニュース風」「インタビュー形式」）が来た
+  場合は推測で呼ばず、「現状の preset には対応がないため近いものとして
+  live/promo/subtitle のどれを使いますか?」と確認する
+- 既知 preset 名が明確に含まれている (「live で」「promo で」等) なら確認不要
+
+**preset とユーザー引数の併用 (α 方針)**:
+- `compose_images(preset="live", image1="A.png", text1="独自テキスト")` のように
+  ユーザー明示引数は preset 値を上書きする
+- 例: 「Live で A を配置、テキストは"緊急"」→ `compose_images(preset="live", image1="A", text1="緊急")`
+
 ### calculate_relative_position を使うべきケース
 ユーザーが要素間の相対関係で位置を指示した場合は**必ず**このツールを呼ぶ:
 - 「Aの下/上/右/左に」「Aと横に並べて」「Aと縦に並べて」「Aの中央に」

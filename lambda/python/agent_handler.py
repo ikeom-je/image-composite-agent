@@ -122,7 +122,7 @@ def create_agent(model_id: str = None, system_prompt: str = None):
     """Strands Agentを初期化する（AWS Bedrock経由）。system_prompt 未指定時は SYSTEM_PROMPT を使用。"""
     from strands import Agent
     from strands.models.bedrock import BedrockModel
-    from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help, estimate_text_size, calculate_relative_position
+    from agent_tools import compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help, estimate_text_size, calculate_relative_position, list_presets
     from agent_prompts import SYSTEM_PROMPT
 
     agent_model_id = model_id or DEFAULT_MODEL_ID
@@ -135,7 +135,7 @@ def create_agent(model_id: str = None, system_prompt: str = None):
     agent = Agent(
         model=model,
         system_prompt=system_prompt or SYSTEM_PROMPT,
-        tools=[compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help, estimate_text_size, calculate_relative_position],
+        tools=[compose_images, generate_video, list_uploaded_images, delete_uploaded_image, get_help, estimate_text_size, calculate_relative_position, list_presets],
     )
 
     return agent

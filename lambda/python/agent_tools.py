@@ -93,6 +93,7 @@ def compose_images(
     text3_wrap: bool = False,
     text3_max_width: int = 0,
     text3_padding: int = 10,
+    preset: str = "",
 ) -> dict:
     """画像を合成します。最大3枚の画像をキャンバス（1920x1080）上に配置して合成します。
 
@@ -102,6 +103,15 @@ def compose_images(
          （LLM 自身で算術しない。Nova 等の暗算ミスを回避する設計）
       ③ ②で得た x, y を image*_position / text*_position に "x,y" 形式で渡す
       ④ ヒューリスティックな推定（「下 ≈ y を少し増やす」等）は禁止
+
+    preset パラメータ:
+      preset 名を渡すと composite_defaults.json の presets セクションから
+      設定を取り出して各種パラメータの default を上書きする。利用可能 preset:
+        - "live" : ライブ配信用 — 右上に赤い LIVE テロップ
+        - "promo": 番組宣伝用 — 中央に大きめ画像 + 上下にタイトル/補足
+        - "subtitle": 字幕オンリー — 透明背景 + 下段白テロップ
+      ユーザー引数が明示されている (= 関数 default と異なる) 場合はユーザー
+      引数が常に勝つ（α 方針）。preset 名が未知の場合はエラー dict を返す。
 
     Args:
         image1: 画像1のソース。"test"でテスト画像、アップロード済み画像のファイル名（例: "338b77e1-xxx.jpeg"）、HTTP URLを指定可能。必須。アップロード済み画像を使う場合はlist_uploaded_imagesで取得したfilenameをそのまま指定してください。
@@ -145,6 +155,49 @@ def compose_images(
     """
     from image_fetcher import fetch_image
     from image_compositor import create_composite_image
+
+    # === preset 適用フェーズ ===
+    # user 引数が default のままのフィールドだけ preset 値で埋める（α 方針）
+    if preset:
+        current = {
+            'image1_position': image1_position, 'image1_size': image1_size,
+            'image2': image2, 'image2_position': image2_position, 'image2_size': image2_size,
+            'image3': image3, 'image3_position': image3_position, 'image3_size': image3_size,
+            'base_image': base_image, 'base_opacity': base_opacity,
+            'text1': text1, 'text1_position': text1_position, 'text1_font_size': text1_font_size,
+            'text1_font_color': text1_font_color, 'text1_bg_color': text1_bg_color,
+            'text1_bg_opacity': text1_bg_opacity, 'text1_wrap': text1_wrap,
+            'text1_max_width': text1_max_width, 'text1_padding': text1_padding,
+            'text2': text2, 'text2_position': text2_position, 'text2_font_size': text2_font_size,
+            'text2_font_color': text2_font_color, 'text2_bg_color': text2_bg_color,
+            'text2_bg_opacity': text2_bg_opacity, 'text2_wrap': text2_wrap,
+            'text2_max_width': text2_max_width, 'text2_padding': text2_padding,
+            'text3': text3, 'text3_position': text3_position, 'text3_font_size': text3_font_size,
+            'text3_font_color': text3_font_color, 'text3_bg_color': text3_bg_color,
+            'text3_bg_opacity': text3_bg_opacity, 'text3_wrap': text3_wrap,
+            'text3_max_width': text3_max_width, 'text3_padding': text3_padding,
+        }
+        resolved = _resolve_preset(preset, current)
+        if not resolved.get("ok"):
+            return {"success": False, "error": resolved.get("error", "preset resolution failed")}
+        m = resolved["merged"]
+        image1_position = m['image1_position']; image1_size = m['image1_size']
+        image2 = m['image2']; image2_position = m['image2_position']; image2_size = m['image2_size']
+        image3 = m['image3']; image3_position = m['image3_position']; image3_size = m['image3_size']
+        base_image = m['base_image']; base_opacity = m['base_opacity']
+        text1 = m['text1']; text1_position = m['text1_position']; text1_font_size = m['text1_font_size']
+        text1_font_color = m['text1_font_color']; text1_bg_color = m['text1_bg_color']
+        text1_bg_opacity = m['text1_bg_opacity']; text1_wrap = m['text1_wrap']
+        text1_max_width = m['text1_max_width']; text1_padding = m['text1_padding']
+        text2 = m['text2']; text2_position = m['text2_position']; text2_font_size = m['text2_font_size']
+        text2_font_color = m['text2_font_color']; text2_bg_color = m['text2_bg_color']
+        text2_bg_opacity = m['text2_bg_opacity']; text2_wrap = m['text2_wrap']
+        text2_max_width = m['text2_max_width']; text2_padding = m['text2_padding']
+        text3 = m['text3']; text3_position = m['text3_position']; text3_font_size = m['text3_font_size']
+        text3_font_color = m['text3_font_color']; text3_bg_color = m['text3_bg_color']
+        text3_bg_opacity = m['text3_bg_opacity']; text3_wrap = m['text3_wrap']
+        text3_max_width = m['text3_max_width']; text3_padding = m['text3_padding']
+        logger.info(f"compose_images preset='{preset}' applied. Effective image1_position={image1_position}, text1={text1!r}")
 
     logger.info(f"compose_images: image1={image1}, image2={image2}, image3={image3}")
 
@@ -592,6 +645,91 @@ def delete_uploaded_image(image_key: str) -> dict:
         return {'success': False, 'error': str(e)}
 
 
+# compose_images の各 param の関数デフォルト値（preset 適用時、user が default のまま渡したフィールドだけを preset で上書きするため）
+_COMPOSE_FUNCTION_DEFAULTS = {
+    'image1_position': '左上', 'image1_size': '400x400',
+    'image2': '', 'image2_position': '右上', 'image2_size': '400x400',
+    'image3': '', 'image3_position': '中央下', 'image3_size': '400x400',
+    'base_image': 'test', 'base_opacity': 100,
+    'text1': '', 'text1_position': '左下', 'text1_font_size': 48, 'text1_font_color': '#FFFFFF',
+    'text1_bg_color': '', 'text1_bg_opacity': 0.7, 'text1_wrap': False, 'text1_max_width': 0, 'text1_padding': 10,
+    'text2': '', 'text2_position': '中央下', 'text2_font_size': 48, 'text2_font_color': '#FFFFFF',
+    'text2_bg_color': '', 'text2_bg_opacity': 0.7, 'text2_wrap': False, 'text2_max_width': 0, 'text2_padding': 10,
+    'text3': '', 'text3_position': '右下', 'text3_font_size': 48, 'text3_font_color': '#FFFFFF',
+    'text3_bg_color': '', 'text3_bg_opacity': 0.7, 'text3_wrap': False, 'text3_max_width': 0, 'text3_padding': 10,
+}
+
+
+def _load_composite_defaults() -> dict:
+    """composite_defaults.json を読み込む（Lambda 同梱 or local テスト時）。失敗時は空 dict。"""
+    paths = [
+        os.path.join(os.path.dirname(__file__), 'composite_defaults.json'),
+        '/var/task/composite_defaults.json',
+    ]
+    for p in paths:
+        try:
+            if os.path.exists(p):
+                with open(p, encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load composite_defaults from {p}: {e}")
+    return {}
+
+
+def _preset_to_compose_kwargs(preset: dict) -> dict:
+    """composite-default.json の preset 構造を compose_images の flat kwargs に変換する。"""
+    out = {}
+    if 'baseImage' in preset:
+        out['base_image'] = preset['baseImage']
+    if 'baseOpacity' in preset:
+        out['base_opacity'] = preset['baseOpacity']
+    placement = preset.get('image_placement', {}) or {}
+    for key in ('image1', 'image2', 'image3'):
+        if key in placement and isinstance(placement[key], dict):
+            pl = placement[key]
+            if 'x' in pl and 'y' in pl:
+                out[f'{key}_position'] = f"{pl['x']},{pl['y']}"
+            if 'width' in pl and 'height' in pl:
+                out[f'{key}_size'] = f"{pl['width']}x{pl['height']}"
+    overlays = preset.get('text_overlays', {}) or {}
+    for key in ('text1', 'text2', 'text3'):
+        if key in overlays and isinstance(overlays[key], dict):
+            t = overlays[key]
+            if 'text' in t and t['text'] != '':
+                out[key] = t['text']
+            if 'position' in t:
+                out[f'{key}_position'] = t['position']
+            if 'font_size' in t:
+                out[f'{key}_font_size'] = t['font_size']
+            if 'font_color' in t:
+                out[f'{key}_font_color'] = t['font_color']
+            if 'bg_color' in t and t['bg_color']:
+                out[f'{key}_bg_color'] = t['bg_color']
+            if 'bg_opacity' in t:
+                out[f'{key}_bg_opacity'] = t['bg_opacity']
+    return out
+
+
+def _resolve_preset(preset_name: str, current_args: dict) -> dict:
+    """preset 名から flat kwargs を解決し、α 方針 (user 引数が default のフィールドだけ
+    preset で埋める = user 明示値が常に勝つ) で merge した結果を返す。
+    返り値: {"ok": bool, "merged": dict, "error": str}"""
+    if not preset_name:
+        return {"ok": True, "merged": current_args}
+    data = _load_composite_defaults()
+    presets = data.get('presets', {}) if isinstance(data, dict) else {}
+    if preset_name not in presets:
+        available = ', '.join(sorted(presets.keys())) or '(none)'
+        return {"ok": False, "merged": current_args,
+                "error": f"unknown preset: {preset_name!r}. Available presets: {available}"}
+    preset_kwargs = _preset_to_compose_kwargs(presets[preset_name])
+    merged = dict(current_args)
+    for k, preset_v in preset_kwargs.items():
+        if k in merged and merged[k] == _COMPOSE_FUNCTION_DEFAULTS.get(k):
+            merged[k] = preset_v
+    return {"ok": True, "merged": merged}
+
+
 _RELATIVE_DIRECTION_ALIASES = {
     '下': '下', '下部': '下', '真下': '下', '下に': '下',
     '上': '上', '上部': '上', '真上': '上', '上に': '上',
@@ -682,6 +820,27 @@ def calculate_relative_position(
     if key == 'y揃え':
         return {"x": int(ref_x), "y": int(ref_y)}
     return {"error": "unreachable", "x": ref_x, "y": ref_y}
+
+
+@tool
+def list_presets() -> dict:
+    """利用可能なプリセット一覧を返す。
+
+    プリセットは composite_defaults.json の presets セクションで定義された
+    典型配置パターン（live/promo/subtitle 等）。compose_images の preset
+    引数で適用する。ユーザーから「Liveパターンで」「番組宣伝の形式で」
+    のような表現を受けた時、対応 preset を確認するために呼び出す。
+
+    Returns:
+        {"presets": [{"name": str, "description": str}, ...]}
+    """
+    data = _load_composite_defaults()
+    presets = (data.get('presets', {}) or {}) if isinstance(data, dict) else {}
+    result = []
+    for name, body in presets.items():
+        if isinstance(body, dict):
+            result.append({"name": name, "description": body.get('description', '')})
+    return {"presets": result}
 
 
 @tool
