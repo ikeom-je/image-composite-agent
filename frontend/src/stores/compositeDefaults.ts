@@ -26,6 +26,23 @@ export type ImageMode = 'single' | 'double' | 'triple'
 export type ImageKey = 'image1' | 'image2' | 'image3'
 export type TextKey = 'text1' | 'text2' | 'text3'
 
+export interface PresetTextOverlay {
+  text: string
+  position: string
+  font_size: number
+  font_color: string
+  bg_color: string | null
+  bg_opacity?: number
+}
+
+export interface Preset {
+  description: string
+  baseImage: string
+  baseOpacity: number
+  image_placement: Partial<Record<ImageKey, ImagePosition>>
+  text_overlays: Record<string, PresetTextOverlay>
+}
+
 export interface SystemDefault {
   canvas: { width: number; height: number }
   baseImage: string
@@ -46,7 +63,7 @@ export interface SystemDefault {
 export interface CompositeDefaults {
   version: string
   system_default: SystemDefault
-  presets: Record<string, unknown>
+  presets: Record<string, Preset>
 }
 
 // design §6.9: フォールバック値。baseImage は transparent を維持してリスク最小化
@@ -83,6 +100,7 @@ export const useCompositeDefaultsStore = defineStore('compositeDefaults', () => 
   const isLoaded = ref(false)
 
   const systemDefault = computed(() => defaults.value?.system_default ?? null)
+  const presets = computed(() => defaults.value?.presets ?? {})
 
   async function loadDefaults(): Promise<void> {
     if (isLoaded.value) return
@@ -124,6 +142,7 @@ export const useCompositeDefaultsStore = defineStore('compositeDefaults', () => 
     defaults,
     isLoaded,
     systemDefault,
+    presets,
     loadDefaults,
     determineImageMode,
     getImageDefault,
