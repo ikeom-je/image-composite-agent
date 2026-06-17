@@ -546,3 +546,40 @@
   - dev からの最新を逆マージしてマージ
   - PR テンプレート（`.github/pull_request_template.md`）のチェックリストを完了
   - _要件: 21.8, 21.9_
+## Issue #59 Phase 2: SettingsPage デフォルト/プリセット UI
+
+### タスク22: Preset 型定義と compositeDefaults 拡張
+_要件: プリセット機能（issue #59）_
+
+- [x] 22.1 `compositeDefaults.ts` に `PresetTextOverlay` / `Preset` インターフェース追加
+- [x] 22.2 `CompositeDefaults.presets` を `Record<string, Preset>` に変更
+- [x] 22.3 `presets` computed ゲッターを追加して return に公開
+
+### タスク23: userDefaults ストア新設
+_要件: localStorage 上書き管理（issue #59）_
+
+- [x] 23.1 `stores/userDefaults.ts` 新規作成（UserDefaults 型 / applyPreset / reset）
+- [x] 23.2 `stores/__tests__/userDefaults.test.ts` ユニットテスト作成（5件）
+- [x] 23.3 localStorage キー `composite-user-defaults` への保存/復元/削除を実装
+
+### タスク24: App.vue に userDefaults 優先チェーン適用
+_要件: system_default < userDefaults < UI明示指定 の優先順（issue #59）_
+
+- [x] 24.1 `App.vue` に `useUserDefaultsStore` を追加
+- [x] 24.2 `applyUserOverrides()` 関数追加（baseImage / baseOpacity の上書き）
+- [x] 24.3 `onMounted` 内で `applyCompositeDefaults()` → `applyUserOverrides()` の順で呼び出し
+
+### タスク25: DefaultsTab.vue 新規作成
+_要件: SettingsPage デフォルトタブ UI（issue #59）_
+
+- [x] 25.1 `components/settings/DefaultsTab.vue` 新規作成
+- [x] 25.2 プリセット一覧（live/promo/subtitle カード表示）と「適用」ボタン
+- [x] 25.3 現在のユーザー上書き表示 + 「リセット」ボタン
+- [x] 25.4 システムデフォルト読み取り専用表示（baseImage/baseOpacity/canvas/video）
+
+### タスク26: SettingsPage.vue にデフォルトタブを追加
+_要件: 3番目のタブ追加（issue #59）_
+
+- [x] 26.1 `activeTab` 型に `'defaults'` を追加
+- [x] 26.2 「デフォルト」タブボタンを追加（モデル / ルール / デフォルト）
+- [x] 26.3 `DefaultsTab` コンポーネントをインポートして `v-else-if="activeTab === 'defaults'"` で表示
