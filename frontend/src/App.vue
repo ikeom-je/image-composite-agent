@@ -131,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useConfigStore } from '@/stores/config'
 import { useCompositeDefaultsStore } from '@/stores/compositeDefaults'
@@ -878,6 +878,8 @@ function applyUserOverrides(): void {
   if (ud.baseImage !== undefined) params.value.baseImage = ud.baseImage
   if (ud.baseOpacity !== undefined) params.value.baseOpacity = ud.baseOpacity
 }
+
+watch(() => userDefaultsStore.overrides, applyUserOverrides, { deep: true })
 
 // ライフサイクル
 onMounted(async () => {

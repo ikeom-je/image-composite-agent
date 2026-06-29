@@ -109,7 +109,16 @@ export const useCompositeDefaultsStore = defineStore('compositeDefaults', () => 
     try {
       const res = await fetch(url, { cache: 'no-cache' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      defaults.value = (await res.json()) as CompositeDefaults
+      const data = (await res.json()) as CompositeDefaults
+      if (data.presets && typeof data.presets === 'object') {
+        for (const [key, preset] of Object.entries(data.presets)) {
+          if (typeof preset.baseImage !== 'string') {
+            console.warn(`[compositeDefaults] presets.${key}.baseImage が string でないため除外`)
+            delete data.presets[key]
+          }
+        }
+      }
+      defaults.value = data
     } catch (e) {
       console.warn('[compositeDefaults] 読み込み失敗、フォールバック使用:', e)
       defaults.value = HARDCODED_FALLBACK

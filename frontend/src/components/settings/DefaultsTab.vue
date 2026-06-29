@@ -88,7 +88,7 @@ function reset() {
         上書き設定なし（システムデフォルトを使用中）
       </div>
       <div v-else class="space-y-2 text-sm">
-        <div v-if="userStore.overrides.baseImage !== undefined" class="flex items-center gap-3">
+        <div v-if="typeof userStore.overrides.baseImage === 'string'" class="flex items-center gap-3">
           <span class="text-gray-500 w-28 shrink-0">背景色</span>
           <span class="inline-flex items-center gap-2">
             <span
@@ -119,7 +119,7 @@ function reset() {
           <dd class="flex items-center gap-2">
             <span
               class="w-4 h-4 rounded-sm border border-gray-300"
-              :style="compositeStore.systemDefault.baseImage.startsWith('#')
+              :style="typeof compositeStore.systemDefault.baseImage === 'string' && compositeStore.systemDefault.baseImage.startsWith('#')
                 ? { background: compositeStore.systemDefault.baseImage }
                 : { background: 'transparent' }"
             />

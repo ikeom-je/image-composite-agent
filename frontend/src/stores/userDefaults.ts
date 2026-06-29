@@ -12,7 +12,13 @@ export interface UserDefaults {
 function loadFromStorage(): UserDefaults {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as UserDefaults) : {}
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return {}
+    return {
+      ...(typeof parsed.baseImage === 'string' ? { baseImage: parsed.baseImage } : {}),
+      ...(typeof parsed.baseOpacity === 'number' ? { baseOpacity: parsed.baseOpacity } : {}),
+    }
   } catch {
     return {}
   }
