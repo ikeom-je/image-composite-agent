@@ -131,10 +131,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useConfigStore } from '@/stores/config'
 import { useCompositeDefaultsStore } from '@/stores/compositeDefaults'
+import { useUserDefaultsStore } from '@/stores/userDefaults'
 import { useNotificationStore } from '@/stores/notification'
 import NotificationSystem from '@/components/NotificationSystem.vue'
 import LoadingOverlay from '@/components/LoadingOverlay.vue'
@@ -149,6 +150,7 @@ import axios from 'axios'
 const appStore = useAppStore()
 const configStore = useConfigStore()
 const compositeDefaultsStore = useCompositeDefaultsStore()
+const userDefaultsStore = useUserDefaultsStore()
 const notificationStore = useNotificationStore()
 
 // パラメータ（1920x1080固定キャンバス）
@@ -871,6 +873,14 @@ function applyCompositeDefaults() {
   textConfigs.value.text3 = { ...textConfigs.value.text3, x: tps.text3.x, y: tps.text3.y, fontSize: tps.text3.font_size }
 }
 
+function applyUserOverrides(): void {
+  const ud = userDefaultsStore.overrides
+  if (ud.baseImage !== undefined) params.value.baseImage = ud.baseImage
+  if (ud.baseOpacity !== undefined) params.value.baseOpacity = ud.baseOpacity
+}
+
+watch(() => userDefaultsStore.overrides, applyUserOverrides, { deep: true })
+
 // ライフサイクル
 onMounted(async () => {
   try {
@@ -887,6 +897,7 @@ onMounted(async () => {
       await compositeDefaultsStore.loadDefaults()
     }
     applyCompositeDefaults()
+    applyUserOverrides()
 
     console.log('[App] Application initialized successfully')
   } catch (error) {
