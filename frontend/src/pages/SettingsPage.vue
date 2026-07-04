@@ -29,6 +29,15 @@
       >
         ルール（System Prompt）
       </button>
+      <button
+        class="px-4 py-2 text-sm font-medium transition-colors"
+        :class="activeTab === 'defaults'
+          ? 'text-blue-600 border-b-2 border-blue-500'
+          : 'text-gray-500 hover:text-gray-700'"
+        @click="activeTab = 'defaults'"
+      >
+        デフォルト
+      </button>
     </div>
 
     <!-- モデル選択タブ -->
@@ -107,6 +116,11 @@
         <PromptPreview />
       </div>
     </template>
+
+    <!-- デフォルト/プリセットタブ -->
+    <section v-else-if="activeTab === 'defaults'">
+      <DefaultsTab />
+    </section>
   </div>
 </template>
 
@@ -118,9 +132,10 @@ import { useChatAgent } from '@/composables/useChatAgent'
 import RuleList from '@/components/settings/RuleList.vue'
 import RuleEditor from '@/components/settings/RuleEditor.vue'
 import PromptPreview from '@/components/settings/PromptPreview.vue'
+import DefaultsTab from '@/components/settings/DefaultsTab.vue'
 import { useRulesStore } from '@/stores/rules'
 
-const activeTab = ref<'model' | 'rules'>('model')
+const activeTab = ref<'model' | 'rules' | 'defaults'>('model')
 
 const rulesStore = useRulesStore()
 const isCreatingRule = ref(false)
