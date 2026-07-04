@@ -558,7 +558,7 @@ git commit -m "feat(settings): SettingsPage に「デフォルト」タブ追加
 ## Task 6: tasks.md 更新と PR 作成準備
 
 **Files:**
-- Modify: `.kiro/specs/image-composition/tasks.md`（Phase 2 タスクがある場合）
+- Modify: `.claude/specs/image-composition/tasks.md`（Phase 2 タスクがある場合）
 
 - [ ] **Step 1: 全テストを通す**
 
@@ -578,10 +578,10 @@ Expected: エラーなし（0 errors）
 
 - [ ] **Step 3: 最終コミット（tasks.md 更新）**
 
-`.kiro/specs/image-composition/tasks.md` に Phase 2 の完了状態を反映（既存タスクのチェックボックスを `[x]` に更新）してコミット：
+`.claude/specs/image-composition/tasks.md` に Phase 2 の完了状態を反映（既存タスクのチェックボックスを `[x]` に更新）してコミット：
 
 ```bash
-git add .kiro/specs/image-composition/tasks.md
+git add .claude/specs/image-composition/tasks.md
 git commit -m "docs(tasks): issue #59 Phase 2 タスク完了マーク"
 ```
 
