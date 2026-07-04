@@ -9,9 +9,9 @@
 **Tech Stack:** Python 3.12 / boto3 / AWS CDK (TypeScript) / DynamoDB / API Gateway / Strands Agents SDK / unittest + moto / Playwright (API E2E)
 
 **Spec参照:**
-- [requirements.md](../../../.kiro/specs/custom-rules-prompt/requirements.md) — Req 1〜7, 13（API側）
-- [design.md](../../../.kiro/specs/custom-rules-prompt/design.md) — 全体設計
-- [tasks.md](../../../.kiro/specs/custom-rules-prompt/tasks.md) — 元タスクリスト + 作業フロー別チェックリスト
+- [requirements.md](../../../.claude/specs/custom-rules-prompt/requirements.md) — Req 1〜7, 13（API側）
+- [design.md](../../../.claude/specs/custom-rules-prompt/design.md) — 全体設計
+- [tasks.md](../../../.claude/specs/custom-rules-prompt/tasks.md) — 元タスクリスト + 作業フロー別チェックリスト
 
 ---
 
@@ -1945,14 +1945,14 @@ git commit -m "test(api): inlineRulesサポートのE2Eテストを追加"
 ## Task 14: tasks.md のチェックボックス更新 + PR作成
 
 **Files:**
-- Modify: `.kiro/specs/custom-rules-prompt/tasks.md`
+- Modify: `.claude/specs/custom-rules-prompt/tasks.md`
 
 - [ ] **Step 1: tasks.md のIssue #8 タスク（タスク1〜11）のチェックボックスを `[x]` に更新**
 
 タスク1.1〜11.4まで全て `[x]` に。`sed -i 's/- \[ \]/- [x]/g'` は他セクションも書き換えるため、Issue #8セクションのみ編集する:
 
 ```bash
-# 手動で .kiro/specs/custom-rules-prompt/tasks.md を編集
+# 手動で .claude/specs/custom-rules-prompt/tasks.md を編集
 # タスク12〜21（Issue #9）は触らない
 ```
 
@@ -1985,7 +1985,7 @@ gh pr create --base dev --title "feat(api): カスタムルールプロンプト
 
 issue #8 を解決。Strands Agent の system prompt にカスタムルールを動的注入する機能を追加する。
 
-仕様: [.kiro/specs/custom-rules-prompt/](../tree/feature/issue8-custom-rules-api/.kiro/specs/custom-rules-prompt/)
+仕様: [.claude/specs/custom-rules-prompt/](../tree/feature/issue8-custom-rules-api/.claude/specs/custom-rules-prompt/)
 
 ## 主な変更
 
