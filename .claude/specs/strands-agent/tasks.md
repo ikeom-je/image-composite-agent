@@ -120,3 +120,17 @@ _要件: 14.1-14.7_
 - [ ] 12.5 Preview 環境の /chat で AC 14.1-14.7 を人間検証
 - [ ] 12.6 ズレあれば SYSTEM_PROMPT を調整 → push で再 deploy → 再検証を iterate
 - [ ] 12.7 dev へ PR merge（stack 自動 destroy）
+
+## タスク13: プリセット機能（Req 15 / issue #59）
+_要件: 15.1-15.7_
+
+- [x] 13.1 `frontend/public/composite-default.json` の `presets` に live / promo / subtitle 追加
+- [x] 13.2 `lambda/python/agent_tools.py` の compose_images に `preset` 引数追加 + α 方針 merge ロジック
+- [x] 13.3 `agent_tools.py` に `list_presets` ツール追加（agent_handler.py で登録）
+- [x] 13.4 `lambda/python/agent_prompts.py` の SYSTEM_PROMPT に「preset 使うべきケース」「曖昧時逆質問ルール」追加
+- [x] 13.5 `test/lambda/test_preset_merge.py` で preset 変換 / merge / unknown 系 unit test
+- [ ] 13.6 PR open + `preview` ラベルで per-PR ephemeral 環境 deploy
+- [ ] 13.7 Preview /chat で AC 15.1-15.7 を Nova で人間検証
+- [ ] 13.8 dev へ PR merge
+
+> SettingsPage UI（表示 + localStorage 上書き）は本 PR スコープ外。Phase 2 として後続 PR で実装予定。

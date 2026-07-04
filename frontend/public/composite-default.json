@@ -31,5 +31,64 @@
       "duration": 3
     }
   },
-  "presets": {}
+  "presets": {
+    "live": {
+      "description": "ライブ配信用 — 右上に赤い LIVE テロップ、中央寄りに画像 1 枚",
+      "baseImage": "#000000",
+      "baseOpacity": 100,
+      "image_placement": {
+        "image1": { "x": 760, "y": 290, "width": 400, "height": 400 }
+      },
+      "text_overlays": {
+        "text1": {
+          "text": "LIVE",
+          "position": "1800,80",
+          "font_size": 56,
+          "font_color": "#FF0000",
+          "bg_color": null
+        }
+      }
+    },
+    "promo": {
+      "description": "番組宣伝用 — 中央に大きめ画像、上下にタイトル + 補足テキスト",
+      "baseImage": "#1a1a1a",
+      "baseOpacity": 100,
+      "image_placement": {
+        "image1": { "x": 660, "y": 240, "width": 600, "height": 600 }
+      },
+      "text_overlays": {
+        "text1": {
+          "text": "番組タイトル",
+          "position": "中央上",
+          "font_size": 64,
+          "font_color": "#FFFFFF",
+          "bg_color": null
+        },
+        "text2": {
+          "text": "番組宣伝コメント",
+          "position": "中央下",
+          "font_size": 36,
+          "font_color": "#FFFFFF",
+          "bg_color": "#000000",
+          "bg_opacity": 0.7
+        }
+      }
+    },
+    "subtitle": {
+      "description": "字幕オンリー — 透明背景に下段の白テロップ（黒帯背景）",
+      "baseImage": "transparent",
+      "baseOpacity": 100,
+      "image_placement": {},
+      "text_overlays": {
+        "text1": {
+          "text": "字幕テキスト",
+          "position": "中央下",
+          "font_size": 48,
+          "font_color": "#FFFFFF",
+          "bg_color": "#000000",
+          "bg_opacity": 0.7
+        }
+      }
+    }
+  }
 }
