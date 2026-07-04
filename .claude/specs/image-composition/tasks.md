@@ -535,9 +535,9 @@
   - _要件: 21.3, 21.4, 21.5, 21.8, 21.9_
 
 - [x] 21.12 ドキュメント更新
-  - `.kiro/steering/architecture.md` — `composite-default.json` の配置・配信フロー追記、API デフォルト変更を注記
-  - `.kiro/steering/structure.md` — Lambda 依存関係図に `composite_defaults.py` を追加
-  - `.kiro/steering/tech.md` — 新ファイル `composite-default.json` の説明
+  - `.claude/steering/architecture.md` — `composite-default.json` の配置・配信フロー追記、API デフォルト変更を注記
+  - `.claude/steering/structure.md` — Lambda 依存関係図に `composite_defaults.py` を追加
+  - `.claude/steering/tech.md` — 新ファイル `composite-default.json` の説明
   - `CHANGELOG.md` または `README.md` に破壊的変更を記載
   - _要件: 21全般_
 

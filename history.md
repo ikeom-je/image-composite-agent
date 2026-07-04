@@ -2,7 +2,7 @@
 
 > **このファイルの役割**: 大きな機能追加・設計変更の **経緯（why／context）** を残すドキュメント。
 > git log（結果＝what）と GitHub Releases（リリースノート）の補完。
-> 詳しい役割・書き分け・更新タイミングは [.kiro/steering/conventions.md](.kiro/steering/conventions.md) の「ドキュメント規約 / history.md の役割」セクションを参照。
+> 詳しい役割・書き分け・更新タイミングは [.claude/steering/conventions.md](.claude/steering/conventions.md) の「ドキュメント規約 / history.md の役割」セクションを参照。
 
 ## 2026-04-01: ベース画像の透明度（opacity）パラメータ追加 (Issue #7)
 

@@ -178,7 +178,7 @@ curl "${UPLOAD_API_URL}/images?maxKeys=20"
 
 自然言語で画像合成・動画生成を指示できます。AWS Bedrock のマルチモデル（Amazon Nova 2 Lite をデフォルト、Claude Sonnet 4.5 / Haiku 等に切替可）をバックエンドに使用し、会話履歴を DynamoDB で管理します。
 
-`Settings` 画面の「ルール」タブから **カスタムルールプロンプト**（業界・会社固有の暗黙知）を編集・有効化すると、`POST /chat` 時に system prompt へ自動注入され Agent の判断に制約として作用します。詳細仕様は [.kiro/specs/custom-rules-prompt/](.kiro/specs/custom-rules-prompt/) を参照。
+`Settings` 画面の「ルール」タブから **カスタムルールプロンプト**（業界・会社固有の暗黙知）を編集・有効化すると、`POST /chat` 時に system prompt へ自動注入され Agent の判断に制約として作用します。詳細仕様は [.claude/specs/custom-rules-prompt/](.claude/specs/custom-rules-prompt/) を参照。
 
 ```bash
 export CHAT_API_URL=$(aws cloudformation describe-stacks \

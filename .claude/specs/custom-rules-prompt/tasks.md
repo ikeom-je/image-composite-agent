@@ -17,15 +17,15 @@
 - [ ] requirements.md の対象Req（issue #8 → Req 1-7、issue #9 → Req 8-12）を読み返す
 - [ ] design.md の関連セクション（API設計 / Lambda実装 / CDK / フロント設計）を確認する
 - [ ] tasks.md の「Issue #8 タスク」または「Issue #9 タスク」のうち、未着手タスクを確認する
-- [ ] [`.kiro/steering/git.md`](../../steering/git.md) のブランチ命名・worktree運用ルールを確認する
+- [ ] [`.claude/steering/git.md`](../../steering/git.md) のブランチ命名・worktree運用ルールを確認する
 - [ ] 依存タスク（Issue #8 → Issue #9）の前提状態を確認する
 
 ### 🟡 各タスク実装前
 
 - [ ] 該当タスクの `_要件: X.X_` を requirements.md で参照し、Acceptance Criteria を確認
 - [ ] design.md の該当箇所のインターフェース・データモデルが現在の実装と整合しているか確認
-- [ ] [`.kiro/steering/conventions.md`](../../steering/conventions.md) のコーディング規約を確認
-- [ ] [`.kiro/steering/testing.md`](../../steering/testing.md) のテスト方針を確認
+- [ ] [`.claude/steering/conventions.md`](../../steering/conventions.md) のコーディング規約を確認
+- [ ] [`.claude/steering/testing.md`](../../steering/testing.md) のテスト方針を確認
 - [ ] テストファイル（単体/統合/E2E）を先に追加 or 雛形を整える（TDD推奨）
 
 ### 🟠 コミット前
@@ -35,7 +35,7 @@
 - [ ] テストがローカルで通ること（`PYTHONPATH=lambda/python python3 -m unittest discover -s test/lambda` / `npm test` 等）
 - [ ] 既存機能への影響を確認（`POST /chat` 既存形式 / 既存UIの動作）
 - [ ] `cdk synth` が通ること（CDK変更時）
-- [ ] [`.kiro/steering/git.md`](../../steering/git.md) のコミットメッセージ規約に沿うか
+- [ ] [`.claude/steering/git.md`](../../steering/git.md) のコミットメッセージ規約に沿うか
 
 ### 🔴 PR作成前
 

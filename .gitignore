@@ -16,8 +16,10 @@ cdk.out
 # Test output files (temporary)
 test/test-results/
 
-# Claude Code
-.claude/
+# Claude Code（ローカル設定・worktreesは除外、仕様書/steeringはgit管理対象）
+.claude/*
+!.claude/specs/
+!.claude/steering/
 
 # Environment files (keep .env.example only)
 .env.local

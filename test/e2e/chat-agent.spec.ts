@@ -1,7 +1,7 @@
 /**
  * Chat Agent フロントエンドE2Eテスト
  *
- * ユースケース対応表（.kiro/specs/strands-agent/usecases.md 参照）:
+ * ユースケース対応表（.claude/specs/strands-agent/usecases.md 参照）:
  * - A1: 2画像合成（UI上で画像+ダウンロードリンク表示）
  * - A3: 自然言語位置指定（UI上で応答表示）
  * - B1: MP4動画生成（UI上で動画+ダウンロードリンク表示）

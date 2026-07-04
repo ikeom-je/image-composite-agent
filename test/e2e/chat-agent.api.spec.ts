@@ -1,7 +1,7 @@
 /**
  * Chat Agent API統合テスト
  *
- * ユースケース対応表（.kiro/specs/strands-agent/usecases.md 参照）:
+ * ユースケース対応表（.claude/specs/strands-agent/usecases.md 参照）:
  * - A1: 2画像合成
  * - A2: 3画像合成
  * - A3: 自然言語位置指定

@@ -3,7 +3,7 @@ PRタイトルは以下の形式に従ってください:
   <type>(<scope>): <内容>
   例: feat(api): baseOpacity追加 / fix(agent): Bedrockリージョン設定修正
 
-詳細は .kiro/steering/git.md の「コミットメッセージ」「プルリクエストガイドライン」を参照。
+詳細は .claude/steering/git.md の「コミットメッセージ」「プルリクエストガイドライン」を参照。
 -->
 
 ## 概要
@@ -31,7 +31,7 @@ PRタイトルは以下の形式に従ってください:
 
 <!--
 該当する変更がある場合、対応ドキュメントの更新確認チェックを入れる。
-詳細は .kiro/steering/git.md の「ドキュメント更新チェックリスト」参照。
+詳細は .claude/steering/git.md の「ドキュメント更新チェックリスト」参照。
 `<feature>` は仕様書ディレクトリ名（`image-composition` または `strands-agent`）。
 -->
 

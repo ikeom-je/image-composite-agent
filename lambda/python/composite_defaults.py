@@ -4,7 +4,7 @@
 frontend/public/composite-default.json を CDK ビルド時に同梱した
 lambda/python/composite_defaults.json から読み込み、API 側のデフォルト値解決に使う。
 
-詳細仕様は .kiro/specs/image-composition/design.md §6 を参照。
+詳細仕様は .claude/specs/image-composition/design.md §6 を参照。
 """
 
 import json

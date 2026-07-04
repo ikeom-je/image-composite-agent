@@ -1,7 +1,7 @@
 /**
  * カスタムルールプロンプト API E2E テスト
  *
- * Acceptance Criteria 対応（.kiro/specs/custom-rules-prompt/requirements.md）:
+ * Acceptance Criteria 対応（.claude/specs/custom-rules-prompt/requirements.md）:
  * - AC 2.1: GET /chat/rules で全ルール一覧
  * - AC 2.2: GET /chat/rules/{ruleId} で個別取得
  * - AC 2.3: POST /chat/rules で新規作成（UUID自動採番）
