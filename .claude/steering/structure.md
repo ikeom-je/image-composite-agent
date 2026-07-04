@@ -15,7 +15,7 @@ image-processor-api/
 ├── test/                   # テストスイート
 ├── scripts/                # ユーティリティスクリプト
 ├── docs/                   # ドキュメント
-├── .kiro/                  # Kiro設定
+├── .claude/                  # 仕様書・steering設定
 └── lambda-layers/          # Lambdaレイヤー（ffmpeg）
 ```
 

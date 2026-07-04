@@ -2,7 +2,7 @@
  * 画像合成デフォルト値の一元管理ストア（Issue #58 / Requirement 21）
  *
  * /composite-default.json をビルド時に S3 (frontend bucket) へ配置し、フロント起動時に fetch する。
- * 詳細仕様は .kiro/specs/image-composition/design.md §6 を参照。
+ * 詳細仕様は .claude/specs/image-composition/design.md §6 を参照。
  */
 
 import { defineStore } from 'pinia'

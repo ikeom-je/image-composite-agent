@@ -86,7 +86,7 @@ inclusion: auto
 | `image2` (double) | `(600, 100, 400, 300)` | `(600, 400, 300, 300)` |
 | `image1`〜`3` (triple) | (旧値群) | 上記 + `image3=(1520, 700, 300, 300)` |
 
-mode 判定は `image2` / `image3` の有無のみで決定（テキスト有無は影響しない）。詳細は `.kiro/specs/image-composition/design.md §6` 参照。
+mode 判定は `image2` / `image3` の有無のみで決定（テキスト有無は影響しない）。詳細は `.claude/specs/image-composition/design.md §6` 参照。
 
 ### 設定
 - バイナリメディアタイプ: 明示的に設定

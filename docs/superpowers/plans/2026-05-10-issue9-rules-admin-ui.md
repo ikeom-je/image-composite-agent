@@ -9,8 +9,8 @@
 **Tech Stack:** Vue 3 (Composition API) / Pinia / Vue Router / TypeScript / Tailwind CSS / axios / marked / DOMPurify / Vitest / Playwright (E2E)
 
 **Spec参照:**
-- [requirements.md](../../../.kiro/specs/custom-rules-prompt/requirements.md) — Req 8〜13（UI側）
-- [design.md](../../../.kiro/specs/custom-rules-prompt/design.md) — section 7（フロントエンド設計）
+- [requirements.md](../../../.claude/specs/custom-rules-prompt/requirements.md) — Req 8〜13（UI側）
+- [design.md](../../../.claude/specs/custom-rules-prompt/design.md) — section 7（フロントエンド設計）
 
 **仕様書との差分（実装で吸収する項目）:**
 - 仕様書 AC 8.1: 「ナビゲーションタブに `Settings` 追加」 → 実態は既に `/chat/settings` (Agent モデル設定) が存在。**既存ページにタブ追加で対応**（グローバルナビ変更なし）
@@ -1387,8 +1387,8 @@ git commit -m "test(e2e): Settings ルール管理UIのE2Eテスト6件を追加
 ## Task 12: 仕様書 tasks.md を完了ベースで更新 + 不整合補正
 
 **Files:**
-- Modify: `.kiro/specs/custom-rules-prompt/tasks.md`
-- Modify: `.kiro/specs/custom-rules-prompt/requirements.md` (AC 8.1/8.2 を実態に合わせる)
+- Modify: `.claude/specs/custom-rules-prompt/tasks.md`
+- Modify: `.claude/specs/custom-rules-prompt/requirements.md` (AC 8.1/8.2 を実態に合わせる)
 
 - [ ] **Step 1: tasks.md の Issue #9 タスク（タスク12〜21）チェックボックスを更新**
 
@@ -1405,7 +1405,7 @@ git commit -m "test(e2e): Settings ルール管理UIのE2Eテスト6件を追加
 
 ```bash
 cd /home/pi/develop/image-composite-agent-issue9
-git add .kiro/specs/custom-rules-prompt/tasks.md .kiro/specs/custom-rules-prompt/requirements.md
+git add .claude/specs/custom-rules-prompt/tasks.md .claude/specs/custom-rules-prompt/requirements.md
 git commit -m "docs(spec): tasks.md issue #9 完了タスク更新 + requirements.md ナビゲーション要件を実態へ補正"
 ```
 
@@ -1450,7 +1450,7 @@ issue #9 を解決。issue #8 で実装した /chat/rules API を Vue 3 管理�
 - Markdownレンダリングは marked + DOMPurify で XSS 対策
 - E2Eテスト 6件追加
 
-仕様書: .kiro/specs/custom-rules-prompt/
+仕様書: .claude/specs/custom-rules-prompt/
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
